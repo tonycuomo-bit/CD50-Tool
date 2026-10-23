@@ -141,7 +141,7 @@ Tony sends an address; Claude adds the site to the layout tool.
 2. **Site input file.** Define a `site.json` schema (address, APN, posts by product, cabinet kVA setting, equipment positions, linework/aerial paths). `cd50.py` reads it instead of hard-coded San Ysidro values. Move San Ysidro into `sites/san-ysidro/site.json`, and keep its output identical.
 3. **Layout tool → generator hand-off.** The layout tool's JSON export writes that `site.json` (equipment, pads, conduit bend points), so a layout drawn in the tool builds a plan set with no code edits.
 4. **Intake → site.json.** Rebuild the intake workbook generator (lost) or read the xlsx directly, so the question set fills `site.json`.
-5. **Second site as a benchmark.** Rebuild a finished job (Cleveland or Madisonville CD100) through the pipeline and compare against the signed set. This proves the generalization.
+5. **Benchmark sites (Tony, 2026-10-23).** Rebuild finished jobs through the pipeline and compare against the signed CD100s: **Cleveland** for a 499 kW (software-limited) site, and **Golden or Collinsville** for full-capacity sites. This proves the generalization. (Collinsville is not in the reference folder list yet; get its set from Tony if it is the one used.)
 6. **Pre-submission checker.** Turn the confirmed Lessons Learned list into automated checks that run on `cd50_data.json`.
 7. **CI.** GitHub Action that installs deps, runs tests, builds the PDF and attaches it to the run. Add a SessionStart hook so cloud sessions install deps automatically.
 8. **CD90 engineering.** Max cabinet-to-post DC run vs. the Tesla V4 Install Manual, conduit fill and voltage drop, foundations from geotech plus Tesla S-501/S-502 (wind speed, soil class).
