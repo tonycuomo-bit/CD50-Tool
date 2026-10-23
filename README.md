@@ -6,8 +6,9 @@ Tools HiON EV uses to semi-automate CD50 (preliminary construction design) plan 
 
 | Folder | Contents |
 | --- | --- |
-| `cd50-layout/` | Site Layout tool, a single self-contained HTML file. Open it in a browser. `sites/` holds site aerials (USGS NAIP). |
-| `cd50-plansets/` | `cd50.py` plan set generator and `pdf.cjs` PDF printer, with the San Ysidro inputs. `source/` has the WB-67 truck path scripts that regenerate the MW inputs. |
+| `sites/` | One folder per site: `site.json` (project info, chargers, geometry, sheet text) plus its linework, truck path and aerial. |
+| `cd50-layout/` | Site Layout tool, a single self-contained HTML file. Open it in a browser. |
+| `cd50-plansets/` | `cd50.py` plan set generator, `sizing.py`, and `pdf.cjs` PDF printer. `source/` has the WB-67 truck path scripts that regenerate the MW inputs. |
 | `cd50-intake/` | Draft intake workbook (question set, derived values, checks). |
 
 ## Build a plan set
@@ -15,11 +16,11 @@ Tools HiON EV uses to semi-automate CD50 (preliminary construction design) plan 
 ```
 pip install -r requirements.txt
 npm install -g playwright            # plus: npx playwright install chromium
-cp cd50-plansets/site_private.example.json cd50-plansets/site_private.json   # optional: owner/contact details
-python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs
+cp sites/site_private.example.json sites/san-ysidro/site_private.json   # optional: owner/contact details
+python3 cd50-plansets/cd50.py sites/san-ysidro && node cd50-plansets/pdf.cjs sites/san-ysidro
 ```
 
-Output is `cd50-plansets/cd50.pdf` (36 x 24 in sheets). Rename it `<site>_CD50_<YYYY-MM-DD>[_rN].pdf` when issuing. Generated files and `site_private.json` are gitignored, so owner names, emails and phone numbers stay out of git.
+Output is `sites/san-ysidro/out/cd50.pdf` (36 x 24 in sheets). Rename it `<site>_CD50_<YYYY-MM-DD>[_rN].pdf` when issuing. Generated files and `site_private.json` are gitignored, so owner names, emails and phone numbers stay out of git.
 
 ## Tests and sizing rules
 
@@ -32,4 +33,4 @@ Sizing rules live in `rules/sizing_rules.json`. After changing them, run `python
 
 ## Truck path inputs
 
-To change the Megacharger truck lanes, edit `cd50-plansets/source/cF.json`, run `python3 mw3.py` from `cd50-plansets/source/`, copy `mw_pos.json` and `mw_overlay.svgfrag` up one level, then rebuild.
+To change the Megacharger truck lanes, edit `cd50-plansets/source/cF.json`, run `python3 mw3.py` from `cd50-plansets/source/`, copy `mw_pos.json` and `mw_overlay.svgfrag` into `sites/san-ysidro/`, then rebuild.
