@@ -37,8 +37,8 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .head{display:flex;flex-direction:column;gap:2px}
 .sub{color:var(--muted);font-size:12.5px}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-input,select,button{font:inherit;color:inherit}
-input[type=number],select,input[type=text]{background:var(--paper);border:1px solid var(--rule);border-radius:4px;padding:6px 8px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:14px}
+input,select,button,textarea{font:inherit;color:inherit}
+input[type=number],select,input[type=text],textarea{background:var(--paper);border:1px solid var(--rule);border-radius:4px;padding:6px 8px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:14px}
 .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--rule);border-radius:4px;overflow:hidden}
 .seg button{border:0;background:var(--paper);padding:7px 6px;cursor:pointer;font-size:13px}
 .seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}
@@ -175,6 +175,14 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
       <div class="note">Click a conduit to add a bend point, drag a point to reroute, double-click a point to remove it. Lengths are center to center on plan, before stub-ups.</div>
       <div id="sched-check" class="note"></div>
       <details class="note"><summary>Tesla design limits</summary><div id="tesla-notes"></div></details>
+    </section>
+
+    <section class="block" aria-labelledby="h-pdf">
+      <h2 id="h-pdf">6 · Plan set PDF</h2>
+      <label class="f">Site folder<input id="pdf-site" type="text" placeholder="e.g. san-ysidro-r6" spellcheck="false"></label>
+      <label class="f">Notes for Claude (optional)<textarea id="pdf-notes" rows="2" placeholder="e.g. move the issue date to Monday"></textarea></label>
+      <div class="btns"><button class="btn primary" id="b-pdf" type="button">Build PDF with Claude</button></div>
+      <div class="note" id="pdf-status">Sends this layout to Claude, who builds the CD50 plan set and posts the PDF in your CD50 project.</div>
     </section>
   </aside>
 
@@ -860,6 +868,7 @@ function loadSite(site){
     if (site.mwLayout || site.svcLayout){ const svcT = ["svc","xfmr","ct","mtr"];
       Object.values(S.items).filter(i => (site.mwLayout && i.kind === "MW") || (site.svcLayout && svcT.includes(i.type))).forEach(i => { i.x = null; });
       S.routes = {}; arrange(size(), true); }
+    if (SITE_FOLDER[site.id] && !pdfSite.value) pdfSite.value = SITE_FOLDER[site.id];
     syncInputs(); setMode("select");
   }; im.src = site.src;
 }
@@ -916,6 +925,36 @@ document.getElementById("b-dl").onclick = async (e) => {
   }
   const a =document.createElement("a"); a.href = URL.createObjectURL(new Blob([layoutText()], {type:"application/json"})); a.download = "layout.json";
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+// Build PDF: in the claude.ai viewer, fire Tony's "Build PDF" scheduled task through the Claude Code Remote connector,
+// which wakes the CD50 Claude session with this layout. Opened as a local file, save layout.json and copy a Claude Code prompt.
+const BUILD_TRIGGER = "trig_01SUGXsC5acu3krHpFg7uN6A";
+const SITE_FOLDER = {"san-ysidro-299e":"san-ysidro-r6", "san-ysidro-299e-sketch":"san-ysidro-r6"};
+const pdfSite = document.getElementById("pdf-site"), pdfStatus = document.getElementById("pdf-status");
+const pdfFolder = () => pdfSite.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || SITE_FOLDER[S.img?.site] || "";
+document.getElementById("b-pdf").onclick = async (e) => {
+  const site = pdfFolder();
+  if (!site){ pdfStatus.textContent = "Enter the site folder name first (the folder under sites/ in the repo)."; pdfSite.focus(); return; }
+  const notes = document.getElementById("pdf-notes").value.trim();
+  const mcp = window.claude?.use ? await window.claude.use("mcp").catch(() => null) : null;
+  e.target.disabled = true;
+  if (mcp){
+    pdfStatus.textContent = "Sending to Claude…";
+    try {
+      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({site, notes, layout: siteLayout()})}, {cache:false});
+      pdfStatus.textContent = `Sent ${site} to Claude. The PDF will be posted in your CD50 project in a few minutes.`;
+    } catch(err){
+      pdfStatus.textContent = err?.code === "server_not_connected" ? "Connect Claude Code in claude.ai Settings → Connectors, then try again."
+        : err?.code === "declined" || err?.code === "not_granted" ? "Not sent. Allow the Claude Code Remote connector for this page to use the button."
+        : `Not sent (${err?.message || err?.code || "error"}). Use Download layout.json and send it to Claude instead.`;
+    }
+    e.target.disabled = false; return;
+  }
+  document.getElementById("b-dl").click();
+  const prompt = `Build the CD50 PDF for sites/${site} from the layout.json in my Downloads folder: copy it to sites/${site}/layout.json, then run cd50.py and pdf.cjs.` + (notes ? ` Notes: ${notes}` : "");
+  try { await navigator.clipboard.writeText(prompt); pdfStatus.textContent = "Saved layout.json and copied a prompt. Paste it into Claude Code in your CD50-Tool folder."; }
+  catch(err){ pdfStatus.textContent = "Saved layout.json. In Claude Code, ask: " + prompt; }
+  e.target.disabled = false;
 };
 document.getElementById("inspector").onclick = e => {
   if (!selected) return; const it = S.items[selected];
