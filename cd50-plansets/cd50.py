@@ -1,48 +1,55 @@
-# CD50 plan set generator: 299 E. San Ysidro Blvd. Writes cd50.html (36x24 in pages) for Chromium print-to-PDF.
-import math, json, base64, re, html, os
-os.chdir(os.path.dirname(os.path.abspath(__file__)))  # inputs and outputs live next to this script
+# CD50 plan set generator. Reads sites/<site>/site.json and writes cd50.html (36x24 in pages, for Chromium
+# print-to-PDF) and cd50_data.json into sites/<site>/out/.  Usage: python3 cd50-plansets/cd50.py sites/san-ysidro
+import math, json, base64, re, html, os, sys
 from shapely.geometry import box as sbox, Polygon
 import numpy as np
 
+if len(sys.argv) != 2: sys.exit("usage: python3 cd50-plansets/cd50.py sites/<site>")
+SITE_DIR = os.path.abspath(sys.argv[1]); OUT = os.path.join(SITE_DIR, 'out'); os.makedirs(OUT, exist_ok=True)
+site_path = lambda f: os.path.join(SITE_DIR, f)
+SITE = json.load(open(site_path('site.json'), encoding='utf-8'))
+PJ, FILES, GEO = SITE['project'], SITE['files'], SITE['geometry']
+UT = PJ['utility']
+
 F = 3.6                       # plan pts per ft (1"=20' at 72 pt/in)
 W, H = 2592, 1728             # 36x24 in sheet in pt
-DATE = "10/23/2026"
+DATE = SITE['date']
 PENDING = "[PENDING · FROM EMAIL / MONDAY]"
 # Owner / contact details are filled in only after Tony approves the layout, and are kept out of git:
-# copy site_private.example.json to site_private.json (gitignored). Missing fields print as PENDING.
-PRIV = json.load(open('site_private.json')) if os.path.exists('site_private.json') else {}
+# copy sites/site_private.example.json to sites/<site>/site_private.json (gitignored). Missing fields print as PENDING.
+PRIV = json.load(open(site_path('site_private.json'))) if os.path.exists(site_path('site_private.json')) else {}
 pv = lambda k: PRIV.get(k) or PENDING
 
 # ---------------------------------------------------------------- sizing (sizing.py, same rules table as the Site Layout tool)
 from sizing import size_groups, egc_al
-groups = [dict(tag="MW-1", kind="MW", posts=2, kva=1247, name="V4 Megacharger cabinet (2 posts)"),
-          dict(tag="V4-1", kind="V4", posts=8, kva=1247, name="V4 Supercharger cabinet (8 posts)")]
-Z = size_groups(groups); groups = Z['groups']
+Z = size_groups([dict(g) for g in SITE['chargers']]); groups = Z['groups']
 TOT_KVA, TOT_A, XF_REQ, XFMR, SVC_REQ, SVC, SVCF = (Z[k] for k in ('total_kva', 'total_amps', 'xf_req', 'xfmr', 'svc_req', 'svc', 'svc_feeder'))
 if Z['xf_over'] or Z['svc_over']: print(f"WARNING: load exceeds the largest standard size (xfmr {XF_REQ:,.0f} kVA, service {SVC_REQ:,.0f} A)")
-MW, V4 = groups
+MW, V4 = groups               # drawings below assume one MW cabinet group then one V4 cabinet group
 
-# ---------------------------------------------------------------- equipment geometry (plan pts, svg frame of lines_mw.svg)
-mwp = json.load(open('mw_pos.json')); TH = math.radians(mwp['rot'])
+# ---------------------------------------------------------------- equipment geometry (plan pts, svg frame of the linework)
+mwp = json.load(open(site_path(FILES['mw_positions']))); TH = math.radians(mwp['rot'])
 E = np.array([math.cos(TH), math.sin(TH)]); N = np.array([math.sin(TH), -math.cos(TH)])
-# Equipment yard tucked against the west (I-805) property line (Tony, CD50 review): long side parallel to the PL,
-# 3 ft off it, equipment backs to the PL. Drawn axis-aligned about pivot (yx, yy) and rotated by YROT; ROT() maps to plan.
-PL_A, PL_B = np.array([260.7, 182.9]), np.array([446.1, 404.6])          # I-805 PL segment, display ft
-_u = (PL_B-PL_A)/np.linalg.norm(PL_B-PL_A); _n = np.array([_u[1], -_u[0]])  # along PL (SE), inward normal (NE)
+# Equipment yard tucked against a property line (San Ysidro: west / I-805 PL, Tony's CD50 review): long side parallel
+# to the PL, gap_ft off it, equipment backs to the PL. Drawn axis-aligned about pivot (yx, yy), rotated by YROT; ROT() maps to plan.
+YD = GEO['yard']
+PL_A, PL_B = np.array(YD['pl_a_ft']), np.array(YD['pl_b_ft'])          # PL segment, display ft
+_u = (PL_B-PL_A)/np.linalg.norm(PL_B-PL_A); _n = np.array([_u[1], -_u[0]])  # along PL, inward normal
 YROT = math.degrees(math.atan2(_u[1], _u[0]))
-YARD_S, YARD_GAP = 100, 3                                                  # ft along the PL from its NW vertex, ft off the PL
-_O = (PL_A + YARD_S*_u + (20+YARD_GAP)*_n)*F
-YARD = (_O[0], _O[1], 42, 20)
+YARD_S, YARD_GAP = YD['along_ft'], YD['gap_ft']                          # ft along the PL from its first vertex, ft off the PL
+_O = (PL_A + YARD_S*_u + (YD['size_ft'][1]+YARD_GAP)*_n)*F
+YARD = (_O[0], _O[1], *YD['size_ft'])
 yx, yy = YARD[0], YARD[1]
 def ROT(p):
     c, s_ = math.cos(math.radians(YROT)), math.sin(math.radians(YROT)); dx, dy = p[0]-yx, p[1]-yy
     return (yx + dx*c - dy*s_, yy + dx*s_ + dy*c)
 YG = f'transform="rotate({YROT:.3f} {yx:.2f} {yy:.2f})"'
-SB = (yx+2*F, yy+11.8*F, 16.7, 6.2)                         # pad x,y,w,d (ft), local; back 2 ft off the PL-side yard edge
-XR = (yx+24*F, yy+9*F, 9.0, 9.0)                            # >2500 kVA pad (tool xfmrDims); doors face local +x (SE)
-V4C = (1608, 678, 5.6, 4.9)
-POSTX = [1728.7, 1766.7, 1801.7, 1865.3, 1903.3, 1941.0, 1979.0, 2017.0]; POSTY = 711
-POSTS = [(x, POSTY, "1"+"ABCDEFGH"[i]) for i, x in enumerate(POSTX)]
+_sb, _xr = GEO['switchboard'], GEO['transformer']
+SB = (yx+_sb['offset_ft'][0]*F, yy+_sb['offset_ft'][1]*F, *_sb['size_ft'])   # pad x,y,w,d (ft), local to the yard
+XR = (yx+_xr['offset_ft'][0]*F, yy+_xr['offset_ft'][1]*F, *_xr['size_ft'])   # doors face local +x
+V4C = (*GEO['v4_cabinet']['xy'], *GEO['v4_cabinet']['size_ft'])
+POSTX, POSTY = GEO['v4_posts']['x'], GEO['v4_posts']['y']
+POSTS = [(x, POSTY, t) for x, t in zip(POSTX, GEO['v4_posts']['tags'])]
 MWC = np.array(mwp['cab'])*F; MP = [(np.array(mwp['post1'])*F, "M1A"), (np.array(mwp['post2'])*F, "M1B")]
 
 def rect_pts(x, y, w, d): return [(x, y), (x+w*F, y), (x+w*F, y+d*F), (x, y+d*F)]
@@ -86,7 +93,7 @@ for p, _ in MP:
 def kinds(b): return [(p, ("removable" if r else "fixed") if isinstance(r, bool) else r) for p, r in b]
 # drop any bollard that would sit inside the WB-67 swept path (Tony: none in the path of traffic)
 from shapely.geometry import Point as _Pt
-_frag = open('mw_overlay.svgfrag').read()
+_frag = open(site_path(FILES['swept_path'])).read()
 SWEPT = Polygon([tuple(map(float, q.split(','))) for q in re.findall(r'<polygon points="([^"]+)"', _frag)[0].split()])
 def clear_path(b): return [(p, r) for p, r in b if not SWEPT.buffer(0.5*F).contains(_Pt(p))]
 B_YARD, B_V4C, B_MWC = [clear_path(kinds(b)) for b in (B_YARD, B_V4C, B_MWC)]
@@ -94,13 +101,15 @@ BOLLARDS = B_YARD + B_V4C + B_POST + B_MWC + B_MP
 NB = len(BOLLARDS); NBR = sum(1 for _, r in BOLLARDS if r == "removable"); NBT = sum(1 for _, r in BOLLARDS if r == "rebound")
 
 # ---------------------------------------------------------------- conduit routes (plan pts)
+# Still San Ysidro-specific: trench waypoints and label spots are hand-placed. Roadmap step 3 (layout tool export)
+# will supply routes per site.
 sbE = ROT((SB[0]+SB[2]*F, SB[1]+SB[3]*F/2)); xrW = ROT((XR[0], SB[1]+SB[3]*F/2))
 _xrN = ROT((XR[0]+XR[2]*F/2, XR[1])); _pa = ROT((SB[0]+12*F, yy-4*F)); _pac = ROT((SB[0]+12*F, yy-3*F))
 _sbW = ROT((SB[0], SB[1]+SB[3]*F/2)); _sbWo = ROT((yx-4*F, SB[1]+SB[3]*F/2)); _cnw = ROT((yx-3*F, yy-3*F)); _cw = ROT((yx-3*F, SB[1]+SB[3]*F/2-3))
 V4cS = (V4C[0]+V4C[2]*F, V4C[1]+V4C[3]*F*0.6)
 ROUTES = [
   dict(tag="P-1", kind="pri", pts=[_xrN, ROT((XR[0]+XR[2]*F/2, yy-6*F)), (ROT((XR[0]+XR[2]*F/2, yy-6*F))[0], 640)], n="(2) 5\"", size='5"',
-       cond="SDG&E primary cable (by utility)", fr="SDG&E POC (Beyer Blvd, TBD)", to="XR-1", note="Trench/conduit by owner per SDG&E design"),
+       cond=f"{UT} primary cable (by utility)", fr=f"{UT} POC (Beyer Blvd, TBD)", to="XR-1", note=f"Trench/conduit by owner per {UT} design"),
   dict(tag="SL-1", kind="ac", pts=[xrW, sbE], n=f"({SVCF[0]}) 4\"", size='4"',
        cond=f"{SVCF[0]} sets (3) {SVCF[1]} + (1) neutral per set", fr="XR-1", to="SB-1", note="Service lateral, customer-owned"),
   dict(tag="F-1", kind="ac", pts=[_sbW, _sbWo, (MWC[0]+12, MWC[1]+14)], n=f"({MW['feeder'][0]}) 4\"", size='4"',
@@ -118,6 +127,13 @@ ROUTES.append(dict(tag="COM-1", kind="com", pts=[(V4C[0], V4C[1]+V4C[3]*F/2), (1
     n='(1) 1-1/4"', size='1-1/4"', cond="(2) CAT6 shielded (etherloop)", fr="V4-1", to="MW-1", note="Shares F-1/F-2 trench"))
 def plen(p): return sum(math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]) for i in range(1, len(p)))/F
 for r in ROUTES: r['len'] = round(plen(r['pts']) + (0 if r['kind'] == 'pri' else 10))
+
+# ---------------------------------------------------------------- site text (templates in site.json)
+CTX = dict(XFMR=XFMR, SVC=SVC, TOT_KVA=TOT_KVA, TOT_A=TOT_A, XF_REQ=XF_REQ, MW=MW, V4=V4, NB=NB, NBT=NBT, NBR=NBR, NBF=NB-NBT-NBR,
+           **{k: pv(k) for k in ('owner', 'owner_address', 'owner_contact', 'owner_email', 'architect')},
+           **{k: PRIV.get(k, "") for k in ('designer_email', 'architect_phone')})
+def txt(key): return [t.format(**CTX) for t in SITE['text'][key]]
+def txt_rows(key): return [[c.format(**CTX) for c in row] for row in SITE['text'][key]]
 
 # ---------------------------------------------------------------- svg helpers
 esc = html.escape
@@ -172,7 +188,7 @@ def scalebar(x, y, ftper=20, label='1" = 20\'-0"'):
     o.append(T(x+segs[-1][1]*k+12, y+7, label, 11, w="bold"))
     return "".join(o)
 def north(x, y, r=24):
-    return (f'<g transform="rotate(-26.5 {x} {y})"><circle cx="{x}" cy="{y}" r="{r}" fill="#fff" stroke="#141817" stroke-width="1.4"/>'
+    return (f'<g transform="rotate({GEO["north_deg"]} {x} {y})"><circle cx="{x}" cy="{y}" r="{r}" fill="#fff" stroke="#141817" stroke-width="1.4"/>'
             f'<path d="M{x} {y-r+3} L{x+9} {y+r-8} L{x} {y+r-15} L{x-9} {y+r-8} Z" fill="#141817"/>'
             f'<text x="{x}" y="{y-r-5}" font-size="15" text-anchor="middle" font-weight="bold">N</text></g>')
 def view_title(x, y, num, title, scale):
@@ -181,7 +197,7 @@ def view_title(x, y, num, title, scale):
             + T(x+52, y+2, title, 20, w="bold") + L(x+52, y+9, x+52+len(title)*11.5, y+9, sw=1.5) + T(x+52, y+26, scale, 12))
 
 # ---------------------------------------------------------------- base linework
-src = open('lines_mw2.svg').read()            # right-turn-only exit version
+src = open(site_path(FILES['linework'])).read()
 inner = src[src.index('>', src.index('<svg'))+1: src.rindex('</svg>')]
 cut = inner.find('<g font-family="Arial, Helvetica, sans-serif" fill="#141817"><rect x="106.0"')
 base = inner[:cut]
@@ -261,13 +277,13 @@ def titleblock(num, title):
         for i, ln in enumerate(lines): o.append(T(x0+8, y+30+i*(sz+3), ln, sz))
         y2 = y+30+len(lines)*(sz+3)
         o.append(L(x0, y2, x1, y2, sw=0.8)); return y2
-    y = field("PROJECT", ["299 E. SAN YSIDRO BLVD", "EV CHARGING HUB", "SAN DIEGO, CA 92173"], y, 12)
+    y = field("PROJECT", PJ['title_lines'], y, 12)
     y = field("PROPERTY OWNER", [pv("owner").upper(), "(TO BE CONFIRMED)"], y)
-    y = field("APN", ["666-100-12-00 (VERIFY)"], y)
-    y = field("UTILITY", ["SDG&E"], y)
-    y = field("AHJ", ["CITY OF SAN DIEGO DSD"], y)
-    y = field("DESIGNER", ["HiON EV"], y)
-    y = field("CONTRACTOR", ["TBD"], y)
+    y = field("APN", [PJ['apn_short']], y)
+    y = field("UTILITY", [UT], y)
+    y = field("AHJ", [PJ['ahj_short']], y)
+    y = field("DESIGNER", [PJ['designer']], y)
+    y = field("CONTRACTOR", [PJ['contractor']], y)
     # revision block
     o.append(T(x0+8, y+16, "REVISIONS", 8.5, w="bold", fill="#555")); y += 22
     o.append(T(x0+8, y+12, "REV", 8.5, w="bold")); o.append(T(x0+40, y+12, "DATE", 8.5, w="bold")); o.append(T(x0+104, y+12, "DESCRIPTION", 8.5, w="bold"))
@@ -296,63 +312,28 @@ def sheet(num, title, body):
 pages = []
 # ================================================================ G-001
 o = []
-o.append(T(70, 110, "299 E. SAN YSIDRO BLVD · EV CHARGING HUB", 46, w="bold"))
-o.append(T(70, 150, "CD50 PRELIMINARY CONSTRUCTION DESIGN · V4 MEGACHARGER (2 POSTS, PULL-THROUGH) + V4 SUPERCHARGER (8 POSTS) ON ONE SERVICE", 19))
-o.append(T(70, 176, "SAN DIEGO, CALIFORNIA 92173 · SDG&E SERVICE TERRITORY", 15, fill="#444"))
+o.append(T(70, 110, PJ['headline'], 46, w="bold"))
+o.append(T(70, 150, PJ['subtitle'], 19))
+o.append(T(70, 176, PJ['location_line'], 15, fill="#444"))
 o.append(L(70, 194, 2300, 194, sw=2))
 # aerial
-img = base64.b64encode(open('../cd50-layout/sites/san-ysidro-299e_0.5ftpx_700x525ft.jpg', 'rb').read()).decode()
+img = base64.b64encode(open(site_path(FILES['aerial']), 'rb').read()).decode()
 ax, ay, aw, ah = 70, 240, 840, 630
-o.append(T(ax, ay-14, "SITE AERIAL (USGS NAIP 2022, NORTH UP, APPROX. 700' x 525')", 13, w="bold"))
+o.append(T(ax, ay-14, FILES['aerial_caption'], 13, w="bold"))
 o.append(f'<image x="{ax}" y="{ay}" width="{aw}" height="{ah}" href="data:image/jpeg;base64,{img}" preserveAspectRatio="none"/>')
 o.append(R(ax, ay, aw, ah, sw=1.2))
 # project data
-s, yb = table(960, 240, [("PROJECT DATA", 230), ("", 420)], [
-    ["Site address", "299 E. San Ysidro Blvd, San Diego, CA 92173"],
-    ["APN", "666-100-12-00 (per SANDAG parcel data; verify with title)"], ["Property owner", f"{pv('owner')} (to be confirmed)"],
-    ["Owner contact", f"{pv('owner_contact')}, {pv('owner')}"], ["Designer", "HiON EV"], ["Contractor of record", "TBD"], ["Jurisdiction (AHJ)", "City of San Diego, Development Services"],
-    ["Electric utility", "San Diego Gas & Electric (SDG&E)"], ["Charging equipment", "Tesla V4 Megacharger + V4 Supercharger"],
-    ["Site area (approx.)", "56,050 sf (traced from SD1.1 site plan)"], ["Adjacent use", "Jack in the Box restaurant (by others)"],
-    ["Zoning", "[TBD AT CD90]"], ["Design stage", "CD50 · first revision, not sealed"],
-], rh=24, sz=11.5); o.append(s)
+s, yb = table(960, 240, [("PROJECT DATA", 230), ("", 420)], txt_rows('project_data'), rh=24, sz=11.5); o.append(s)
 # design summary
-s, yb2 = table(960, yb+30, [("DESIGN SUMMARY", 230), ("", 420)], [
-    ["Megacharger posts", f"2 (pull-through, WB-67 semi)  ·  1 cabinet MW-1 @ {MW['kva']} kVA"],
-    ["Supercharger posts", f"8 (passenger)  ·  1 cabinet V4-1 @ {V4['kva']} kVA (highest nameplate)"],
-    ["Connected load", f"{TOT_KVA:,} kVA  ·  {TOT_A:,.0f} A @ 480Y/277 V, 3Ø"],
-    ["Utility transformer", f"XR-1 {XFMR:,} kVA pad-mount ({TOT_KVA:,} x 1.25 = {XF_REQ:,.0f} kVA, next size up)"],
-    ["Service equipment", f"SB-1 {SVC:,} A switchboard, 480Y/277 V, 3Ø 4W, utility metering section"],
-    ["Cabinet breakers", f"MW-1 {MW['ocpd']} A  ·  V4-1 {V4['ocpd']} A  (125% of cabinet input)"],
-    ["Truck access", "Right-in from EB Beyer Blvd; right-turn-only exit onto EB Beyer Blvd"],
-    ["Bollards", f"{NB} total: {NBT} Tesla rebounding at posts, {NB-NBT-NBR} fixed + {NBR} removable guard posts"],
-], rh=24, sz=11.5); o.append(s)
+s, yb2 = table(960, yb+30, [("DESIGN SUMMARY", 230), ("", 420)], txt_rows('design_summary'), rh=24, sz=11.5); o.append(s)
 # scope
-s, y = notes(1680, 240, "SCOPE OF WORK", [
-    "Install (2) Tesla V4 Megacharger posts in two 15' x 80' pull-through truck stalls with (1) Megacharger cabinet, on the former coffee-pad area in the NW portion of the lot.",
-    "Install (8) Tesla V4 Supercharger posts at the north parking row (former FUTURE EV / EVCS stalls), including the van-accessible EV stall, with (1) V4 cabinet in the planter behind the row.",
-    f"New SDG&E {XFMR:,} kVA pad-mount transformer and new {SVC:,} A, 480Y/277 V switchboard in a new bollard-protected equipment yard. Both chargers are fed from this one service.",
-    "New one-way truck entrance (right-in from EB Beyer Blvd) and right-turn-only truck exit onto eastbound E. Beyer Blvd with R3-2 signage and pavement arrows (by civil / traffic engineer, subject to City approval).",
-    "Underground conduit, trenching, pads, foundations, bollards, striping, signage and accessible route improvements for the charging stalls.",
-], n=62, sz=11.5); o.append(s)
+s, y = notes(1680, 240, "SCOPE OF WORK", txt('scope'), n=62, sz=11.5); o.append(s)
 # sheet index
 rows = [[n, t] for n, t in SHEETS]
 s, y2 = table(1680, y+20, [("SHEET", 90), ("SHEET INDEX", 520)], rows, rh=22, sz=11.5); o.append(s)
-s, y3 = notes(1680, y2+40, "APPLICABLE CODES (VERIFY EDITION WITH AHJ AT CD90)", [
-    "California Electrical Code (CEC), current adopted edition, incl. Art. 625 EV power transfer systems and Art. 230/240/250/110.",
-    "California Building Code (CBC) incl. Chapter 11B accessibility (11B-228.3 EV charging stations, 11B-812).",
-    "California Green Building Standards Code (CALGreen), California Fire Code, City of San Diego Municipal Code.",
-    "SDG&E Electric Service Standards & Guide Manual (ESSGM); EUSERC metering requirements.",
-    "Tesla V4 Supercharger and V4 Megacharger installation manuals and templatized plan sets.",
-], n=62, sz=11); o.append(s)
+s, y3 = notes(1680, y2+40, "APPLICABLE CODES (VERIFY EDITION WITH AHJ AT CD90)", txt('applicable_codes'), n=62, sz=11); o.append(s)
 # project team
-s, y4 = table(70, 1000, [("PROJECT TEAM", 220), ("NAME / COMPANY", 340), ("CONTACT", 300)], [
-    ["Property owner", f"{pv('owner')} (to be confirmed)", pv("owner_address")],
-    ["Owner contact", pv("owner_contact"), pv("owner_email")],
-    ["Designer", "HiON EV", PRIV.get("designer_email", "")], ["Contractor of record", "TBD", ""],
-    ["Architect (site)", pv("architect"), PRIV.get("architect_phone", "")],
-    ["Electrical engineer of record", "[TBD AT CD90]", ""], ["Civil / traffic engineer", "[TBD]", ""],
-    ["Utility", "SDG&E (planner TBD)", ""], ["Charging equipment", "Tesla", ""],
-], rh=24, sz=11.5); o.append(s)
+s, y4 = table(70, 1000, [("PROJECT TEAM", 220), ("NAME / COMPANY", 340), ("CONTACT", 300)], txt_rows('project_team'), rh=24, sz=11.5); o.append(s)
 s, y5 = table(70, y4+30, [("ABBREVIATIONS", 110), ("", 320), ("", 110), ("", 320)], [
     ["AFG", "Above finished grade", "MW", "V4 Megacharger"], ["AL / CU", "Aluminum / copper", "OCPD", "Overcurrent protective device"],
     ["EGC", "Equipment grounding conductor", "POC", "Point of connection"], ["EVCS", "EV charging station", "PL", "Property line"],
@@ -364,89 +345,27 @@ pages.append(sheet("G-001", "COVER SHEET", "".join(o)))
 # ================================================================ G-002
 o = []
 cols = [70, 640, 1210, 1780]
-s, y = notes(cols[0], 90, "GENERAL NOTES", [
-    "This is a CD50 preliminary design for coordination and review only. It is not sealed and shall not be used for permit or construction. Dimensions and equipment locations will be verified at CD90 and CD100.",
-    "Base site information is traced from Marks Architects SD1.1 Site Dimension Plan (Jack in the Box, dated 12-30-2025) at 1\"=20'. Aerial context is approximate. A boundary and topographic survey is required before CD90.",
-    f"Property owner is shown as {pv('owner')} pending confirmation of the owner / lessee entity. APN is from SANDAG parcel data and shall be verified against title.",
-    "Contractor shall verify all existing conditions, utilities and dimensions in the field and report discrepancies before starting work.",
-    "Call DigAlert (811) at least two working days before excavation. Pothole existing utilities at all crossings.",
-    "All work shall comply with the applicable codes on G-001, Tesla installation manuals, SDG&E requirements and City of San Diego standards.",
-    "Restore all disturbed paving, curb, landscaping and irrigation to match existing or better.",
-    "The adjacent Jack in the Box building, drive aisles and parking are by others; keep its operations and fire access open during construction.",
-], n=62); o.append(s)
-s, y = notes(cols[0], y+30, "TRUCK CIRCULATION NOTES", [
-    "The Megacharger stalls are a concept checked with a simulated WB-67 swept path (R41' / R64' centerline). The civil engineer shall confirm with AutoTURN before CD90.",
-    "The I-805-side swept path comes to about 0.5 ft of the property line near the NW corner. Provide a curb buffer or shift the lanes; Caltrans right-of-way coordination may be needed.",
-    "No on-site truck queue fits behind the charging stalls (straight lengths about 100' and 86'). Queuing on E. Beyer Blvd is not allowed; operations plan TBD.",
-    "Truck entrance is right-in only from eastbound E. Beyer Blvd. The truck exit is right-turn only onto eastbound E. Beyer Blvd (R3-2 No Left Turn sign, right-turn arrows). Simulated WB-67 right turns stay in the eastbound lanes, south of the Beyer centerline. Traffic study and City approval required; a signal is not assumed.",
-], n=62); o.append(s)
-s, y = notes(cols[1], 90, "ELECTRICAL NOTES", [
-    f"Service: SDG&E {XFMR:,} kVA pad-mount transformer XR-1 to {SVC:,} A, 480Y/277 V, 3-phase, 4-wire switchboard SB-1 with EUSERC utility metering section. Final transformer size and primary voltage by SDG&E.",
-    f"Cabinet breakers are sized at 125% of cabinet input current: MW-1 {MW['kva']} kVA = {MW['amps']:,.0f} A, {MW['ocpd']} A breaker; V4-1 {V4['kva']} kVA = {V4['amps']:,.0f} A, {V4['ocpd']} A breaker.",
-    f"V4-1 is commissioned at its highest nameplate rating, {V4['kva']} kVA (1500 A). No derate table is needed.",
-    "Ground-fault protection of equipment is required on the main (CEC 230.95, 1000 A and larger, 480Y/277 V). Arc energy reduction is required for breakers rated 1200 A and larger (CEC 240.87).",
-    "Cabinet feeders are 3-wire plus EGC with no neutral. Parallel conductors per CEC 310.10(G). Aluminum conductors shall be compact AA-8000 series, XHHW-2.",
-    "Conduit below grade: Schedule 40 PVC, Schedule 80 PVC or RMC where exposed and at stub-ups. Minimum cover 24\" (36\" under truck paving). Provide pull ropes in spare conduits.",
-    "Available fault current, coordination and arc-flash studies at CD90 once SDG&E provides transformer impedance.",
-    "Grounding electrode system at SB-1 per CEC 250.50; bond cabinets and posts per Tesla requirements.",
-    "Conduit lengths on E-301 are plan estimates plus 10 ft for stub-ups. Voltage drop calculations at CD90.",
-], n=62); o.append(s)
-s, y = notes(cols[2], 90, "BOLLARD & EQUIPMENT PROTECTION NOTES", [
-    "Provide vehicle impact protection at all electrical equipment: transformer, switchboard, charger cabinets and charger posts. Locations on E-101 and E-102; details on S-501.",
-    "V4 posts (Tesla templatized S-502): recommended rebounding bollard each side of every post, 2'-3 3/4\" from post centerline on the 5'-11\" CIP post pad, 6\" dia., min. 4.5\" from pad edge, (3) 3/8\" SS Hilti Kwik-Bolt TZ2 with 2.5\" min. embedment. Optional rear bollard where the back of the post faces traffic.",
-    "Megacharger posts (Tesla MW Design Guide G-102, fig. 4, drive-thru stalls): rebounding bollard on the island 5'-7\" from each post on the entry side. Confirm with Tesla for 15' truck stalls.",
-    "Cabinets and switchboard: guard posts per California Fire Code 312: steel pipe min. 4\" dia. (6\" shown), concrete filled, 3' min. above grade (4' shown), 3' deep in 15\" min. dia. footing (18\" shown), max. 4' on center, 3' from the equipment.",
-    "Keep Tesla cabinet clearances clear of fixed posts: 5' front, 3' sides, 6\" back (V4 Design Manual / MW Design Guide). Posts within the front clearance are removable (sleeve-mounted).",
-    "Transformer XR-1: bollards per SDG&E requirements (Tesla G-001 utility note 4); 3' clear all sides and 8' at the doors, removable at the doors. Verify with the executed SDG&E design.",
-], n=62); o.append(s)
-s, y = notes(cols[2], y+30, "ACCESSIBILITY NOTES (CBC 11B)", [
-    "With 10 EV charging spaces (5 to 25 range), provide at least 1 van-accessible and 1 standard-accessible EV space (CBC 11B-228.3.2.1). Posts 1C (van) and 1D (standard) serve the existing accessible EV / EVCS stalls.",
-    "Accessible EV spaces need an accessible route to the charger; operable parts at 48\" max. reach; access aisle striping and signage per CBC 11B-812.",
-    "Megacharger truck stalls are not counted toward passenger accessible spaces; confirm with AHJ.",
-], n=62); o.append(s)
-s, y = notes(cols[3], 90, "OPEN ITEMS FOR CD90", [
-    "Confirm owner / lessee entity, verify APN, and name the contractor of record.",
-    "Boundary / topo survey and utility locate.",
-    "Set the equipment yard location (currently TBD) with SDG&E and the owner: POC, primary voltage, transformer size; then update feeder routes and lengths.",
-    "Confirm MW cabinet input setting (1247 kVA assumed) and V4 cabinet at 1247 kVA nameplate.",
-    "AutoTURN truck check and traffic study for the right-turn-only truck exit (City approval).",
-    "Caltrans / I-805 right-of-way buffer at the NW corner.",
-    "Tesla post pad and foundation option from templatized S-502 by wind speed (107 / 135 mph) and soils; SDG&E bollard layout.",
-    "Geotechnical report for pad and post foundations.",
-    "Confirm accessible stall layout with the AHJ.",
-    "Lighting, signage and stormwater by civil.",
-], n=40); o.append(s)
+s, y = notes(cols[0], 90, "GENERAL NOTES", txt('general_notes'), n=62); o.append(s)
+s, y = notes(cols[0], y+30, "TRUCK CIRCULATION NOTES", txt('truck_notes'), n=62); o.append(s)
+s, y = notes(cols[1], 90, "ELECTRICAL NOTES", txt('electrical_notes'), n=62); o.append(s)
+s, y = notes(cols[2], 90, "BOLLARD & EQUIPMENT PROTECTION NOTES", txt('bollard_notes'), n=62); o.append(s)
+s, y = notes(cols[2], y+30, "ACCESSIBILITY NOTES (CBC 11B)", txt('accessibility_notes'), n=62); o.append(s)
+s, y = notes(cols[3], 90, "OPEN ITEMS FOR CD90", txt('open_items'), n=40); o.append(s)
 pages.append(sheet("G-002", "GENERAL NOTES", "".join(o)))
 
 # ================================================================ A-101
-VB = (440, 60, 1720, 1460); TX, TY = 590, 80
+VB = tuple(GEO['views']['site_plan']); TX, TY = 590, 80
 o = [plan(TX, TY, VB, 1.0, [site_lines, truck_plain, equipment(tags=True, clear=False)])]
 o.append(view_title(TX, 1620, "1", "SITE PLAN & TRUCK CIRCULATION", 'SCALE: 1" = 20\'-0"'))
 o.append(scalebar(TX+520, 1622)); o.append(north(TX+1640, 1610))
-kn = [
-    "New one-way truck entrance, right-in only from eastbound E. Beyer Blvd.",
-    "Megacharger stalls 1 and 2, 15' x 80' pull-through (WB-67).",
-    "Megacharger posts M1A and M1B on raised islands with bollards.",
-    "Megacharger cabinet MW-1 on concrete pad.",
-    "Truck exit: RIGHT TURN ONLY onto eastbound E. Beyer Blvd. R3-2 No Left Turn sign and right-turn pavement arrows.",
-    "WB-67 swept paths (simulated). Civil to confirm with AutoTURN.",
-    "Equipment yard: XR-1 transformer and SB-1 switchboard, tucked 3' off the west (I-805) property line to keep the interior open for traffic. LOCATION TBD, pending SDG&E design and owner review; shown for sizing and routing only.",
-    "V4 Supercharger posts 1A-1H at the north parking row.",
-    "V4 cabinet V4-1 in the planter behind the row.",
-    "Existing Jack in the Box building, parking and drive aisles (by others).",
-    "Former coffee pad, parking row and drive-thru removed from the design.",
-]
+kn = txt('a101_keynotes')
 s, y = notes(70, 90, "KEYNOTES", kn, n=40, sz=11.5); o.append(s)
 leg = [("#0b5f8a", "WB-67 swept path / truck lanes"), ("#c4b5fd", "Megacharger cabinet"), ("#fdba74", "V4 cabinet"),
        ("#99f6e4", "Switchboard"), ("#cbd5e1", "Utility transformer"), ("#eab308", "Guard post (fixed)"), ("#ffffff", "Guard post (removable)"), ("#f97316", "Tesla rebounding bollard")]
 o.append(T(70, y+30, "LEGEND", 14, w="bold")); y += 50
 for c, t in leg:
     o.append(R(70, y-10, 22, 12, fill=c, sw=0.8) if "Bollard" not in t else f'<circle cx="81" cy="{y-4}" r="5" fill="{c}" stroke="#141817" stroke-width="1"/>'); o.append(T(102, y, t, 11.5)); y += 22
-s, y = notes(70, y+30, "SITE DATA", [
-    "Site area about 56,050 sf; cleared west area about 22,600 sf after removing the coffee pad.",
-    "Parking: 10 EV spaces (8 V4 + 2 MW truck). Passenger EV row keeps 3 FUTURE EV stalls.",
-    "North arrow is 26.5° from sheet up (plan rotated to the SD1.1 orientation).",
-], n=40, sz=11, num=False); o.append(s)
+s, y = notes(70, y+30, "SITE DATA", txt('a101_site_data'), n=40, sz=11, num=False); o.append(s)
 pages.append(sheet("A-101", "SITE PLAN & TRUCK CIRCULATION", "".join(o)))
 
 # ================================================================ E-101
@@ -454,17 +373,9 @@ faded = f'<g opacity="0.42">{site_lines}{truck_plain}</g>'
 o = [plan(TX, TY, VB, 1.0, [faded, conduits(), equipment(tags=True, clear=True)])]
 o.append(view_title(TX, 1620, "1", "ELECTRICAL SITE PLAN", 'SCALE: 1" = 20\'-0"'))
 o.append(scalebar(TX+520, 1622)); o.append(north(TX+1640, 1610))
-s, y = notes(70, 90, "SHEET NOTES", [
-    "Conduit routes are schematic. Final routing, depth and crossings at CD90 after survey and utility locate.",
-    "Feeders F-1 and F-2 and comms COM-1 share a common trench from SB-1. Separate DC from AC per Tesla requirements.",
-    "DC runs to posts 1A-1H share one trench in the planter behind the stall heads.",
-    "Equipment yard (XR-1, SB-1) LOCATION TBD. SDG&E primary P-1 route, POC and all feeder lengths from the yard will change when it is set.",
-    "Shaded areas are working / door clearances (SB-1 4', XR-1 8', V4-1 front).",
-    "Bollards protect all equipment; open circles are removable. See S-501.",
-    "See E-201 for the single-line diagram and E-301 for feeder and conduit schedules.",
-], n=40, sz=11.5); o.append(s)
+s, y = notes(70, 90, "SHEET NOTES", txt('e101_notes'), n=40, sz=11.5); o.append(s)
 o.append(T(70, y+30, "LEGEND", 14, w="bold")); y += 52
-for c, t, d in [(COL['pri'], "SDG&E primary (by utility)", ' stroke-dasharray="12 4 2 4"'), (COL['ac'], "AC service / cabinet feeder", ""),
+for c, t, d in [(COL['pri'], f"{UT} primary (by utility)", ' stroke-dasharray="12 4 2 4"'), (COL['ac'], "AC service / cabinet feeder", ""),
                 (COL['dc'], "DC cabinet-to-post", ""), (COL['com'], "Comms (CAT6 etherloop)", ' stroke-dasharray="5 3"')]:
     o.append(L(70, y-4, 110, y-4, st=c, sw=2.4, extra=d)); o.append(T(120, y, t, 11.5)); y += 22
 for c, t in [("#eab308", "Guard post, fixed (CFC 312)"), ("#ffffff", "Guard post, removable"), ("#f97316", "Tesla rebounding bollard")]:
@@ -483,34 +394,26 @@ eq = equipment(scale=0.6, tags=True, clear=True); cd = conduits(labels=False)
 def dims(x, y, x2, y2, txt, off=0, vert=False):
     if vert: return L(x, y, x, y2, sw=0.6) + L(x-4, y, x+4, y, sw=0.6) + L(x-4, y2, x+4, y2, sw=0.6) + T(x-5, (y+y2)/2, txt, 5.5, a="middle", rot=-90)
     return L(x, y, x2, y, sw=0.6) + L(x, y-4, x, y+4, sw=0.6) + L(x2, y-4, x2, y+4, sw=0.6) + T((x+x2)/2, y-3, txt, 5.5, a="middle")
-dyard = (dims(yx, yy-22, yx+42*F, 0, "42'-0\" YARD, 3'-0\" OFF I-805 PL") + dims(yx-14, yy, 0, yy+20*F, "20'-0\"", vert=True)
+dyard = (dims(yx, yy-22, yx+YARD[2]*F, 0, YD['dim_label']) + dims(yx-14, yy, 0, yy+YARD[3]*F, f"{YARD[3]}'-0\"", vert=True)
          + dims(SB[0], SB[1]+SB[3]*F+5, SB[0]+SB[2]*F, 0, f"{SB[2]}' PAD") + dims(XR[0], XR[1]+XR[3]*F+5, XR[0]+XR[2]*F, 0, f"{XR[2]}' PAD")
          + T(XR[0]+XR[2]*F+15, XR[1]+XR[3]*F/2, "8' DOOR CLEAR", 5, rot=90, a="middle")
          + T(SB[0]+SB[2]*F/2, SB[1]-4*F+9, "4' WORKING SPACE", 5, a="middle"))
 dyard = f'<g {YG}>' + dyard + '</g>'
 # view 1: equipment yard + MW cabinet area
-VB1 = (960, 490, 560, 580)
+VB1 = tuple(GEO['views']['enlarged_yard'])
 o.append(plan(70, 90, VB1, 2.0, [f'<g opacity="0.35">{site_lines}{truck_plain}</g>', cd, eq, dyard]))
 o.append(R(70, 90, VB1[2]*2, VB1[3]*2, sw=1))
 o.append(view_title(70, 90+VB1[3]*2+50, "1", "ENLARGED PLAN · EQUIPMENT YARD & MEGACHARGER", 'SCALE: 1" = 10\'-0"'))
 o.append(scalebar(760, 90+VB1[3]*2+52, 10, '1" = 10\'-0"'))
 # view 2: V4 row
-VB2 = (1530, 650, 510, 130)
+VB2 = tuple(GEO['views']['enlarged_v4_row'])
 drow = (dims(POSTX[0], 735, POSTX[1], 0, "10'-6\"") + T(1620, 670, "PL", 6, w="bold")
         + T(1700, 727, "WHEEL STOP (TYP.)", 5) + T(1610, 718, "CURB", 5))
 ws = "".join(R(x-3*F, POSTY+9*F/3.6*3.6/3.6+10, 6*F, 0.5*F, fill="#9ca3af", sw=0.4) for x in POSTX)
 o.append(plan(1250, 90, VB2, 2.0, [f'<g opacity="0.45">{site_lines}</g>', ws, cd, eq, drow]))
 o.append(R(1250, 90, VB2[2]*2.0, VB2[3]*2.0, sw=1))
 o.append(view_title(1250, 90+VB2[3]*2.0+50, "2", "ENLARGED PLAN · V4 SUPERCHARGER ROW", 'SCALE: 1" = 10\'-0"'))
-s, y = notes(1250, 520, "ENLARGED PLAN NOTES", [
-    "Equipment yard runs parallel to the west (I-805) property line, 3'-0\" off it, with equipment backs toward the PL and fronts facing the site. Guard posts 1'-0\" outside the yard on the three open sides at 4'-0\" max. on center (CFC 312; SDG&E governs at XR-1). Removable posts at the SE end for transformer door access.",
-    "SB-1 front faces into the site (NE) with 4'-0\" min. working space; two egress paths required for 1200 A and larger equipment over 6' wide (CEC 110.26(C)(3)).",
-    "XR-1 doors face the SE end of the yard with 8'-0\" clear. Transformer pad, grounding and bollards per SDG&E ESSGM.",
-    "V4-1 sits in the planter behind the stall heads, 5'-0\" front clearance toward the curb. Removable bollards in front, fixed bollards on the sides.",
-    "Each V4 post is centred on its stall head on a 5'-11\" x 2'-0\" CIP pad, with a Tesla rebounding bollard 2'-3 3/4\" each side (S-502). Wheel stop in each stall.",
-    "Posts 1C and 1D serve the van-accessible and standard-accessible EV stalls; keep the access aisle and route clear.",
-    "MW-1 pad is set 3'-6\" min. from the truck swept path; guard posts on the sides clear of the truck path (none inside the swept path). Each Megacharger post has a rebounding bollard 5'-7\" upstream on its island (Tesla G-102).",
-], n=95, sz=11.5); o.append(s)
+s, y = notes(1250, 520, "ENLARGED PLAN NOTES", txt('e102_notes'), n=95, sz=11.5); o.append(s)
 pages.append(sheet("E-102", "ENLARGED ELECTRICAL PLANS", "".join(o)))
 
 # ================================================================ E-201 SLD
@@ -519,10 +422,10 @@ cx = 900
 def brk(x, y, a, lab=None):
     s = f'<path d="M{x} {y} q 14 14 0 28" fill="none" stroke="#141817" stroke-width="2"/>' + L(x, y-10, x, y, sw=2) + L(x, y+28, x, y+38, sw=2)
     return s + (T(x+16, y+18, lab or f"{a} A", 13, w="bold") if a else "")
-o.append(T(cx, 120, "SDG&E PRIMARY (VOLTAGE TBD, TYP. 12 kV)", 14, a="middle", w="bold")); o.append(L(cx, 130, cx, 180, sw=2.4, extra=' stroke-dasharray="12 4 2 4"'))
-o.append(T(cx+14, 160, "P-1: (2) 5\" PVC, CABLE BY SDG&E", 11))
+o.append(T(cx, 120, PJ['utility_primary'], 14, a="middle", w="bold")); o.append(L(cx, 130, cx, 180, sw=2.4, extra=' stroke-dasharray="12 4 2 4"'))
+o.append(T(cx+14, 160, f"P-1: (2) 5\" PVC, CABLE BY {UT}", 11))
 o.append(f'<circle cx="{cx}" cy="205" r="26" fill="none" stroke="#141817" stroke-width="2"/><circle cx="{cx}" cy="245" r="26" fill="none" stroke="#141817" stroke-width="2"/>')
-o.append(T(cx+44, 210, f"XR-1  {XFMR:,} kVA PAD-MOUNT (SDG&E)", 15, w="bold")); o.append(T(cx+44, 230, "PRIMARY TBD - 480Y/277 V, 3Ø 4W, %Z TBD", 12))
+o.append(T(cx+44, 210, f"XR-1  {XFMR:,} kVA PAD-MOUNT ({UT})", 15, w="bold")); o.append(T(cx+44, 230, "PRIMARY TBD - 480Y/277 V, 3Ø 4W, %Z TBD", 12))
 o.append(T(cx+44, 250, f"REQUIRED {TOT_KVA:,} kVA x 1.25 = {XF_REQ:,.0f} kVA -> {XFMR:,} kVA", 12))
 o.append(L(cx, 271, cx, 330, sw=2.4)); o.append(T(cx+14, 300, f"SL-1: {SVCF[0]} SETS (3) {SVCF[1]} + (1) N, ({SVCF[0]}) 4\" PVC", 11))
 # switchboard box
@@ -566,14 +469,7 @@ for x, (_, _, t) in zip(xs, POSTS):
 o.append(T(xs[0]-20, 1312, "DC: (4) 600 kcmil AL (2+, 2-) + #2/0 CU EGC + TESLA SIGNAL, (1) 4\" PER POST", 10.5))
 o.append(L(mwx+110, 1000, v4x-110, 1000, st=COL['com'], sw=2, extra=' stroke-dasharray="6 4"')); o.append(T((mwx+v4x)/2, 992, "COM-1: (2) CAT6 ETHERLOOP, 1-1/4\"", 10.5, a="middle", fill=COL['com']))
 o.append(view_title(70, 1620, "1", "SINGLE-LINE DIAGRAM", "NOT TO SCALE"))
-s, y = notes(1640, 120, "SLD NOTES", [
-    "Equipment ratings are preliminary and follow the CD50 sizing rules: transformer = total cabinet kVA x 1.25, next standard size up; breakers = 125% of cabinet input, next standard size up; service = 125% of summed cabinet amps.",
-    "Cabinet input settings are assumptions until confirmed: MW-1 1247 kVA nameplate, V4-1 1247 kVA (highest V4 nameplate).",
-    "Main breaker requires ground-fault protection of equipment (CEC 230.95) and arc energy reduction (CEC 240.87).",
-    "SB-1 AIC rating, coordination and arc-flash labels from studies at CD90.",
-    "Feeders to Tesla cabinets are 3-wire plus EGC. Confirm conductor counts and terminations with the Tesla cabinet lug data.",
-    "Spare space in SB-1 for a future cabinet; future load requires recheck of XR-1 and SB-1.",
-], n=58, sz=11.5); o.append(s)
+s, y = notes(1640, 120, "SLD NOTES", txt('sld_notes'), n=58, sz=11.5); o.append(s)
 s, y = table(1640, y+30, [("LOAD SUMMARY", 300), ("", 300)], [
     ["MW-1 (2 MW posts)", f"{MW['kva']:,} kVA · {MW['amps']:,.1f} A"], ["V4-1 (8 V4 posts)", f"{V4['kva']:,} kVA · {V4['amps']:,.1f} A"],
     {"c": ["TOTAL CONNECTED", f"{TOT_KVA:,} kVA · {TOT_A:,.1f} A"]}, ["Service @ 125%", f"{TOT_A*1.25:,.1f} A -> {SVC:,} A"],
@@ -590,7 +486,7 @@ o.append(T(70, 96, "TABLE 1 · LOAD CALCULATION & OCPD SIZING", 15, w="bold")); 
 s, y2 = para(70, y+22, f"Amps = kVA x 1000 / (480 x 1.732). Breaker = next standard size at or above 125% of cabinet amps (CEC 240.6). Service = next standard size at or above the larger of the biggest breaker and 125% of summed cabinet amps: {TOT_A:,.1f} x 1.25 = {TOT_A*1.25:,.1f} A -> {SVC:,} A. Transformer = {TOT_KVA:,} kVA x 1.25 = {XF_REQ:,.1f} kVA -> {XFMR:,} kVA (next standard size up; never undersized). Feeder sets: up to 800 A, 500 kcmil AL at 310 A per set; above 800 A, 750 kcmil AL at 385 A per set (75°C).", 190, 11)
 o.append(s)
 eqrows = [
-    ["XR-1", "Utility pad-mount transformer", f"{XFMR:,} kVA, primary TBD - 480Y/277 V", "9.0' x 9.0'", f"{sum(1 for _ in B_YARD)} (yard)", "By SDG&E; doors east, 8' clear"],
+    ["XR-1", "Utility pad-mount transformer", f"{XFMR:,} kVA, primary TBD - 480Y/277 V", "9.0' x 9.0'", f"{sum(1 for _ in B_YARD)} (yard)", f"By {UT}; doors east, 8' clear"],
     ["SB-1", "Service switchboard, utility metering section", f"{SVC:,} A, 480Y/277 V, 3Ø 4W", "16.7' x 6.2'", "(yard)", "NEMA 3R; GFP + arc energy reduction"],
     ["MW-1", "Tesla V4 Megacharger cabinet", f"{MW['kva']} kVA input, {MW['ocpd']} A feeder", "6.2' x 5.0'", str(len(B_MWC)), "Serves M1A, M1B"],
     ["V4-1", "Tesla V4 Supercharger cabinet", f"{V4['kva']} kVA (nameplate), {V4['ocpd']} A", "5.6' x 4.9'", str(len(B_V4C)), "Serves 1A-1H"],
@@ -633,7 +529,7 @@ o.append(L(px+60, g0, px+60, g0+150, sw=0.8) + T(px+70, g0+80, "3'-0\" MIN. EMBE
 o.append(T(px-260, g0-200, "6\" DIA. SCH. 40 STEEL PIPE,", 12)); o.append(T(px-260, g0-184, "CONCRETE FILLED, DOMED TOP,", 12)); o.append(T(px-260, g0-168, "SAFETY YELLOW", 12))
 o.append(T(px-260, g0+120, "18\" DIA. CONCRETE", 12)); o.append(T(px-260, g0+136, "FOOTING", 12))
 o.append(T(bx+40, by+40, "REMOVABLE TYPE: same pipe in a sleeve cast in the footing, with locking pin.", 11))
-o.append(T(bx+40, by+58, "For cabinets and switchboard. Transformer bollards per SDG&E. Posts use Tesla rebounding bollards (detail 2B, 2C).", 11, fill="#b42318"))
+o.append(T(bx+40, by+58, f"For cabinets and switchboard. Transformer bollards per {UT}. Posts use Tesla rebounding bollards (detail 2B, 2C).", 11, fill="#b42318"))
 # bollard layout typical
 o.append(detail_box(bx+730, by, 760, 720, "2", "TYPICAL BOLLARD LAYOUTS"))
 ox, oy = bx+800, by+100
@@ -657,7 +553,7 @@ o.append(T(ox2, oy2+248, "6\" dia., on 5'-11\" CIP pad, min. 4.5\" from pad edge
 # pad schedule
 o.append(T(1580, 96, "PAD & FOUNDATION SCHEDULE (PRELIMINARY)", 15, w="bold"))
 s, y = table(1580, 110, [("ITEM", 150), ("PAD SIZE", 120), ("THICKNESS", 110), ("NOTES", 340)], [
-    ["XR-1 pad", "9.0' x 9.0'", "Per SDG&E", "SDG&E standard pad, grounding ring"],
+    ["XR-1 pad", "9.0' x 9.0'", f"Per {UT}", f"{UT} standard pad, grounding ring"],
     ["SB-1 pad", "16.7' x 6.2'", "8\" min.", "#4 @ 12\" EW; conduit window per mfr."],
     ["Equipment yard slab", "42' x 20'", "6\" min.", "Curbed; slope to drain"],
     ["MW-1 pad", "6.2' x 5.0'", "Per Tesla", "Tesla MW templatized S-sheets"],
@@ -667,15 +563,11 @@ s, y = table(1580, 110, [("ITEM", 150), ("PAD SIZE", 120), ("THICKNESS", 110), (
     ["V4 post CIP pad", "5'-11\" x 2'-0\"", "Per Tesla S-502", "107 / 135 mph options; rebounding bollards"],
     ["Bollard footing", "18\" dia.", "3'-0\" deep", "See detail 1"],
 ], rh=24, sz=11.5); o.append(s)
-s, y = notes(1580, y+40, "STRUCTURAL NOTES", [
-    "Foundations are placeholders until the geotechnical report and the Tesla templatized S-501/S-502 (wind speed and soil class) are applied at CD90.",
-    "Concrete f'c = 3,000 psi min. at 28 days for pads and bollard footings unless Tesla or SDG&E require more.",
-    "Wind speed, seismic design category and soil class per ASCE 7 for the site; confirm at CD90.",
-], n=62, sz=11.5); o.append(s)
+s, y = notes(1580, y+40, "STRUCTURAL NOTES", txt('structural_notes'), n=62, sz=11.5); o.append(s)
 pages.append(sheet("S-501", "PAD, FOUNDATION & BOLLARD DETAILS", "".join(o)))
 
 css = "@page{size:36in 24in;margin:0}html,body{margin:0;padding:0}.page{width:36in;height:24in;page-break-after:always;overflow:hidden}.page>svg{width:36in;height:24in;display:block}"
-open('cd50.html', 'w').write(f'<!doctype html><html><head><meta charset="utf-8"><title>CD50 San Ysidro</title><style>{css}</style></head><body>{"".join(pages)}</body></html>')
+open(os.path.join(OUT, 'cd50.html'), 'w').write(f'<!doctype html><html><head><meta charset="utf-8"><title>CD50 {SITE["short_name"]}</title><style>{css}</style></head><body>{"".join(pages)}</body></html>')
 json.dump(dict(bollards=[[p[0], p[1], r] for p, r in BOLLARDS], routes=[{k: r[k] for k in ('tag', 'len', 'n', 'cond')} for r in ROUTES],
-               xfmr=XFMR, svc=SVC, tot_kva=TOT_KVA), open('cd50_data.json', 'w'), indent=1)
+               xfmr=XFMR, svc=SVC, tot_kva=TOT_KVA), open(os.path.join(OUT, 'cd50_data.json'), 'w'), indent=1)
 print("bollards", NB, "removable", NBR); [print(r['tag'], r['len']) for r in ROUTES]

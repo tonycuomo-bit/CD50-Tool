@@ -9,17 +9,20 @@ CLAUDE.md                  this file: rules, tools, workflow, roadmap
 README.md                  short setup and build steps
 requirements.txt           Python deps for the generator (shapely, numpy); requirements-dev.txt adds pytest
 rules/sizing_rules.json    Tony's sizing rules, the one table both tools use
-tests/                     pytest suite (sizing rules, Python/JS parity)
+tests/                     pytest suite (sizing rules, Python/JS parity, site inputs, golden drawing hashes)
 tools/sync_rules.py        copies the rules table into the layout tool
+sites/
+  site_private.example.json  template for the gitignored per-site owner/contact file
+  san-ysidro/
+    site.json              project info, chargers, equipment geometry, sheet text (templates)
+    lines_mw2.svg, mw_overlay.svgfrag, mw_pos.json, *.jpg   linework, WB-67 swept path, MW positions, NAIP aerial
+    out/                   generated cd50.html / cd50_data.json / cd50.pdf (gitignored)
 cd50-layout/
   cd50-layout.html         Site Layout tool (single self-contained HTML)
-  sites/                   site aerials (USGS NAIP, public domain)
 cd50-plansets/
-  cd50.py                  plan set generator -> cd50.html + cd50_data.json
+  cd50.py                  plan set generator: sites/<site>/site.json -> sites/<site>/out/
   sizing.py                sizing calcs (cabinets, breakers, transformer, service, feeders, EGC)
-  pdf.cjs                  Chromium print of cd50.html -> cd50.pdf (36x24 in)
-  mw_pos.json, lines_mw2.svg, mw_overlay.svgfrag   San Ysidro inputs
-  site_private.example.json  template for gitignored owner/contact details
+  pdf.cjs                  Chromium print of out/cd50.html -> out/cd50.pdf (36x24 in)
   source/                  WB-67 truck path scripts that regenerate the MW inputs
 cd50-intake/
   CD50 Intake Sheet DRAFT.xlsx   draft question set
@@ -29,8 +32,8 @@ cd50-intake/
 
 - Private repo, default branch `main`. Do work on a branch and open a PR to `main`; Tony reviews.
 - Run `python3 -m pytest` before every PR (needs `pip install -r requirements-dev.txt`; the parity test also needs node).
-- After any change to `cd50.py` or its inputs, rebuild (`python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs`) and check the printed bollard count and conduit lengths. Look at the PDF for drawing changes.
-- A refactor that should not change the drawings must produce an identical `cd50.html` (ignore `<metadata>` blocks, which carry file provenance).
+- After any change to `cd50.py` or a site's inputs, rebuild (`python3 cd50-plansets/cd50.py sites/<site> && node cd50-plansets/pdf.cjs sites/<site>`) and check the printed bollard count and conduit lengths. Look at the PDF for drawing changes.
+- `tests/test_site.py` builds each site with a golden file (`tests/golden/<site>.cd50.html.sha256`, built without `site_private.json`) and fails if the drawings changed. A refactor must keep it passing. For an intended drawing change, check the PDF, then update the hash (the test prints the new one) in the same PR and say so.
 - Never commit generated files, issued PDFs, `site_private.json`, emails, or architect source PDFs.
 
 ## What a CD set is
@@ -87,15 +90,16 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
 
 - Python (shapely, numpy). Builds every sheet as SVG inside one HTML file (`cd50.html`, 36x24 in pages), then Chromium prints it to PDF. Also writes `cd50_data.json` (bollards, conduit routes, xfmr, svc, total kVA).
 - Setup (once): `pip install -r requirements.txt` and `npm install -g playwright` (plus `npx playwright install chromium` on a machine without a bundled Chromium; the cloud container already has one at `/opt/pw-browsers/chromium`).
-- Run (the script chdirs to its own folder, so it works from anywhere):
+- Run from the repo root, naming the site folder:
   ```
-  python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs   # cd50.html + cd50_data.json, then cd50.pdf (36x24 in)
+  python3 cd50-plansets/cd50.py sites/san-ysidro && node cd50-plansets/pdf.cjs sites/san-ysidro   # -> sites/san-ysidro/out/
   ```
-  `cd50.py` prints the bollard count and conduit route lengths. `pdf.cjs` uses globally installed Playwright and launches `/opt/pw-browsers/chromium`, falling back to Playwright's own Chromium. Copy `cd50.pdf` to the dated, revisioned name below. Generated files are gitignored.
-- Owner / contact details: keep them out of git anyway (the repo was public at first and may be shared). `cd50.py` reads them from `cd50-plansets/site_private.json` (gitignored; copy `site_private.example.json`). Missing fields print as `[PENDING · FROM EMAIL / MONDAY]`. Do not hard-code names, emails or phone numbers in the code.
-- Inputs it reads (all in `cd50-plansets/`): `mw_pos.json` (MW cabinet/post positions + rotation), `lines_mw2.svg` (site linework with right-turn-only truck exit), `mw_overlay.svgfrag` (WB-67 swept path polygon), optional `site_private.json`, plus the site aerial at `../cd50-layout/sites/`.
-- Upstream scripts in `cd50-plansets/source/`: `truck.py` (WB-67 kinematics, L1 19.5 / L2 45.5 ft), `cF.json` (truck lane config), `mw3.py` (regenerates the three MW input files from `cF.json`; run it from `source/` and copy outputs up), `compose.py`, `site_poly.npy`. Change truck lanes in `cF.json`, rerun `mw3.py`, then `cd50.py`.
-- It is currently San Ysidro-specific: equipment coordinates, post X positions, yard placement and note text are hard-coded. `PENDING` marks owner/APN fields waiting on approval.
+  `cd50.py` prints the bollard count and conduit route lengths. `pdf.cjs` uses globally installed Playwright and launches `/opt/pw-browsers/chromium`, falling back to Playwright's own Chromium. Copy `out/cd50.pdf` to the dated, revisioned name below. `out/` is gitignored.
+- Owner / contact details: keep them out of git anyway (the repo was public at first and may be shared). `cd50.py` reads them from `sites/<site>/site_private.json` (gitignored; copy `sites/site_private.example.json`). Missing fields print as `[PENDING · FROM EMAIL / MONDAY]`. Do not hard-code names, emails or phone numbers in the code.
+- Inputs (all in `sites/<site>/`): `site.json` plus the files it names under `files` (aerial, linework SVG, WB-67 swept path, MW positions), and optional `site_private.json`.
+- `site.json` sections: `project` (title block and cover text, utility, AHJ, APN), `files`, `chargers` (groups `{tag, kind: V4|MW, posts, kva, name}` sized by `sizing.py`), `geometry` (north angle, yard placement off a property line, switchboard/transformer offsets in the yard, V4 cabinet and post positions, plan view boxes), and `text` (every notes list and the cover tables). Text entries are Python format templates filled from the sizing and bollard results and `site_private.json`: `{XFMR:,}`, `{SVC:,}`, `{TOT_KVA:,}`, `{MW[kva]}`, `{V4[ocpd]}`, `{NB}`, `{owner}` and so on (the full list is `CTX` in `cd50.py`; `tests/test_site.py` rejects unknown fields). Never put emails or phone numbers in `site.json`.
+- Upstream scripts in `cd50-plansets/source/`: `truck.py` (WB-67 kinematics, L1 19.5 / L2 45.5 ft), `cF.json` (truck lane config), `mw3.py` (regenerates the MW input files from `cF.json`; run it from `source/` and copy `mw_pos.json` and `mw_overlay.svgfrag` into `sites/san-ysidro/`), `compose.py`, `site_poly.npy`. Change truck lanes in `cF.json`, rerun `mw3.py`, then `cd50.py`.
+- Still San Ysidro-shaped in code: the drawings assume one MW group then one V4 group, a property-line equipment yard, and hand-placed conduit trench waypoints and label spots (`ROUTES` section, plus some E-102 and S-501 detail positions). `PENDING` marks owner fields waiting on approval.
 - Output naming: `<site>_CD50_<YYYY-MM-DD>[_rN].pdf`. Never overwrite a previous revision; bump `_rN`. Issued PDFs go to the shared project folder `cd50-plansets/` and Tony's OneDrive, not git (they carry owner contacts).
 
 ### Intake sheet
@@ -108,7 +112,7 @@ Tony sends an address; Claude adds the site to the layout tool.
 
 1. Geocode: SANDAG `SANDAG_COMPOSITE_LOCATOR/findAddressCandidates` (geo.sandag.org) with `outSR=2230`; use the `ADDRESS_APN` PointAddress hit. Outside San Diego, use the Census geocoder (geocoding.geo.census.gov). APN via SANDAG `Parcels_APN_Locator` reverse geocode (verify against title).
 2. Imagery: USGS NAIP `USGSNAIPPlus/ImageServer/exportImage` (imagery.nationalmap.gov) with `bboxSR=imageSR=2230` (CA State Plane VI, US ft) so ft/px is exact. Standard frame 700 x 525 ft at 1400 x 1050 px = 0.5 ft/px. NAIP is ~2 ft native, so it looks blocky up close. Use the state plane zone for the site's state outside CA.
-3. Save to `cd50-layout/sites/<site>_0.5ftpx_700x525ft.jpg` and add a SITES entry. NAIP imagery is public domain, so it can be committed. The exported sketch PDFs/JPGs stay in the shared project folder; traced linework the tools need (`lines_mw2.svg`, the layout tool's `sketchSrc`) is committed.
+3. Save to `sites/<site>/<site>_0.5ftpx_700x525ft.jpg` and add a SITES entry to the layout tool. NAIP imagery is public domain, so it can be committed. The exported sketch PDFs/JPGs stay in the shared project folder; traced linework the tools need (`lines_mw2.svg`, the layout tool's `sketchSrc`) is committed.
 4. Optional engineering sketch: architect AutoCAD PDFs keep layers; `pymupdf` `get_drawings()` gives `d['layer']`. Whitelist BNDY, A-WALL/BUILDING, CURB/PVT-CURB/PVT-CONCRETE, EX-CURB, CL, PVT-STRIPE, DIM, fixtures; drop DEMO-*, hatches, CAR-CLEARENCE, landscape, title block. Apply `page.rotation_matrix`; at 1"=20', 72 pt = 20 ft. Align a Google Earth screenshot with a 2-point similarity fit on curb lines.
 - These hosts must be allowed in the environment's network policy. Google Maps/Earth was dropped (no usable API key; terms restrict tracing).
 - MW truck layouts are checked with simulated WB-67 swept paths (L1 19.5 ft / L2 45.5 ft).
@@ -143,7 +147,7 @@ Tony sends an address; Claude adds the site to the layout tool.
 ## Roadmap (priority order)
 
 1. ~~One sizing module with tests.~~ Done: `rules/sizing_rules.json`, `sizing.py`, `tests/test_sizing.py`.
-2. **Site input file.** Define a `site.json` schema (address, APN, posts by product, cabinet kVA setting, equipment positions, linework/aerial paths). `cd50.py` reads it instead of hard-coded San Ysidro values. Move San Ysidro into `sites/san-ysidro/site.json`, and keep its output identical.
+2. ~~Site input file.~~ Done: `sites/<site>/site.json`; San Ysidro output unchanged. Left for later steps: conduit routes and label placement (step 3), V4-only / MW-only / multi-cabinet drawing variants (step 5), and splitting the notes into a shared standard-notes library plus site-specific notes.
 3. **Layout tool → generator hand-off.** The layout tool's JSON export writes that `site.json` (equipment, pads, conduit bend points), so a layout drawn in the tool builds a plan set with no code edits.
 4. **Intake → site.json.** Rebuild the intake workbook generator (lost) or read the xlsx directly, so the question set fills `site.json`.
 5. **Benchmark sites (Tony, 2026-10-23).** Rebuild finished jobs through the pipeline and compare against the signed CD100s: **Cleveland** for a 499 kW (software-limited) site, and **Golden or Collinsville** for full-capacity sites. This proves the generalization. (Collinsville is not in the reference folder list yet; get its set from Tony if it is the one used.)
