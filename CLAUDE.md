@@ -74,6 +74,7 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
 - **Cabinets / switchboard**: CFC 312 guard posts, 3 ft off, 4 ft o.c. max, front (door side) removable.
 - **Transformer**: per utility (Tesla G-001 utility note 4); removable at the doors.
 - **Clearances (Tesla)**: cabinet 5' front / 3' sides / 6" back; transformer 3' sides / 8' front.
+- **Custom bollards (layout tool)**: the first edit on an item (drag, delete, kind, count) freezes its bollards into a custom list that moves with the item and is exported as-is; a set count is spaced evenly around the guard ring and may exceed 4 ft o.c. Custom lists skip the swept-path filter; the inspector flags any in the truck path.
 - **Swept-path skip**: no bollards in the path of traffic. Guard posts that fall inside the truck swept path (buffered 0.5 ft) are dropped: `SWEPT` filter in `cd50.py`, `noBollard` polygon on a SITES entry in the layout tool. Tesla post bollards are always kept.
 
 ## Tools
@@ -81,7 +82,7 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
 ### Site Layout tool (single-file HTML)
 
 - Live: https://claude.ai/artifact/EtmZLbypTPyGDZyL3uGDJc. Source: `cd50-layout/cd50-layout.html` (was `cd50-layout-v6.html` in the shared project folder; older versions stay there, git is the history from now on).
-- Features: sizing panel (V4 / MW / MW + V4), image paste/upload, crop, scale, sketch view, drag/rotate equipment with pads, clearances and bollards (toggle + count), auto conduit runs (SL, AC-SPR, DC per post, COM) with bend points, schedule, **Copy / Download layout.json** for the plan set generator.
+- Features: sizing panel (V4 / MW / MW + V4), image paste/upload, crop, scale, sketch view, drag/rotate equipment with pads, clearances and bollards (toggle + count; drag, delete or set fixed/removable on single bollards, set a per-equipment bollard count, Reset to auto), auto conduit runs (SL, AC-SPR, DC per post, COM) with bend points, schedule, **Copy / Download layout.json** for the plan set generator.
 - Footprints and feeder sets are approximate (CD50 level).
 - Sites live in the `const SITES` array: `src` (data URI image), `wFt`, `hFt`, `pin` (image ft), plus optional `place`, `view`, `north`, `sketchSrc` (linework), `mwLayout {posts:[[x,y,rot]],cabs:[...]}`, `svcLayout` (xfmr/svc/ct/mtr), `noBollard` polygon. Users pick one with **Load site**.
 - To publish a change: edit `cd50-layout/cd50-layout.html`, commit, and republish to the same artifact URL. No more `-vN` copies.

@@ -271,21 +271,37 @@ function inPoly(x, y, P){ let c = false; for (let i = 0, j = P.length - 1; i < P
   if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
 // guard posts never go inside the site's truck swept path (noBollard polygon, tool ft); Tesla post bollards stay
 function bollards(it, s){
+  if (S.bollards === false) return [];
+  if (it.bl) return it.bl;
   const all = bollardsRaw(it, s); const site = S.img && SITES.find(x => x.id === S.img.site); const P = site && site.noBollard;
   if (!P) return all; const c = Math.cos(it.rot * Math.PI / 180), sn = Math.sin(it.rot * Math.PI / 180);
   return all.filter(b => b.k === "rebound" || !inPoly(it.x + b.x*c - b.y*sn, it.y + b.x*sn + b.y*c, P));
 }
+// guard-post sides per equipment type; the front (door side) is removable
+const RING = {cab:["left","right","front"], xfmr:["left","right","back","front"], svc:["left","right","front"], ct:["left","right","front"]};
 function bollardsRaw(it, s){
-  if (S.bollards === false) return [];
-  switch(it.type){
-    case "post": return it.kind === "MW" ? [{x:-5.583, y:0, k:"rebound"}] : [{x:-2.3125, y:0, k:"rebound"}, {x:2.3125, y:0, k:"rebound"}];
-    case "cab": return bollardRing(s.pw/2, s.pd/2, 3, ["left","right","front"], ["front"]);
-    case "xfmr": return bollardRing(s.pw/2, s.pd/2, 3, ["left","right","back","front"], ["front"]);
-    case "svc": return bollardRing(s.pw/2, s.pd/2, 3, ["left","right","front"], ["front"]);
-    case "ct": return bollardRing(s.pw/2, s.pd/2, 3, ["left","right","front"], ["front"]);
-    default: return [];
-  }
+  if (it.type === "post") return it.kind === "MW" ? [{x:-5.583, y:0, k:"rebound"}] : [{x:-2.3125, y:0, k:"rebound"}, {x:2.3125, y:0, k:"rebound"}];
+  return RING[it.type] ? bollardRing(s.pw/2, s.pd/2, 3, RING[it.type], ["front"]) : [];
 }
+// exactly n guard posts spaced evenly along the same ring (user-chosen count; spacing may exceed 4 ft o.c.)
+function bollardRingN(it, s, n){
+  const off = 3, hw = s.pw/2 + off, hd = s.pd/2 + off, closed = RING[it.type].includes("back");
+  const V = closed ? [[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd],[-hw,-hd]] : [[-hw,-hd],[-hw,hd],[hw,hd],[hw,-hd]];
+  const seg = V.slice(1).map((b, i) => Math.hypot(b[0]-V[i][0], b[1]-V[i][1])), L = seg.reduce((a, b) => a + b, 0);
+  const at = d => { for (let i = 0; i < seg.length; i++){ if (d <= seg[i] + 1e-9 || i === seg.length - 1){ const t = seg[i] ? Math.min(1, d / seg[i]) : 0;
+    return [V[i][0] + (V[i+1][0]-V[i][0])*t, V[i][1] + (V[i+1][1]-V[i][1])*t]; } d -= seg[i]; } };
+  const P = [];
+  for (let i = 0; i < n; i++){ const [x, y] = at(closed ? L*i/n : n === 1 ? L/2 : L*i/(n-1));
+    P.push({x:+x.toFixed(3), y:+y.toFixed(3), k:Math.abs(y - hd) < 0.01 && Math.abs(x) < hw - 0.01 ? "removable" : "fixed"}); }
+  return P;
+}
+function inTruckPath(it, b){
+  const site = S.img && SITES.find(x => x.id === S.img.site); const P = site && site.noBollard; if (!P) return false;
+  const c = Math.cos(it.rot * Math.PI / 180), sn = Math.sin(it.rot * Math.PI / 180);
+  return inPoly(it.x + b.x*c - b.y*sn, it.y + b.x*sn + b.y*c, P);
+}
+// first edit on an item freezes its current bollards into it.bl, which then moves and rotates with the item
+function customBollards(it, z){ if (!it.bl) it.bl = bollards(it, spec(it, z)).map(b => ({...b})); return it.bl; }
 const COLORS = {xfmr:"#64748b", ct:"#475569", mtr:"#475569", svc:"#0f766e", cab:"#9a3412", post:"#1f2937", cabMW:"#6d28d9", postMW:"#4c1d95"};
 
 // ---------- items + runs
@@ -302,7 +318,7 @@ function buildItems(z){
   const oldSvc = Object.values(old).find(o => o.type === "svc");
   for (const w of want){
     const o = old[w.id] || (w.type === "svc" ? oldSvc : null);
-    if (o) next[w.id] = {...w, x:o.x, y:o.y, rot:o.rot||0}; else { next[w.id] = {...w, x:null, y:null, rot:0}; missing = true; }
+    if (o) next[w.id] = {...w, x:o.x, y:o.y, rot:o.rot||0, ...(o.bl ? {bl:o.bl} : {})}; else { next[w.id] = {...w, x:null, y:null, rot:0}; missing = true; }
   }
   S.items = next;
   if (missing) arrange(z, true);
@@ -419,7 +435,7 @@ function cropImage(src, sx, sy, sw, sh){
 }
 
 // ---------- render
-let selected = null, mode = "select";
+let selected = null, selBoll = null, mode = "select";
 function render(){
   const z = size(); const R = runs(z);
   const v = S.view; svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
@@ -452,8 +468,10 @@ function render(){
     if (s.shape === "oval") el("ellipse", {cx:0, cy:0, rx:s.w/2, ry:s.d/2, fill:col, stroke:selected === it.id ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
     else if (s.shape === "round") el("circle", {cx:0, cy:0, r:s.w/2, fill:col, stroke:selected === it.id ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
     else el("rect", {x:-s.w/2, y:-s.d/2, width:s.w, height:s.d, fill:col, rx:0.15, stroke:selected === it.id ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
-    for (const b of bollards(it, s)){ const gb = el("circle", {cx:b.x, cy:b.y, r:0.45, fill:b.k === "rebound" ? "#f97316" : b.k === "removable" ? "var(--sheet)" : "#eab308", stroke:"var(--ink)", "stroke-width":unit*1.2, "pointer-events":"none"}, gH);
-      gb.setAttribute("transform", `translate(${it.x} ${it.y}) rotate(${it.rot})`); }
+    bollards(it, s).forEach((b, i) => { const on = selBoll && selBoll.id === it.id && selBoll.i === i;
+      const gb = el("g", {transform:`translate(${it.x} ${it.y}) rotate(${it.rot})`, "data-boll":`${it.id}|${i}`, style:"cursor:move"}, gH);
+      el("circle", {cx:b.x, cy:b.y, r:Math.max(0.45, unit*7), fill:"transparent"}, gb);
+      el("circle", {cx:b.x, cy:b.y, r:on ? 0.6 : 0.45, fill:b.k === "rebound" ? "#f97316" : b.k === "removable" ? "var(--sheet)" : "#eab308", stroke:on ? "var(--sel)" : "var(--ink)", "stroke-width":unit*(on ? 3 : 1.2)}, gb); });
     // front edge marker
     if (s.shape !== "round") el("line", {x1:-s.w/2, y1:s.d/2, x2:s.w/2, y2:s.d/2, stroke:"#fbbf24", "stroke-width":unit*2.5}, g);
     const t = el("text", {x:0, y:0, "font-size":Math.max(unit*11, 0.9), "text-anchor":"middle", "dominant-baseline":"central", fill:"#fff", "font-family":"IBM Plex Mono, monospace", transform:`rotate(${-it.rot})`, "pointer-events":"none"}, g);
@@ -529,7 +547,19 @@ function renderSide(z, R){
     ins.innerHTML = `<div><b style="font-family:var(--f-mono)">${it.id}</b> · ${s.name}</div>
       <div class="note">Pad ${s.pw ? s.pw.toFixed(1) + " × " + s.pd.toFixed(1) + " ft" : "on rack"} · rotation ${Math.round(it.rot)}°</div>
       <div class="btns"><button class="btn" type="button" data-rot="-90">⟲ 90°</button><button class="btn" type="button" data-rot="-15">⟲ 15°</button>
-      <button class="btn" type="button" data-rot="15">⟳ 15°</button><button class="btn" type="button" data-rot="90">⟳ 90°</button></div>`;
+      <button class="btn" type="button" data-rot="15">⟳ 15°</button><button class="btn" type="button" data-rot="90">⟳ 90°</button></div>
+      ${S.bollards === false ? "" : (() => { const B = bollards(it, s); const inPath = it.bl ? B.filter(b => b.k !== "rebound" && inTruckPath(it, b)).length : 0;
+        const sb = selBoll && selBoll.id === it.id && B[selBoll.i];
+        return `<div class="btns" style="align-items:center"><label for="bcount" class="note" style="margin:0">Bollards</label>
+          ${RING[it.type] ? `<input id="bcount" type="number" min="0" max="40" step="1" value="${B.length}" style="width:64px">` : `<b>${B.length}</b>`}
+          <span class="pill ${it.bl ? "warn" : "ok"}">${it.bl ? "Custom" : "Auto"}</span>
+          ${it.bl ? `<button class="btn" type="button" data-bact="reset">Reset to auto</button>` : ""}</div>
+          ${inPath ? `<div class="note"><span class="pill warn">${inPath} in truck path</span></div>` : ""}
+          ${sb ? `<div class="btns" style="align-items:center"><span class="note" style="margin:0">Bollard ${selBoll.i + 1}:</span>
+            ${sb.k === "rebound" ? `<span class="note" style="margin:0">Tesla rebounding</span>` :
+              `<button class="btn" type="button" data-bact="fixed" aria-pressed="${sb.k === "fixed"}">Fixed</button><button class="btn" type="button" data-bact="removable" aria-pressed="${sb.k === "removable"}">Removable</button>`}
+            <button class="btn" type="button" data-bact="delete">Delete</button></div>` : ""}
+          <div class="note">Drag a bollard to move it. Select one and press Delete to remove it.</div>`; })()}`;
   } else ins.innerHTML = `<div class="note">${Object.keys(S.items).length} items placed. Select one on the plan to rotate it.</div>`;
   const t = document.getElementById("sched");
   const rows = R.map(r => { const L = plen(pathPts(r)); const over = r.kind === "dc" && L > 330;
@@ -637,7 +667,19 @@ document.getElementById("b-dl").onclick = async (e) => {
   const a =document.createElement("a"); a.href = URL.createObjectURL(new Blob([layoutText()], {type:"application/json"})); a.download = "layout.json";
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
-document.getElementById("inspector").onclick = e => { const b = e.target.closest("[data-rot]"); if (!b || !selected) return; const it = S.items[selected]; it.rot = ((it.rot + +b.dataset.rot) % 360 + 360) % 360; render(); };
+document.getElementById("inspector").onclick = e => {
+  if (!selected) return; const it = S.items[selected];
+  const b = e.target.closest("[data-rot]"); if (b){ it.rot = ((it.rot + +b.dataset.rot) % 360 + 360) % 360; render(); return; }
+  const a = e.target.closest("[data-bact]"); if (!a) return; const act = a.dataset.bact;
+  if (act === "reset"){ delete it.bl; selBoll = null; }
+  else if (selBoll && selBoll.id === it.id){ const B = customBollards(it, size());
+    if (act === "delete"){ B.splice(selBoll.i, 1); selBoll = null; } else if (B[selBoll.i]) B[selBoll.i].k = act; }
+  render();
+};
+document.getElementById("inspector").onchange = e => {
+  if (e.target.id !== "bcount" || !selected) return; const it = S.items[selected]; if (!RING[it.type]) return;
+  const n = Math.max(0, Math.min(40, parseInt(e.target.value) || 0)); it.bl = bollardRingN(it, spec(it, size()), n); selBoll = null; render();
+};
 
 document.getElementById("file").onchange = e => loadImageFile(e.target.files[0]);
 document.addEventListener("paste", e => {
@@ -657,7 +699,7 @@ function loadImageFile(f) {
 
 // ---------- modes
 const hints = {
-  select:"Drag equipment to move it. Click a conduit to add a bend point. Drag empty space to pan, scroll to zoom.",
+  select:"Drag equipment or a single bollard to move it. Click a conduit to add a bend point. Drag empty space to pan, scroll to zoom.",
   crop:"Drag a box around the work area to crop the overhead view.",
   scale:"Click both ends of something with a known length, such as a stall stripe, then enter its true length.",
 };
@@ -679,8 +721,11 @@ svg.addEventListener("pointerdown", e => {
   if (mode === "crop"){ drag = {kind:"crop", a:p, b:p}; return; }
   if (mode === "scale"){ drag = {kind:"scale", b:p}; return; }
   const vtx = e.target.closest("[data-vtx]"), item = e.target.closest("[data-item]"), run = e.target.closest("[data-run]");
+  const boll = e.target.closest("[data-boll]");
   if (vtx){ const [id, i] = vtx.dataset.vtx.split("|"); drag = {kind:"vtx", id, i:+i}; return; }
-  if (item){ const it = S.items[item.dataset.item]; selected = it.id; drag = {kind:"item", id:it.id, dx:p[0] - it.x, dy:p[1] - it.y}; render(); return; }
+  if (boll){ const [id, i] = boll.dataset.boll.split("|"); const it = S.items[id]; customBollards(it, size());
+    selected = id; selBoll = {id, i:+i}; drag = {kind:"boll", id, i:+i}; render(); return; }
+  if (item){ const it = S.items[item.dataset.item]; selected = it.id; selBoll = null; drag = {kind:"item", id:it.id, dx:p[0] - it.x, dy:p[1] - it.y}; render(); return; }
   if (run){ // insert a bend point on the nearest segment
     const r = runs(size()).find(x => x.id === run.dataset.run); const pts = pathPts(r);
     let bi = 1, bd = Infinity;
@@ -688,12 +733,14 @@ svg.addEventListener("pointerdown", e => {
       const t = Math.max(0, Math.min(1, ((p[0]-ax)*(bx-ax) + (p[1]-ay)*(by-ay)) / L2)); const d = Math.hypot(p[0] - (ax + t*(bx-ax)), p[1] - (ay + t*(by-ay)));
       if (d < bd){ bd = d; bi = i; } }
     const mid = (S.routes[r.id] || []).slice(); mid.splice(bi - 1, 0, p); S.routes[r.id] = mid; drag = {kind:"vtx", id:r.id, i:bi - 1}; render(); return; }
-  selected = null; drag = {kind:"pan", sx:e.clientX, sy:e.clientY, v:{...S.view}}; render();
+  selected = null; selBoll = null; drag = {kind:"pan", sx:e.clientX, sy:e.clientY, v:{...S.view}}; render();
 });
 svg.addEventListener("pointermove", e => {
   if (!drag) return; const p = toFt(e);
   if (drag.kind === "pan"){ const k = drag.v.w / svg.clientWidth; S.view = {...drag.v, x:drag.v.x - (e.clientX - drag.sx) * k, y:drag.v.y - (e.clientY - drag.sy) * k}; render(); }
   else if (drag.kind === "item"){ const it = S.items[drag.id]; it.x = +(p[0] - drag.dx).toFixed(2); it.y = +(p[1] - drag.dy).toFixed(2); render(); }
+  else if (drag.kind === "boll"){ const it = S.items[drag.id], b = it.bl[drag.i]; const c = Math.cos(it.rot * Math.PI / 180), sn = Math.sin(it.rot * Math.PI / 180);
+    const dx = p[0] - it.x, dy = p[1] - it.y; b.x = +(dx*c + dy*sn).toFixed(3); b.y = +(-dx*sn + dy*c).toFixed(3); render(); }
   else if (drag.kind === "vtx"){ S.routes[drag.id][drag.i] = [+p[0].toFixed(2), +p[1].toFixed(2)]; render(); }
   else { drag.b = p; render(); }
 });
@@ -725,6 +772,7 @@ document.getElementById("scaleok").onclick = () => {
 document.getElementById("scalecancel").onclick = () => setMode("select");
 window.addEventListener("keydown", e => {
   if (!selected || e.target.matches("input,select")) return;
+  if ((e.key === "Delete" || e.key === "Backspace") && selBoll){ e.preventDefault(); S.items[selBoll.id].bl.splice(selBoll.i, 1); selBoll = null; render(); return; }
   if (e.key === "r" || e.key === "R"){ const it = S.items[selected]; it.rot = (it.rot + (e.shiftKey ? -15 : 15) + 360) % 360; render(); }
 });
 window.addEventListener("resize", () => render());
