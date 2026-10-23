@@ -64,3 +64,5 @@ def test_layout_export_format(site_id):
     ids = {i['id'] for i in lay['items']}
     assert all(b['item'] in ids for b in lay['bollards']) and all(r['from'] in ids and r['to'] in ids for r in lay['routes'])
     assert {g['kind'] for g in lay['chargers']} == {'MW', 'V4'}       # drawings need one MW and one V4 group for now
+    for pl in (lay.get('landscape') or {}).get('plants', []):        # generic plants only; species are picked at CD90
+        assert pl['species'] == 'TBD' and pl['dia_ft'] > 0 and f'code:"{pl["code"]}"' in tool
