@@ -129,7 +129,8 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
       <div class="btns">
         <button class="btn" id="b-arrange" type="button">Re-arrange all</button>
         <button class="btn" id="b-reroute" type="button">Reset conduit paths</button>
-        <button class="btn" id="b-copy" type="button">Copy layout data</button>
+        <button class="btn" id="b-copy" type="button">Copy layout.json</button>
+        <button class="btn" id="b-dl" type="button">Download layout.json</button>
       </div>
       <div class="note">Drag equipment to move it. Select it to rotate. Pads are hatched; dashed outlines are working clearances.</div>
     </section>
@@ -595,10 +596,39 @@ document.getElementById("b-sketch").onclick = () => { S.sketch = !S.sketch; sync
 document.getElementById("b-boll").onclick = () => { S.bollards = S.bollards === false; syncInputs(); render(); };
 document.getElementById("b-arrange").onclick = () => { arrange(size(), false); fit(); render(); };
 document.getElementById("b-reroute").onclick = () => { S.routes = {}; render(); };
+// layout.json for the plan set generator (sites/<site>/layout.json, read by cd50-plansets/cd50.py).
+// Everything is in tool feet, world frame; frame.origin_ft is the top-left of the site image (or linework).
+function siteLayout(){
+  const z = size(); const R = runs(z); const r3 = v => +v.toFixed(3);
+  const items = [], boll = [];
+  for (const it of Object.values(S.items)){
+    const s = spec(it, z), c = Math.cos(it.rot * Math.PI / 180), sn = Math.sin(it.rot * Math.PI / 180);
+    const tr = ([x, y]) => [r3(it.x + x*c - y*sn), r3(it.y + x*sn + y*c)];
+    const rect = (x0, y0, x1, y1) => [[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(tr);
+    items.push({id:it.id, type:it.type, kind:it.kind || null, cab:it.cab || null, name:s.name, shape:s.shape, x:r3(it.x), y:r3(it.y), rot:r3(it.rot),
+      size_ft:[s.w, s.d], pad_ft:s.pw ? [s.pw, s.pd] : null,
+      body:rect(-s.w/2, -s.d/2, s.w/2, s.d/2), pad:s.pw ? rect(-s.pw/2, -s.pd/2, s.pw/2, s.pd/2) : null,
+      front_clear:s.cf ? rect(-s.w/2, s.d/2, s.w/2, s.d/2 + s.cf) : null});
+    for (const b of bollards(it, s)) boll.push({item:it.id, kind:b.k, xy:tr([b.x, b.y])});
+  }
+  const im = S.img;
+  return {format:"cd50-layout/1", exported:new Date().toISOString().slice(0, 10),
+    frame:im ? {site:im.site || null, origin_ft:[r3(im.x), r3(im.y)], size_ft:[r3(im.w / im.ppf), r3(im.h / im.ppf)], north:im.north || 0} : null,
+    sizing:{total_kva:z.totalKva, xfmr_kva:z.xfmr, service_amps:z.svcAmps, service_tag:z.svcTag},
+    chargers:z.G.map(g => ({tag:`${g.cabPrefix}1`, kind:g.kind, posts:g.posts, kva:g.kva,
+      name:`${g.kind === "MW" ? "V4 Megacharger" : "V4 Supercharger"} cabinet (${g.posts} posts)`})),
+    items, bollards:boll,
+    routes:R.map(r => { const P = pathPts(r); return {id:r.id, from:r.from, to:r.to, kind:r.kind, n:r.n, size:r.size, cond:r.cond, fn:r.fn,
+      path:P.map(p => p.map(r3)), length_ft:+plen(P).toFixed(1)}; })};
+}
+const layoutText = () => JSON.stringify(siteLayout(), null, 1);
 document.getElementById("b-copy").onclick = async (e) => {
-  const z = size(); const data = {sizing:z, product:S.product, posts:S.posts, equipment:S.items, conduits:runs(z).map(r => ({...r, path:pathPts(r), lengthFt:+plen(pathPts(r)).toFixed(1)}))};
-  try { await navigator.clipboard.writeText(JSON.stringify(data, null, 2)); e.target.textContent = "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
-  setTimeout(() => e.target.textContent = "Copy layout data", 1600);
+  try { await navigator.clipboard.writeText(layoutText()); e.target.textContent = "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
+  setTimeout(() => e.target.textContent = "Copy layout.json", 1600);
+};
+document.getElementById("b-dl").onclick = () => {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([layoutText()], {type:"application/json"})); a.download = "layout.json";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 document.getElementById("inspector").onclick = e => { const b = e.target.closest("[data-rot]"); if (!b || !selected) return; const it = S.items[selected]; it.rot = ((it.rot + +b.dataset.rot) % 360 + 360) % 360; render(); };
 

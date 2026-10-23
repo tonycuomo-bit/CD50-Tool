@@ -17,6 +17,7 @@ sites/
     site.json              project info, chargers, equipment geometry, sheet text (templates)
     lines_mw2.svg, mw_overlay.svgfrag, mw_pos.json, *.jpg   linework, WB-67 swept path, MW positions, NAIP aerial
     out/                   generated cd50.html / cd50_data.json / cd50.pdf (gitignored)
+  example-tool-export/     San Ysidro rebuilt from a layout tool export (site.json + layout.json, shares ../san-ysidro files)
 cd50-layout/
   cd50-layout.html         Site Layout tool (single self-contained HTML)
 cd50-plansets/
@@ -80,7 +81,7 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
 ### Site Layout tool (single-file HTML)
 
 - Live: https://claude.ai/artifact/EtmZLbypTPyGDZyL3uGDJc. Source: `cd50-layout/cd50-layout.html` (was `cd50-layout-v6.html` in the shared project folder; older versions stay there, git is the history from now on).
-- Features: sizing panel (V4 / MW / MW + V4), image paste/upload, crop, scale, sketch view, drag/rotate equipment with pads, clearances and bollards (toggle + count), auto conduit runs (SL, AC-SPR, DC per post, COM) with bend points, schedule, JSON export.
+- Features: sizing panel (V4 / MW / MW + V4), image paste/upload, crop, scale, sketch view, drag/rotate equipment with pads, clearances and bollards (toggle + count), auto conduit runs (SL, AC-SPR, DC per post, COM) with bend points, schedule, **Copy / Download layout.json** for the plan set generator.
 - Footprints and feeder sets are approximate (CD50 level).
 - Sites live in the `const SITES` array: `src` (data URI image), `wFt`, `hFt`, `pin` (image ft), plus optional `place`, `view`, `north`, `sketchSrc` (linework), `mwLayout {posts:[[x,y,rot]],cabs:[...]}`, `svcLayout` (xfmr/svc/ct/mtr), `noBollard` polygon. Users pick one with **Load site**.
 - To publish a change: edit `cd50-layout/cd50-layout.html`, commit, and republish to the same artifact URL. No more `-vN` copies.
@@ -96,10 +97,13 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
   ```
   `cd50.py` prints the bollard count and conduit route lengths. `pdf.cjs` uses globally installed Playwright and launches `/opt/pw-browsers/chromium`, falling back to Playwright's own Chromium. Copy `out/cd50.pdf` to the dated, revisioned name below. `out/` is gitignored.
 - Owner / contact details: keep them out of git anyway (the repo was public at first and may be shared). `cd50.py` reads them from `sites/<site>/site_private.json` (gitignored; copy `sites/site_private.example.json`). Missing fields print as `[PENDING · FROM EMAIL / MONDAY]`. Do not hard-code names, emails or phone numbers in the code.
-- Inputs (all in `sites/<site>/`): `site.json` plus the files it names under `files` (aerial, linework SVG, WB-67 swept path, MW positions), and optional `site_private.json`.
+- Inputs (all in `sites/<site>/`): `site.json` plus the files it names under `files` (aerial, linework SVG, WB-67 swept path, MW positions, or `layout`), and optional `site_private.json`. Paths may point into another site folder (`../san-ysidro/...`).
+- **Two geometry modes.** With `files.layout`, the generator takes equipment, pads, front clearances, bollards, conduit paths and the charger groups from `layout.json` (the layout tool export, format `cd50-layout/1`, tool feet). Plan points are `(ft - frame.origin_ft) * 3.6 + linework viewBox origin`; with no linework, the aerial is the plan background. Without it, the hand-placed San Ysidro yard model is used (`geometry` in `site.json`). San Ysidro r5 stays on the yard model until it is redrawn in the tool and Tony approves the new sheets.
+- Adding a site from the tool: lay it out (Load site or paste an image, set scale, place equipment, add conduit bend points), Download layout.json, save it as `sites/<site>/layout.json`, write `sites/<site>/site.json` (copy `example-tool-export/site.json`: `project`, `files`, `text`), then build. If the sizing rules changed after the export, `cd50.py` warns; re-export.
+- Layout-mode limits for now: one MW group and one V4 group (step 5), conduit labels sit on each run's longest segment, enlarged plan views are fixed-size boxes centred on the equipment, and no dimension strings.
 - `site.json` sections: `project` (title block and cover text, utility, AHJ, APN), `files`, `chargers` (groups `{tag, kind: V4|MW, posts, kva, name}` sized by `sizing.py`), `geometry` (north angle, yard placement off a property line, switchboard/transformer offsets in the yard, V4 cabinet and post positions, plan view boxes), and `text` (every notes list and the cover tables). Text entries are Python format templates filled from the sizing and bollard results and `site_private.json`: `{XFMR:,}`, `{SVC:,}`, `{TOT_KVA:,}`, `{MW[kva]}`, `{V4[ocpd]}`, `{NB}`, `{owner}` and so on (the full list is `CTX` in `cd50.py`; `tests/test_site.py` rejects unknown fields). Never put emails or phone numbers in `site.json`.
 - Upstream scripts in `cd50-plansets/source/`: `truck.py` (WB-67 kinematics, L1 19.5 / L2 45.5 ft), `cF.json` (truck lane config), `mw3.py` (regenerates the MW input files from `cF.json`; run it from `source/` and copy `mw_pos.json` and `mw_overlay.svgfrag` into `sites/san-ysidro/`), `compose.py`, `site_poly.npy`. Change truck lanes in `cF.json`, rerun `mw3.py`, then `cd50.py`.
-- Still San Ysidro-shaped in code: the drawings assume one MW group then one V4 group, a property-line equipment yard, and hand-placed conduit trench waypoints and label spots (`ROUTES` section, plus some E-102 and S-501 detail positions). `PENDING` marks owner fields waiting on approval.
+- Still San Ysidro-shaped in code (yard model only): the property-line equipment yard and hand-placed conduit trench waypoints and label spots (`ROUTES` section, E-102 dimension strings). `PENDING` marks owner fields waiting on approval.
 - Output naming: `<site>_CD50_<YYYY-MM-DD>[_rN].pdf`. Never overwrite a previous revision; bump `_rN`. Issued PDFs go to the shared project folder `cd50-plansets/` and Tony's OneDrive, not git (they carry owner contacts).
 
 ### Intake sheet
@@ -148,7 +152,7 @@ Tony sends an address; Claude adds the site to the layout tool.
 
 1. ~~One sizing module with tests.~~ Done: `rules/sizing_rules.json`, `sizing.py`, `tests/test_sizing.py`.
 2. ~~Site input file.~~ Done: `sites/<site>/site.json`; San Ysidro output unchanged. Left for later steps: conduit routes and label placement (step 3), V4-only / MW-only / multi-cabinet drawing variants (step 5), and splitting the notes into a shared standard-notes library plus site-specific notes.
-3. **Layout tool → generator hand-off.** The layout tool's JSON export writes that `site.json` (equipment, pads, conduit bend points), so a layout drawn in the tool builds a plan set with no code edits.
+3. ~~Layout tool → generator hand-off.~~ Done: the tool exports `layout.json`; `cd50.py` builds from it (`sites/example-tool-export`). Next: redraw San Ysidro in the tool (yard along the I-805 PL, trench bend points) and retire the yard model once Tony approves the sheets; add a primary (P-1) run and dimension strings to the tool export.
 4. **Intake → site.json.** Rebuild the intake workbook generator (lost) or read the xlsx directly, so the question set fills `site.json`.
 5. **Benchmark sites (Tony, 2026-10-23).** Rebuild finished jobs through the pipeline and compare against the signed CD100s: **Cleveland** for a 499 kW (software-limited) site, and **Golden or Collinsville** for full-capacity sites. This proves the generalization. (Collinsville is not in the reference folder list yet; get its set from Tony if it is the one used.)
 6. **Pre-submission checker.** Turn the confirmed Lessons Learned list into automated checks that run on `cd50_data.json`.
