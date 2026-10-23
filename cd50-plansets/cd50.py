@@ -300,8 +300,24 @@ def conduits(labels=True, sc=1.0):
     return "".join(o)
 # layout-tool sites: every item is drawn from its exported footprint (pad, body, front clearance) instead of the yard model
 EQ_FILL = dict(xfmr="#cbd5e1", svc="#99f6e4", ct="#e2e8f0", mtr="#e2e8f0")
+def parking_layout(scale=1.0):
+    # stalls, accessible EVCS access aisles and signs from the layout tool's parking block (optional)
+    pk = LAYOUT.get('parking') or {}; o = []
+    for st in pk.get('stalls', []):
+        q = [P(v) for v in st['outline']]; ada = st['kind'] != 'ev'; col = "#1d4ed8" if ada else "#141817"
+        o.append(L(*q[0], *q[3], st=col, sw=0.9)); o.append(L(*q[1], *q[2], st=col, sw=0.9))
+        if st['aisle']:
+            a = [P(v) for v in st['aisle']]; o.append(PG(a, fill="#dbeafe", st="#1d4ed8", sw=0.9))
+            for k in range(1, int(st['l_ft'] // 3) + 1):        # hatch lines across the aisle, 3 ft o.c.
+                t = k * 3 / st['l_ft']; o.append(L(*(np.array(a[0]) + (np.array(a[3]) - a[0]) * t), *(np.array(a[1]) + (np.array(a[2]) - a[1]) * max(0, t - 0.25)), st="#1d4ed8", sw=0.5))
+        c = np.mean(q, axis=0); lab = {'van': "VAN ACCESSIBLE EVCS", 'std': "ACCESSIBLE EVCS", 'amb': "AMBULATORY EVCS"}.get(st['kind'])
+        if lab: o.append(T(c[0], c[1] + 3*scale, lab, 6.5*scale, a="middle", w="bold", fill=col, rot=st['rot']))
+    for sg in pk.get('signs', []):
+        x, y = P(sg['xy']); o.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.2" fill="#dc2626" stroke="#141817" stroke-width="0.6"/>')
+        o.append(T(x + 3.5, y + 2, sg['code'], 6*scale, fill="#991b1b"))
+    return "".join(o)
 def equipment_layout(scale=1.0, tags=True, clear=True):
-    o = []; ts = 9*scale
+    o = [parking_layout(scale)] if LAYOUT.get('parking') else []; ts = 9*scale
     its = [i for i in ITEMS.values() if i['type'] != 'post']
     if clear:
         for i in its:
