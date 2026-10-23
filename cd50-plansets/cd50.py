@@ -621,7 +621,9 @@ o.append(T(70, y3+40, "TABLE 3 · FEEDER & CONDUIT SCHEDULE", 15, w="bold"))
 crow = [[r['tag'], r['fr'], r['to'], r['n'] + (" PVC" if r['kind'] != "com" else ""), r['cond'], f"{r['len']}'", r['note']] for r in ROUTES]
 s, y4 = table(70, y3+54, [("TAG", 80), ("FROM", 190), ("TO", 90), ("CONDUIT", 120), ("CONDUCTORS", 420), ("EST. LENGTH", 100), ("NOTES", 300)], crow, rh=22, sz=11); o.append(s)
 tot_tr = round(sum(r['len'] for r in ROUTES if r['kind'] == "dc" and r['to'].startswith("POST 1")) )
-s, y5 = para(70, y4+20, f"Equipment yard location is TBD, so P-1, SL-1, F-1, F-2 and COM-1 lengths are placeholders. Lengths are measured on plan plus 10 ft for stub-ups (P-1 to PL only). DC runs to posts 1A-1H share one trench; total DC conduit about {tot_tr:,} ft. Verify the maximum cabinet-to-post DC run against the Tesla V4 Installation Manual. Conduit fill to be verified at CD90 with final conductor types.", 190, 11); o.append(s)
+_lenote = (f"SL-1, SL-2, {FT_MW}, {FT_V4} and COM-1 follow the trench bend points from the Site Layout tool; the SDG&E primary (P-1) is not routed yet. Lengths are measured on plan plus 10 ft for stub-ups." if LAYOUT else
+           "Equipment yard location is TBD, so P-1, SL-1, F-1, F-2 and COM-1 lengths are placeholders. Lengths are measured on plan plus 10 ft for stub-ups (P-1 to PL only).")
+s, y5 = para(70, y4+20, f"{_lenote} DC runs to posts 1A-1H share one trench; total DC conduit about {tot_tr:,} ft. Verify the maximum cabinet-to-post DC run against the Tesla V4 Installation Manual. Conduit fill to be verified at CD90 with final conductor types.", 190, 11); o.append(s)
 # panel schedule SB-1
 o.append(T(1700, 96, "TABLE 4 · SB-1 DISTRIBUTION", 15, w="bold"))
 s, y6 = table(1700, 110, [("CKT", 50), ("LOAD", 200), ("BREAKER", 100), ("kVA", 90)], [

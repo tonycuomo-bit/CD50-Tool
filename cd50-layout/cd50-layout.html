@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>CD50 Site Layout</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -364,7 +365,7 @@ const STALL_KINDS = {ev:"EV stall", van:"Van accessible EVCS", std:"Standard acc
 function adaRequired(n, jur){
   if (n < 1) return {van:0, std:0, amb:0};
   if (jur === "CA"){
-    if (n <= 4) return {van:1, std:0, amb:0}; if (n <= 25) return {van:1, std:0, amb:1}; if (n <= 50) return {van:1, std:1, amb:1};
+    if (n <= 4) return {van:1, std:0, amb:0}; if (n <= 25) return {van:1, std:1, amb:0}; if (n <= 50) return {van:1, std:1, amb:1};
     if (n <= 75) return {van:1, std:2, amb:2}; if (n <= 100) return {van:1, std:3, amb:3};
     return {van:1, std:3 + Math.ceil((n-100)/60), amb:3 + Math.ceil((n-100)/50)};
   }

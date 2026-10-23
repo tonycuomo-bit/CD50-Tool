@@ -1,7 +1,7 @@
 {
- "_note": "Example: San Ysidro rebuilt from a Site Layout tool export (layout.json). Equipment, pads, bollards, conduit paths and chargers come from layout.json; the V4 row was placed at the r5 positions, the service yard and MW layout are the tool's own. Text is copied from sites/san-ysidro and still describes the r5 design.",
- "id": "example-tool-export",
- "short_name": "Layout tool export (example)",
+ "_note": "San Ysidro r6: the r5 design redrawn in the Site Layout tool (layout.json). Equipment, pads, bollards, conduit trench bend points, stalls, accessible EVCS and signs come from layout.json; text is the r5 text with the tool's run and cabinet tags. Owner/contact details go in site_private.json next to this file (gitignored).",
+ "id": "san-ysidro-r6",
+ "short_name": "San Ysidro r6 (layout tool)",
  "date": "10/23/2026",
  "project": {
   "title_lines": [
@@ -9,7 +9,7 @@
    "EV CHARGING HUB",
    "SAN DIEGO, CA 92173"
   ],
-  "headline": "299 E. SAN YSIDRO BLVD · LAYOUT TOOL EXPORT (EXAMPLE)",
+  "headline": "299 E. SAN YSIDRO BLVD · EV CHARGING HUB",
   "subtitle": "CD50 PRELIMINARY CONSTRUCTION DESIGN · V4 MEGACHARGER (2 POSTS, PULL-THROUGH) + V4 SUPERCHARGER (8 POSTS) ON ONE SERVICE",
   "location_line": "SAN DIEGO, CALIFORNIA 92173 · SDG&E SERVICE TERRITORY",
   "apn_short": "666-100-12-00 (VERIFY)",
@@ -87,7 +87,7 @@
    ],
    [
     "Supercharger posts",
-    "8 (passenger)  ·  1 cabinet V4-1 @ {V4[kva]} kVA (highest nameplate)"
+    "8 (passenger)  ·  1 cabinet SPR-1 @ {V4[kva]} kVA (highest nameplate)"
    ],
    [
     "Connected load",
@@ -103,7 +103,7 @@
    ],
    [
     "Cabinet breakers",
-    "MW-1 {MW[ocpd]} A  ·  V4-1 {V4[ocpd]} A  (125% of cabinet input)"
+    "MW-1 {MW[ocpd]} A  ·  SPR-1 {V4[ocpd]} A  (125% of cabinet input)"
    ],
    [
     "Truck access",
@@ -193,8 +193,8 @@
   ],
   "electrical_notes": [
    "Service: SDG&E {XFMR:,} kVA pad-mount transformer XR-1 to {SVC:,} A, 480Y/277 V, 3-phase, 4-wire switchboard SB-1 with EUSERC utility metering section. Final transformer size and primary voltage by SDG&E.",
-   "Cabinet breakers are sized at 125% of cabinet input current: MW-1 {MW[kva]} kVA = {MW[amps]:,.0f} A, {MW[ocpd]} A breaker; V4-1 {V4[kva]} kVA = {V4[amps]:,.0f} A, {V4[ocpd]} A breaker.",
-   "V4-1 is commissioned at its highest nameplate rating, {V4[kva]} kVA (1500 A). No derate table is needed.",
+   "Cabinet breakers are sized at 125% of cabinet input current: MW-1 {MW[kva]} kVA = {MW[amps]:,.0f} A, {MW[ocpd]} A breaker; SPR-1 {V4[kva]} kVA = {V4[amps]:,.0f} A, {V4[ocpd]} A breaker.",
+   "SPR-1 is commissioned at its highest nameplate rating, {V4[kva]} kVA (1500 A). No derate table is needed.",
    "Ground-fault protection of equipment is required on the main (CEC 230.95, 1000 A and larger, 480Y/277 V). Arc energy reduction is required for breakers rated 1200 A and larger (CEC 240.87).",
    "Cabinet feeders are 3-wire plus EGC with no neutral. Parallel conductors per CEC 310.10(G). Aluminum conductors shall be compact AA-8000 series, XHHW-2.",
    "Conduit below grade: Schedule 40 PVC, Schedule 80 PVC or RMC where exposed and at stub-ups. Minimum cover 24\" (36\" under truck paving). Provide pull ropes in spare conduits.",
@@ -211,8 +211,9 @@
    "Transformer XR-1: bollards per SDG&E requirements (Tesla G-001 utility note 4); 3' clear all sides and 8' at the doors, removable at the doors. Verify with the executed SDG&E design."
   ],
   "accessibility_notes": [
-   "With 10 EV charging spaces (5 to 25 range), provide at least 1 van-accessible and 1 standard-accessible EV space (CBC 11B-228.3.2.1). Posts 1C (van) and 1D (standard) serve the existing accessible EV / EVCS stalls.",
-   "Accessible EV spaces need an accessible route to the charger; operable parts at 48\" max. reach; access aisle striping and signage per CBC 11B-812.",
+   "8 V4 EV charging spaces (5 to 25 range): provide 1 van-accessible and 1 standard-accessible EVCS (CBC 11B-228.3.2.1). Stall 1C is van accessible (12' + 5' aisle) and 1D standard accessible (9'), sharing one 5' access aisle in the 1C-1D gap (Tesla G-104 van and standard layout).",
+   "30\" x 48\" clear floor space at each accessible charge post; 3' clear behind the post and 1:48 max slope where the accessible route passes the stall head (Tesla G-104). Operable parts at 48\" max. reach; accessible route to the charger per CBC 11B-812.",
+   "Access aisle: 4\" border and cross striping, NO PARKING in 12\" letters. Accessible EVCS signs per CBC 11B-812.8 / AHJ, placed clear of operable parts.",
    "Megacharger truck stalls are not counted toward passenger accessible spaces; confirm with AHJ."
   ],
   "open_items": [
@@ -236,7 +237,7 @@
    "WB-67 swept paths (simulated). Civil to confirm with AutoTURN.",
    "Equipment yard: XR-1 transformer and SB-1 switchboard, tucked 3' off the west (I-805) property line to keep the interior open for traffic. LOCATION TBD, pending SDG&E design and owner review; shown for sizing and routing only.",
    "V4 Supercharger posts 1A-1H at the north parking row.",
-   "V4 cabinet V4-1 in the planter behind the row.",
+   "V4 cabinet SPR-1 in the planter behind the row.",
    "Existing Jack in the Box building, parking and drive aisles (by others).",
    "Former coffee pad, parking row and drive-thru removed from the design."
   ],
@@ -247,10 +248,10 @@
   ],
   "e101_notes": [
    "Conduit routes are schematic. Final routing, depth and crossings at CD90 after survey and utility locate.",
-   "Feeders F-1 and F-2 and comms COM-1 share a common trench from SB-1. Separate DC from AC per Tesla requirements.",
+   "Feeders AC-MW-1 and AC-SPR-1 and comms COM-1 share a common trench from SB-1. Separate DC from AC per Tesla requirements.",
    "DC runs to posts 1A-1H share one trench in the planter behind the stall heads.",
    "Equipment yard (XR-1, SB-1) LOCATION TBD. SDG&E primary P-1 route, POC and all feeder lengths from the yard will change when it is set.",
-   "Shaded areas are working / door clearances (SB-1 4', XR-1 8', V4-1 front).",
+   "Shaded areas are working / door clearances (SB-1 4', XR-1 8', SPR-1 front).",
    "Bollards protect all equipment; open circles are removable. See S-501.",
    "See E-201 for the single-line diagram and E-301 for feeder and conduit schedules."
   ],
@@ -258,14 +259,14 @@
    "Equipment yard runs parallel to the west (I-805) property line, 3'-0\" off it, with equipment backs toward the PL and fronts facing the site. Guard posts 1'-0\" outside the yard on the three open sides at 4'-0\" max. on center (CFC 312; SDG&E governs at XR-1). Removable posts at the SE end for transformer door access.",
    "SB-1 front faces into the site (NE) with 4'-0\" min. working space; two egress paths required for 1200 A and larger equipment over 6' wide (CEC 110.26(C)(3)).",
    "XR-1 doors face the SE end of the yard with 8'-0\" clear. Transformer pad, grounding and bollards per SDG&E ESSGM.",
-   "V4-1 sits in the planter behind the stall heads, 5'-0\" front clearance toward the curb. Removable bollards in front, fixed bollards on the sides.",
+   "SPR-1 sits in the planter behind the stall heads, 5'-0\" front clearance toward the curb. Removable bollards in front, fixed bollards on the sides.",
    "Each V4 post is centred on its stall head on a 5'-11\" x 2'-0\" CIP pad, with a Tesla rebounding bollard 2'-3 3/4\" each side (S-502). Wheel stop in each stall.",
    "Posts 1C and 1D serve the van-accessible and standard-accessible EV stalls; keep the access aisle and route clear.",
    "MW-1 pad is set 3'-6\" min. from the truck swept path; guard posts on the sides clear of the truck path (none inside the swept path). Each Megacharger post has a rebounding bollard 5'-7\" upstream on its island (Tesla G-102)."
   ],
   "sld_notes": [
    "Equipment ratings are preliminary and follow the CD50 sizing rules: transformer = total cabinet kVA x 1.25, next standard size up; breakers = 125% of cabinet input, next standard size up; service = 125% of summed cabinet amps.",
-   "Cabinet input settings are assumptions until confirmed: MW-1 1247 kVA nameplate, V4-1 1247 kVA (highest V4 nameplate).",
+   "Cabinet input settings are assumptions until confirmed: MW-1 1247 kVA nameplate, SPR-1 1247 kVA (highest V4 nameplate).",
    "Main breaker requires ground-fault protection of equipment (CEC 230.95) and arc energy reduction (CEC 240.87).",
    "SB-1 AIC rating, coordination and arc-flash labels from studies at CD90.",
    "Feeders to Tesla cabinets are 3-wire plus EGC. Confirm conductor counts and terminations with the Tesla cabinet lug data.",
