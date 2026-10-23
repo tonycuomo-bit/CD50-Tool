@@ -1952,6 +1952,122 @@
    }
   ]
  },
+ "landscape": {
+  "plants": [
+   {
+    "id": "PL1",
+    "plant": "shrub_lg",
+    "code": "S-1",
+    "label": "Large screening shrub",
+    "tree": false,
+    "dia_ft": 6,
+    "size": "5 gal",
+    "species": "TBD",
+    "xy": [
+     -41.9,
+     108.8
+    ]
+   },
+   {
+    "id": "PL2",
+    "plant": "shrub_lg",
+    "code": "S-1",
+    "label": "Large screening shrub",
+    "tree": false,
+    "dia_ft": 6,
+    "size": "5 gal",
+    "species": "TBD",
+    "xy": [
+     -37.2,
+     116.6
+    ]
+   },
+   {
+    "id": "PL3",
+    "plant": "shrub_lg",
+    "code": "S-1",
+    "label": "Large screening shrub",
+    "tree": false,
+    "dia_ft": 6,
+    "size": "5 gal",
+    "species": "TBD",
+    "xy": [
+     -32.5,
+     124.4
+    ]
+   },
+   {
+    "id": "PL4",
+    "plant": "shrub_lg",
+    "code": "S-1",
+    "label": "Large screening shrub",
+    "tree": false,
+    "dia_ft": 6,
+    "size": "5 gal",
+    "species": "TBD",
+    "xy": [
+     -28.4,
+     132.3
+    ]
+   },
+   {
+    "id": "PL5",
+    "plant": "tree_md",
+    "code": "T-2",
+    "label": "Medium canopy tree",
+    "tree": true,
+    "dia_ft": 20,
+    "size": "24\" box",
+    "species": "TBD",
+    "xy": [
+     -84.1,
+     146.3
+    ]
+   },
+   {
+    "id": "PL6",
+    "plant": "tree_md",
+    "code": "T-2",
+    "label": "Medium canopy tree",
+    "tree": true,
+    "dia_ft": 20,
+    "size": "24\" box",
+    "species": "TBD",
+    "xy": [
+     -52.8,
+     177.6
+    ]
+   },
+   {
+    "id": "PL7",
+    "plant": "grass",
+    "code": "S-3",
+    "label": "Ornamental grass / groundcover",
+    "tree": false,
+    "dia_ft": 2,
+    "size": "1 gal",
+    "species": "TBD",
+    "xy": [
+     164.5,
+     56
+    ]
+   },
+   {
+    "id": "PL8",
+    "plant": "grass",
+    "code": "S-3",
+    "label": "Ornamental grass / groundcover",
+    "tree": false,
+    "dia_ft": 2,
+    "size": "1 gal",
+    "species": "TBD",
+    "xy": [
+     164.5,
+     61
+    ]
+   }
+  ]
+ },
  "routes": [
   {
    "id": "SL-1",

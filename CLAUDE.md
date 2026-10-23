@@ -9,8 +9,9 @@ CLAUDE.md                  this file: rules, tools, workflow, roadmap
 README.md                  short setup and build steps
 requirements.txt           Python deps for the generator (shapely, numpy); requirements-dev.txt adds pytest
 rules/sizing_rules.json    Tony's sizing rules, the one table both tools use
+rules/tesla_rules.json     Tesla design limits (330 ft CAT run, DC trench, clearances, stalls) with sources; both tools use it
 tests/                     pytest suite (sizing rules, Python/JS parity, site inputs, golden drawing hashes)
-tools/sync_rules.py        copies the rules table into the layout tool
+tools/sync_rules.py        copies both rules tables into the layout tool
 sites/
   site_private.example.json  template for the gitignored per-site owner/contact file
   san-ysidro/
@@ -49,7 +50,7 @@ cd50-intake/
 - 24x36 in sheets (36 x 24 landscape), Tesla templatized plan set look, Tesla **G / E / A / S** numbering.
 - Primary template: Tesla `V4 Docs/2026.09.21 - V4 Templatized Plan Set.pdf` (G-001, E-101, E-201/202/203 SLD variants by cabinet rating, E-501/502, A-501 ADA, S-501/502 foundations by wind speed). Megacharger version is in `MW V4/`.
 - Keep the SSC extras Tesla's template lacks: site info, GN general notes, specs, ADA, existing/survey sheets.
-- Current CD50 sheet list: G-001 Cover, G-002 General Notes, A-101 Site Plan & Truck Circulation, E-101 Electrical Site Plan, E-102 Enlarged Electrical Plans, E-201 Single-Line Diagram, E-301 Load Calcs & Schedules, S-501 Pad, Foundation & Bollard Details.
+- Current CD50 sheet list: G-001 Cover, G-002 General Notes, A-101 Site Plan & Truck Circulation, L-101 Landscape Plan (layout-mode sites with plants), E-101 Electrical Site Plan, E-102 Enlarged Electrical Plans, E-201 Single-Line Diagram, E-301 Load Calcs & Schedules, S-501 Pad, Foundation & Bollard Details.
 - Plan scale 1"=20' (3.6 pt per ft at 72 pt/in); enlarged plans 1"=10'.
 
 ## Sizing rules (Tony's rules; do not change without asking)
@@ -64,6 +65,12 @@ A short question set drives everything (post counts, product, cabinet input sett
 - **Mixed MW + V4** on one shared transformer and service is supported.
 - Example (San Ysidro r2+): MW-1 1247 + V4-1 1247 = 2494 kVA, XR-1 3750 kVA, SB-1 4000 A, 2000 A cabinet breakers.
 - **One rules table**: `rules/sizing_rules.json` (standard sizes, factors, posts per cabinet, input choices, feeders, EGC). `cd50-plansets/sizing.py` reads it; `tools/sync_rules.py` copies it into the layout tool's `RULES` block. The tool's `sizeGroups()` (between `// BEGIN SIZING` and `// END SIZING`) mirrors `size_groups()` line for line, and `tests/test_sizing.py` runs both and compares. To change a rule: edit the JSON (with Tony's OK), run `python3 tools/sync_rules.py`, then `python3 -m pytest`.
+
+## Tesla design limits
+
+- `rules/tesla_rules.json` holds the Tesla limits with a source on every rule: V4 Supercharger Design Guide (rev 0, 06/23/25, plotted 04/28/26), V4 Install Manual (12/2025), Commercial Charging Design Manual (rev 03/18/24). Where they differ, the **newest wins** (e.g. V4DG's 24 DC conduits per trench group and 28" max depth replace the CCDM's 16 and 24"). These are Tesla's rules, not Tony's sizing rules: when Tony sends a newer Tesla document, update the JSON and its `sources`, run `python3 tools/sync_rules.py`, then pytest.
+- **Run limit**: CAT6 post to cabinet, cabinet to cabinet or cabinet to switchgear max 330 ft (100 m). There is no separate DC conductor length limit in any Tesla document so far. Both tools check every DC, COM and cabinet feeder run (plan length + 10 ft stub-ups): the tool flags it under the conduit schedule, `cd50.py` prints a warning, writes `checks` into `cd50_data.json`, and states the longest run on E-301. `tests/test_site.py` fails if a committed site is over.
+- **DC trench**: up to 24 DC post conduits per group, 24" between groups; more than 4 need engineered backfill per Tesla's Rho table. E-301 Table 6 lists all the limits from the JSON `notes`.
 
 ## Bollards and clearances
 
@@ -82,7 +89,7 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
 ### Site Layout tool (single-file HTML)
 
 - Live: https://claude.ai/artifact/EtmZLbypTPyGDZyL3uGDJc. Source: `cd50-layout/cd50-layout.html` (was `cd50-layout-v6.html` in the shared project folder; older versions stay there, git is the history from now on).
-- Features: sizing panel (V4 / MW / MW + V4), image paste/upload, crop, scale, sketch view, drag/rotate equipment with pads, clearances and bollards (toggle + count; drag, delete or set fixed/removable on single bollards, set a per-equipment bollard count, Reset to auto), parking panel (ADA standard CA CBC 11B-812 or federal, striping style, EV stall size, sign catalog, pavement stencil; Stalls at V4 posts, + van / standard / ambulatory accessible EVCS with access aisle, Signs at stalls; accessible-EVCS scoping check), auto conduit runs (SL, AC-SPR, DC per post, COM) with bend points, schedule, **Copy / Download layout.json** for the plan set generator.
+- Features: sizing panel (V4 / MW / MW + V4), image paste/upload, crop, scale, sketch view, drag/rotate equipment with pads, clearances and bollards (toggle + count; drag, delete or set fixed/removable on single bollards, set a per-equipment bollard count, Reset to auto), parking panel (ADA standard CA CBC 11B-812 or federal, striping style, EV stall size, sign catalog, pavement stencil; Stalls at V4 posts, + van / standard / ambulatory accessible EVCS with access aisle, Signs at stalls; accessible-EVCS scoping check), landscaping (generic trees and shrubs T-1..T-4, S-1..S-3 with canopy size, species TBD), auto conduit runs (SL, AC-SPR, DC per post, COM) with bend points, schedule, **Copy / Download layout.json** for the plan set generator.
 - Footprints and feeder sets are approximate (CD50 level).
 - Sites live in the `const SITES` array: `src` (data URI image), `wFt`, `hFt`, `pin` (image ft), plus optional `place`, `view`, `north`, `sketchSrc` (linework), `mwLayout {posts:[[x,y,rot]],cabs:[...]}`, `svcLayout` (xfmr/svc/ct/mtr), `noBollard` polygon. Users pick one with **Load site**.
 - To publish a change: edit `cd50-layout/cd50-layout.html`, commit, and republish to the same artifact URL. No more `-vN` copies.
@@ -101,7 +108,8 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
 - Inputs (all in `sites/<site>/`): `site.json` plus the files it names under `files` (aerial, linework SVG, WB-67 swept path, MW positions, or `layout`), and optional `site_private.json`. Paths may point into another site folder (`../san-ysidro/...`).
 - **Two geometry modes.** With `files.layout`, the generator takes equipment, pads, front clearances, bollards, conduit paths and the charger groups from `layout.json` (the layout tool export, format `cd50-layout/1`, tool feet). Plan points are `(ft - frame.origin_ft) * 3.6 + linework viewBox origin`; with no linework, the aerial is the plan background. Without it, the hand-placed San Ysidro yard model is used (`geometry` in `site.json`). San Ysidro r5 stays on the yard model until it is redrawn in the tool and Tony approves the new sheets.
 - Adding a site from the tool: lay it out (Load site or paste an image, set scale, place equipment, add conduit bend points), Download layout.json, save it as `sites/<site>/layout.json`, write `sites/<site>/site.json` (copy `san-ysidro-r6/site.json`: `project`, `files`, `text`), then build. If the sizing rules changed after the export, `cd50.py` warns; re-export.
-- `layout.json` may carry a `parking` block (stalls with outline and access-aisle polygons, signs with codes, jurisdiction, striping, ADA scoping result); `parking_layout()` draws it on the plans. Tesla rules come from the V4 Supercharger Design Guide (rev 0, 06/23/25): G-101 stall minimum 9' x 17' (10'-6" / 11' wide with side obstructions on one / both sides), G-104 ADA (van 11', 12' in CA, + 5' aisle; standard 9' + 5'; 18' long; optional 2' buffer; 30" x 48" clear floor space at the post; 4" white border and cross striping, NO PARKING 12" letters; fishbone / on-the-line ADA stalls not allowed in CA). They live in `TESLA_STALL` / `TESLA_ADA` in the tool, which uses the larger of Tesla and the jurisdiction. Federal EV scoping uses the 2010 ADA 208.2 parking table as a proxy.
+- `layout.json` may carry a `parking` block (stalls with outline and access-aisle polygons, signs with codes, jurisdiction, striping, ADA scoping result); `parking_layout()` draws it on the plans. Tesla rules come from the V4 Supercharger Design Guide (rev 0, 06/23/25): G-101 stall minimum 9' x 17' (10'-6" / 11' wide with side obstructions on one / both sides), G-104 ADA (van 11', 12' in CA, + 5' aisle; standard 9' + 5'; 18' long; optional 2' buffer; 30" x 48" clear floor space at the post; 4" white border and cross striping, NO PARKING 12" letters; fishbone / on-the-line ADA stalls not allowed in CA). They live in `stall` / `ada` in `rules/tesla_rules.json` (the tool's `TESLA_STALL` / `TESLA_ADA`), and the tool uses the larger of Tesla and the jurisdiction. Federal EV scoping uses the 2010 ADA 208.2 parking table as a proxy.
+- `layout.json` may carry a `landscape` block (`plants`: code, label, tree, dia_ft, size, `species: "TBD"`, xy). With plants, `cd50.py` adds sheet L-101 (landscape plan, planting schedule with species TBD, landscape notes). Species are picked by the landscape architect at CD90.
 - Layout-mode limits for now: one MW group and one V4 group (step 5), conduit labels sit on each run's longest segment, enlarged plan views are fixed-size boxes centred on the equipment, and no dimension strings.
 - `site.json` sections: `project` (title block and cover text, utility, AHJ, APN), `files`, `chargers` (groups `{tag, kind: V4|MW, posts, kva, name}` sized by `sizing.py`), `geometry` (north angle, yard placement off a property line, switchboard/transformer offsets in the yard, V4 cabinet and post positions, plan view boxes), and `text` (every notes list and the cover tables). Text entries are Python format templates filled from the sizing and bollard results and `site_private.json`: `{XFMR:,}`, `{SVC:,}`, `{TOT_KVA:,}`, `{MW[kva]}`, `{V4[ocpd]}`, `{NB}`, `{owner}` and so on (the full list is `CTX` in `cd50.py`; `tests/test_site.py` rejects unknown fields). Never put emails or phone numbers in `site.json`.
 - Upstream scripts in `cd50-plansets/source/`: `truck.py` (WB-67 kinematics, L1 19.5 / L2 45.5 ft), `cF.json` (truck lane config), `mw3.py` (regenerates the MW input files from `cF.json`; run it from `source/` and copy `mw_pos.json` and `mw_overlay.svgfrag` into `sites/san-ysidro/`), `compose.py`, `site_poly.npy`. Change truck lanes in `cF.json`, rerun `mw3.py`, then `cd50.py`.
@@ -142,7 +150,7 @@ Tony sends an address; Claude adds the site to the layout tool.
 ## Active site: San Ysidro (299 E. San Ysidro Blvd, San Diego)
 
 - Jack in the Box site; owner, contacts, project number and due dates are kept outside the repo (project memory / `site_private.json`). One combined SDG&E request (8 V4 + MCS).
-- Design: coffee pad removed; 2-post MW pull-through in the NW wedge (right-in from EB Beyer, right-turn-only exit to E. Beyer); 8 V4 posts at the former FUTURE EV row; equipment yard parallel to the I-805 (west) PL, 3 ft off it. Sets are in the shared project folder `cd50-plansets/`: `299E-San-Ysidro_CD50_2026-10-23_r5.pdf` (yard model, last issued) and `_r6.pdf` (from the layout tool, `sites/san-ysidro-r6`, out for review).
+- Design: coffee pad removed; 2-post MW pull-through in the NW wedge (right-in from EB Beyer, right-turn-only exit to E. Beyer); 8 V4 posts at the former FUTURE EV row; equipment yard parallel to the I-805 (west) PL, 3 ft off it. Sets are in the shared project folder `cd50-plansets/`: `299E-San-Ysidro_CD50_2026-10-23_r5.pdf` (yard model) and `_r8.pdf` (from the layout tool, `sites/san-ysidro-r6`, with the Tesla limits table and L-101 landscape plan; out for review). r6 had the owner line doubled; r7 was an internal step. COM-1 (SPR-1 to MW-1 etherloop) is 310 ft against the 330 ft limit.
 
 ## San Ysidro open items
 
@@ -159,6 +167,6 @@ Tony sends an address; Claude adds the site to the layout tool.
 5. **Benchmark sites (Tony, 2026-10-23).** Rebuild finished jobs through the pipeline and compare against the signed CD100s: **Cleveland** for a 499 kW (software-limited) site, and **Golden or Collinsville** for full-capacity sites. This proves the generalization. (Collinsville is not in the reference folder list yet; get its set from Tony if it is the one used.)
 6. **Pre-submission checker.** Turn the confirmed Lessons Learned list into automated checks that run on `cd50_data.json`.
 7. **CI.** GitHub Action that installs deps, runs tests, builds the PDF and attaches it to the run. Add a SessionStart hook so cloud sessions install deps automatically.
-8. **CD90 engineering.** Max cabinet-to-post DC run vs. the Tesla V4 Install Manual, conduit fill and voltage drop, foundations from geotech plus Tesla S-501/S-502 (wind speed, soil class).
+8. **CD90 engineering.** Conduit fill and voltage drop, foundations from geotech plus Tesla S-501/S-502 (wind speed, soil class).
 
 Other notes: the Monday.com connector fails to connect (proxy 403), so monday info currently comes from email notifications.

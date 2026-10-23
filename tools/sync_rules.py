@@ -1,28 +1,33 @@
-"""Copy rules/sizing_rules.json into the Site Layout tool (cd50-layout/cd50-layout.html).
+"""Copy rules/sizing_rules.json (RULES) and rules/tesla_rules.json (TESLA) into the Site Layout tool
+(cd50-layout/cd50-layout.html).
 
-Run after editing the rules JSON:  python3 tools/sync_rules.py
+Run after editing either rules JSON:  python3 tools/sync_rules.py
 Use --check to fail (exit 1) if the tool is out of date instead of writing it.
 """
 import json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RULES = os.path.join(ROOT, 'rules', 'sizing_rules.json')
 TOOL = os.path.join(ROOT, 'cd50-layout', 'cd50-layout.html')
-PAT = re.compile(r'(// BEGIN RULES[^\n]*\n)const RULES = .*?;\n(// END RULES)', re.S)
+BLOCKS = {name: os.path.join(ROOT, 'rules', f) for name, f in (('RULES', 'sizing_rules.json'), ('TESLA', 'tesla_rules.json'))}
 
 
-def rules_js():
-    r = {k: v for k, v in json.load(open(RULES, encoding='utf-8')).items() if not k.startswith('_')}
-    return 'const RULES = ' + json.dumps(r, ensure_ascii=False, separators=(',', ':')) + ';\n'
+def pat(name): return re.compile(rf'(// BEGIN {name}[^\n]*\n)const {name} = .*?;\n(// END {name})', re.S)
+
+
+def block_js(name):
+    r = {k: v for k, v in json.load(open(BLOCKS[name], encoding='utf-8')).items() if not k.startswith('_')}
+    return f'const {name} = ' + json.dumps(r, ensure_ascii=False, separators=(',', ':')) + ';\n'
 
 
 def synced(html):
-    return PAT.sub(lambda m: m.group(1) + rules_js() + m.group(2), html, count=1)
+    for name in BLOCKS: html = pat(name).sub(lambda m: m.group(1) + block_js(name) + m.group(2), html, count=1)
+    return html
 
 
 if __name__ == '__main__':
     html = open(TOOL, encoding='utf-8').read()
-    if not PAT.search(html): sys.exit('RULES markers not found in ' + TOOL)
+    for name in BLOCKS:
+        if not pat(name).search(html): sys.exit(f'{name} markers not found in ' + TOOL)
     new = synced(html)
     if '--check' in sys.argv:
         sys.exit(0 if new == html else 'cd50-layout.html is out of date; run python3 tools/sync_rules.py')
