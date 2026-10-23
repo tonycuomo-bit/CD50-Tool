@@ -1142,7 +1142,7 @@ async function findAerial(a){
 async function askClaude(a, why){
   const site = slugify(a), esri = document.getElementById("addr-esri").checked;
   const mcp = window.claude?.use ? await window.claude.use("mcp").catch(() => null) : null;
-  let err = null;
+  let err = null, errText = "";
   if (mcp && FIND_TRIGGER){
     const db = await aerialDb();
     if (db) try { await db.doc("aerials/" + site).set({status:"requested", address:a, esri, msg:"Waiting for Claude", at:Date.now()}); } catch(e){}
@@ -1150,14 +1150,22 @@ async function askClaude(a, why){
       if (db){ watchAerial(site); addrStatus.textContent = `${why}, so Claude is fetching it. It loads here by itself when it's ready, usually in 2 to 4 minutes. Size the site meanwhile.`; }
       else addrStatus.textContent = `${why}, so it went to Claude, which will fetch the aerial and post when it's ready (a few minutes).`;
       return; }
-    catch(e){ err = e?.code || e?.message || "error"; }
+    catch(e){ err = e?.code || e?.message || "error"; errText = mcpErrText(e); }
   }
   const fix = {server_not_connected:"Add Claude Code in claude.ai Settings → Connectors", not_in_manifest:"Claude Code is turned off for this page: allow it in the page's Permissions menu",
     approval_required:"Allow the Claude Code request when the page asks", needs_reauth:"Reconnect Claude Code in claude.ai Settings → Connectors"}[err];
-  const cmd = `python3 tools/aerial.py "${a}" --site ${site} --add-to-tool${esri ? " --esri" : ""}`;
-  const head = err ? `${why}, and the request to Claude failed (${err}${fix ? ": " + fix : ""}).` : `${why}.`;
+  const cmd = `python tools/aerial.py "${a}" --site ${site} --add-to-tool${esri ? " --esri" : ""}`;
+  const head = err ? `${why}, and the request to Claude failed (${err}${fix ? ": " + fix : ""}${errText ? "; says: " + errText : ""}).` : `${why}.`;
   try { await navigator.clipboard.writeText(cmd); addrStatus.textContent = `${head} Copied the command to run in the CD50-Tool folder: ${cmd}`; }
   catch(e){ addrStatus.textContent = `${head} In the CD50-Tool folder run: ${cmd}`; }
+}
+// the connector's own words for a failed call (a tool_error carries the tool's result), shortened for the status line
+function mcpErrText(e){
+  const r = e?.result, parts = [];
+  for (const c of (r && r.content) || []) if (c && c.text) parts.push(c.text);
+  let t = parts.join(" ") || (r && r.payload && JSON.stringify(r.payload)) || e?.message || "";
+  try { const j = JSON.parse(t); t = j.error?.message || j.message || t; } catch(_){}
+  return String(t).replace(/\s+/g, " ").slice(0, 240);
 }
 // Claude's answer comes back through the page's shared db: Claude uploads the aerial as an asset and writes aerials/<site>
 // {status: requested|working|ready|failed, msg, asset_id, wFt, hFt, pin, address, geo, label, credit}. Ready docs load as sites.
@@ -1180,7 +1188,12 @@ async function watchAerial(id){
 // on open: list the aerials Claude has already fetched, and pick up one still in progress for the current address
 aerialDb().then(async db => { if (!db) return;
   try { const q = await db.collection("aerials").get();
-    q.docs.forEach(doc => { const d = doc.data(); if (d.status === "ready" && d.asset_id) addAerialSite(doc.id, d); else if (S.address && doc.id === slugify(S.address) && d.status !== "failed") watchAerial(doc.id); });
+    const mine = S.address ? slugify(S.address) : null;
+    q.docs.forEach(doc => { const d = doc.data();
+      if (d.status === "ready" && d.asset_id){ const site = addAerialSite(doc.id, d);
+        // the aerial for the current address arrived while the page was closed: load it now
+        if (doc.id === mine && !(S.img && S.img.site === site.id)){ S.aerialSite = {...site, src:null}; loadSite(site); addrStatus.textContent = `Loaded from Claude: ${d.msg || d.credit || ""}`; } }
+      else if (doc.id === mine && d.status !== "failed") watchAerial(doc.id); });
   } catch(e){} });
 document.getElementById("addrform").onsubmit = e => { e.preventDefault(); const a = addrIn.value.trim(); if (a) findAerial(a); };
 candBox.onchange = e => { const i = e.target.name === "aerial" && +e.target.value; if (lastCands && i !== false) useCand(lastCands.c[i], lastCands.g).catch(err => { addrStatus.textContent = `Could not load that source (${err.message}).`; }); };
