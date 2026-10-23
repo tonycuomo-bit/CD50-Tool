@@ -1,0 +1,9 @@
+{
+  "owner": "Owner entity name",
+  "owner_address": "Owner mailing address",
+  "owner_contact": "Owner contact name",
+  "owner_email": "contact@example.com",
+  "designer_email": "designer@example.com",
+  "architect": "Site architect firm, contact",
+  "architect_phone": "000-000-0000"
+}
