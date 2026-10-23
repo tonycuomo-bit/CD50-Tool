@@ -21,3 +21,4 @@ desktop.ini
 # Aerial finder (tools/aerial.py) by-products; the enhanced image and aerial.json are kept
 sites/*/aerial/*_raw.jpg
 sites/*/aerial/candidates.jpg
+sites/*/aerial/tool_doc.json

@@ -1142,15 +1142,46 @@ async function findAerial(a){
 async function askClaude(a, why){
   const site = slugify(a), esri = document.getElementById("addr-esri").checked;
   const mcp = window.claude?.use ? await window.claude.use("mcp").catch(() => null) : null;
+  let err = null;
   if (mcp && FIND_TRIGGER){
+    const db = await aerialDb();
+    if (db) try { await db.doc("aerials/" + site).set({status:"requested", address:a, esri, msg:"Waiting for Claude", at:Date.now()}); } catch(e){}
     try { await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id:FIND_TRIGGER, text:JSON.stringify({address:a, site, esri})}, {cache:false});
-      addrStatus.textContent = `${why}, so it went to Claude, which will fetch and rank the aerials, add "${a}" to Fetched site imagery and post when it's ready (a few minutes). Size the site meanwhile.`; return; }
-    catch(err){ if (err?.code === "server_not_connected"){ addrStatus.textContent = "Connect Claude Code in claude.ai Settings → Connectors, then try again."; return; } }
+      if (db){ watchAerial(site); addrStatus.textContent = `${why}, so Claude is fetching it. It loads here by itself when it's ready, usually in 2 to 4 minutes. Size the site meanwhile.`; }
+      else addrStatus.textContent = `${why}, so it went to Claude, which will fetch the aerial and post when it's ready (a few minutes).`;
+      return; }
+    catch(e){ err = e?.code || e?.message || "error"; }
   }
+  const fix = {server_not_connected:"Add Claude Code in claude.ai Settings → Connectors", not_in_manifest:"Claude Code is turned off for this page: allow it in the page's Permissions menu",
+    approval_required:"Allow the Claude Code request when the page asks", needs_reauth:"Reconnect Claude Code in claude.ai Settings → Connectors"}[err];
   const cmd = `python3 tools/aerial.py "${a}" --site ${site} --add-to-tool${esri ? " --esri" : ""}`;
-  try { await navigator.clipboard.writeText(cmd); addrStatus.textContent = `${why}. Copied the command to run in the CD50-Tool folder: ${cmd}`; }
-  catch(e){ addrStatus.textContent = `${why}. In the CD50-Tool folder run: ${cmd}`; }
+  const head = err ? `${why}, and the request to Claude failed (${err}${fix ? ": " + fix : ""}).` : `${why}.`;
+  try { await navigator.clipboard.writeText(cmd); addrStatus.textContent = `${head} Copied the command to run in the CD50-Tool folder: ${cmd}`; }
+  catch(e){ addrStatus.textContent = `${head} In the CD50-Tool folder run: ${cmd}`; }
 }
+// Claude's answer comes back through the page's shared db: Claude uploads the aerial as an asset and writes aerials/<site>
+// {status: requested|working|ready|failed, msg, asset_id, wFt, hFt, pin, address, geo, label, credit}. Ready docs load as sites.
+let dbP = null, aerialWatch = null;
+const aerialDb = () => dbP || (dbP = window.claude?.use ? window.claude.use("db").catch(() => null) : Promise.resolve(null));
+function aerialSite(id, d){ return {id:"addr-" + id, folder:id, label:d.label || d.address, wFt:d.wFt, hFt:d.hFt, pin:d.pin, address:d.address, credit:d.credit, src:"/_blob/" + d.asset_id}; }
+function addAerialSite(id, d){ const site = aerialSite(id, d), i = SITES.findIndex(s => s.id === site.id); if (i >= 0) SITES[i] = site; else SITES.push(site); addSiteOption(site); return site; }
+async function watchAerial(id){
+  const db = await aerialDb(); if (!db) return;
+  if (aerialWatch) aerialWatch();
+  aerialWatch = db.doc("aerials/" + id).onSnapshot(snap => {
+    const d = snap.exists ? snap.data() : null; if (!d) return;
+    if (d.status === "ready" && d.asset_id){ aerialWatch && aerialWatch(); aerialWatch = null;
+      const site = addAerialSite(id, d); S.aerialSite = {...site, src:null}; loadSite(site); setAddress(d.address, d.geo || null);
+      addrStatus.textContent = `Loaded from Claude: ${d.msg || d.credit || ""}`; }
+    else if (d.status === "failed"){ aerialWatch && aerialWatch(); aerialWatch = null; addrStatus.textContent = `Claude could not fetch the aerial: ${d.msg || "no reason given"}. Paste a screenshot instead, or try again.`; }
+    else addrStatus.textContent = `Claude is fetching the aerial: ${d.msg || d.status}…`;
+  }, () => {});
+}
+// on open: list the aerials Claude has already fetched, and pick up one still in progress for the current address
+aerialDb().then(async db => { if (!db) return;
+  try { const q = await db.collection("aerials").get();
+    q.docs.forEach(doc => { const d = doc.data(); if (d.status === "ready" && d.asset_id) addAerialSite(doc.id, d); else if (S.address && doc.id === slugify(S.address) && d.status !== "failed") watchAerial(doc.id); });
+  } catch(e){} });
 document.getElementById("addrform").onsubmit = e => { e.preventDefault(); const a = addrIn.value.trim(); if (a) findAerial(a); };
 candBox.onchange = e => { const i = e.target.name === "aerial" && +e.target.value; if (lastCands && i !== false) useCand(lastCands.c[i], lastCands.g).catch(err => { addrStatus.textContent = `Could not load that source (${err.message}).`; }); };
 if (S.aerialSite && S.img && S.img.site === S.aerialSite.id && !SITES.some(s => s.id === S.aerialSite.id)){ SITES.push({...S.aerialSite, src:S.img.src}); addSiteOption(S.aerialSite); }

@@ -63,6 +63,8 @@ def test_layout_tool_requires_the_address():
     assert 'id="addrblock"' in TOOL_HTML and 'id="addr"' in TOOL_HTML and 'gate();' in TOOL_HTML
     assert re.search(r'const FIND_TRIGGER = "trig_\w+"', TOOL_HTML)
     assert 'project:{address:S.address' in TOOL_HTML                     # the address goes out with layout.json
+    # Claude's result comes back through the page db (aerials/<site>) and an uploaded asset, so it loads with no republish
+    assert 'db.doc("aerials/" + id).onSnapshot' in TOOL_HTML and '"/_blob/" + d.asset_id' in TOOL_HTML
 
 
 def test_blocked_better_names_sharper_sources_and_their_hosts():
