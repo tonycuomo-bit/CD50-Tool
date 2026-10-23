@@ -142,13 +142,14 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
         <label class="f">Striping<select id="pk-stripe"></select></label>
       </div>
       <div class="row2">
-        <label class="f">EV stall width (ft)<input id="pk-w" type="number" min="7.5" max="14" step="0.5"></label>
-        <label class="f">Stall length (ft)<input id="pk-l" type="number" min="15" max="24" step="0.5"></label>
+        <label class="f">EV stall width (ft)<input id="pk-w" type="number" min="9" max="14" step="0.5"></label>
+        <label class="f">Stall length (ft)<input id="pk-l" type="number" min="17" max="24" step="0.5"></label>
       </div>
       <div class="row2">
         <label class="f">EV stall sign<select id="pk-sign"></select></label>
         <label class="f">Pavement stencil<select id="pk-stencil"><option value="1">EV CHARGING ONLY</option><option value="0">None</option></select></label>
       </div>
+      <label class="f">Access aisle striping<select id="pk-aisle"></select></label>
       <div class="btns">
         <button class="btn" id="pk-posts" type="button">Stalls at V4 posts</button>
         <button class="btn" id="pk-van" type="button">+ Van accessible</button>
@@ -251,7 +252,7 @@ const SITES = [
 
 // ---------- state
 const DEFAULT = {product:"V4", posts:4, inputKva:499, mwPosts:2, mwInputKva:1247, items:{}, routes:{}, img:null, view:null, sketch:true, opacity:0.8, bollards:true,
-  park:{jur:"CA", stripe:"w4", w:9, l:18, stencil:true, sign:"tesla"}, pk:{}};
+  park:{jur:"CA", stripe:"w4", w:9, l:18, stencil:true, sign:"tesla", aisleCol:"white"}, pk:{}};
 let S = {...structuredClone(DEFAULT), ...(load() || {})};
 S.park = {...DEFAULT.park, ...(S.park || {})}; S.pk = S.pk || {};
 const O = id => S.items[id] || S.pk[id];
@@ -336,12 +337,15 @@ function customBollards(it, z){ if (!it.bl) it.bl = bollards(it, spec(it, z)).ma
 // ---------- parking: EV stalls, accessible EVCS, striping, signs (tool ft; stall head = charger end at local y = -l/2)
 // Accessible EVCS: CA CBC 11B-228.3.2.1 (scoping) and 11B-812 (van 12' + 5' aisle, standard 9' + 5', ambulatory 10' no aisle, 18' long).
 // Federal: no enforceable EV scoping yet; 2010 ADA 208.2 parking table used as a proxy, with US Access Board EV recommendations for size.
-// TESLA_ADA holds Tesla's own minimums (templatized A-501); null until confirmed. Effective size is the larger of Tesla and the jurisdiction.
+// Tesla V4 Supercharger Design Guide (rev 0, 06/23/25): G-101 stall minimums, G-104 ADA configurations.
+// Effective size is the larger of Tesla and the jurisdiction (CA van 12', otherwise 11', per G-104).
 const JUR = {
-  CA:{label:"California (CBC 11B-812)", van:{w:12, aisle:5}, std:{w:9, aisle:5}, amb:{w:10, aisle:0}, l:18, hatch:"Blue hatch at 36\" o.c. + NO PARKING in 12\" letters (11B-502.3.3)"},
-  FED:{label:"Federal (2010 ADA + Access Board EV guidance)", van:{w:11, aisle:5}, std:{w:8, aisle:5}, amb:null, l:18, hatch:"Hatched access aisle (ADA 502.3.3)"},
+  CA:{label:"California (CBC 11B-812)", van:{w:12, aisle:5}, std:{w:9, aisle:5}, amb:{w:10, aisle:0}, l:18},
+  FED:{label:"Federal (2010 ADA + Access Board EV guidance)", van:{w:11, aisle:5}, std:{w:8, aisle:5}, amb:null, l:18},
 };
-const TESLA_ADA = {van:null, std:null, amb:null, l:null};
+const TESLA_ADA = {van:{w:11, aisle:5}, std:{w:9, aisle:5}, amb:null, l:18};          // G-104: van 11' (12' CA) + 5' aisle, standard 9' + 5', 18' long
+const TESLA_STALL = {w:9, l:17, obst:[9, 10.5, 11]};                                     // G-101: min 9' x 17'; width 9' / 10'-6" / 11' with 0 / 1 / 2 side obstructions
+const AISLE_COL = {white:{label:"White (Tesla G-104)", col:"#f8fafc"}, blue:{label:"Blue", col:"#2563eb"}};
 const STRIPES = {
   w4:{label:"4\" white single line", col:"#f8fafc", dbl:false},
   hp:{label:"4\" white hairpin (double, 12\" apart)", col:"#f8fafc", dbl:true},
@@ -370,7 +374,7 @@ function adaRequired(n, jur){
 }
 function stallDims(st){
   const P = S.park, J = JUR[P.jur], l = Math.max(P.l, J.l, TESLA_ADA.l || 0);
-  if (st.kind === "ev") return {w:P.w, l:P.l, aisle:0};
+  if (st.kind === "ev") return {w:Math.max(P.w, TESLA_STALL.obst[st.obs || 0]), l:Math.max(P.l, TESLA_STALL.l), aisle:0};
   const j = J[st.kind] || J.std, t = TESLA_ADA[st.kind];
   return {w:Math.max(j.w, t ? t.w : 0), l, aisle:Math.max(j.aisle, t ? t.aisle : 0)};
 }
@@ -404,7 +408,7 @@ function drawParking(g, unit){
     if (o.type === "sign"){ el("circle", {cx:0, cy:0, r:Math.max(0.6, unit*6), fill:"#dc2626", stroke:on ? "var(--sel)" : "var(--ink)", "stroke-width":unit*(on ? 3 : 1.2)}, gg);
       const t = el("text", {x:unit*9, y:0, "font-size":Math.max(unit*10, 0.9), fill:"var(--ink)", "dominant-baseline":"central", "font-family":"IBM Plex Mono, monospace", transform:`rotate(${-o.rot})`, "paint-order":"stroke", stroke:"var(--canvas)", "stroke-width":unit*3}, gg);
       t.textContent = (SIGNS[o.sign] || {code:"?"}).code; continue; }
-    const d = stallDims(o), ada = o.kind !== "ev", col = ada ? "#2563eb" : sp.col, hw = d.w/2, hl = d.l/2;
+    const d = stallDims(o), ada = o.kind !== "ev", ac = (AISLE_COL[P.aisleCol] || AISLE_COL.white).col, col = ada ? ac : sp.col, hw = d.w/2, hl = d.l/2;
     el("rect", {x:-hw, y:-hl, width:d.w, height:d.l, fill:ada ? "#2563eb" : "var(--accent)", "fill-opacity":on ? 0.18 : 0.06, stroke:on ? "var(--sel)" : "none", "stroke-width":unit*2}, gg);
     const line = (x) => { const xs = !ada && sp.dbl ? [x - 0.5, x + 0.5] : [x];
       for (const xx of xs){ el("line", {x1:xx, y1:-hl, x2:xx, y2:hl, stroke:"var(--ink)", "stroke-width":0.5, "stroke-linecap":"round"}, gg);
@@ -412,23 +416,33 @@ function drawParking(g, unit){
     line(-hw); line(hw);
     if (d.aisle){ const ax = o.aisle === "L" ? -hw - d.aisle : hw, x0 = ax, x1 = ax + d.aisle;
       line(o.aisle === "L" ? x0 : x1);
-      const hp = el("path", {d:Array.from({length:Math.ceil(d.l/3) + 2}, (_, i) => { const y = -hl + i*3; return `M${x0} ${y}L${x1} ${y - d.aisle}`; }).join(""), stroke:"#2563eb", "stroke-width":0.25, fill:"none"}, gg);
-      const cid = `clip-${o.id}`; const cp = el("clipPath", {id:cid}, gg); el("rect", {x:x0, y:-hl, width:d.aisle, height:d.l}, cp); hp.setAttribute("clip-path", `url(#${cid})`);
-      el("rect", {x:x0, y:-hl, width:d.aisle, height:d.l, fill:"none", stroke:"#2563eb", "stroke-width":0.33}, gg);
-      if (P.jur === "CA"){ const t = el("text", {x:x0 + d.aisle/2, y:0, "font-size":1, "text-anchor":"middle", "dominant-baseline":"central", fill:"#2563eb", "font-weight":700, transform:`rotate(-90 ${x0 + d.aisle/2} 0)`, "font-family":"IBM Plex Sans Condensed, sans-serif"}, gg); t.textContent = "NO PARKING"; } }
+      const hatch = (xa, wa, k) => { const hp = el("path", {d:Array.from({length:Math.ceil(d.l/3) + 2}, (_, i) => { const y = -hl + i*3; return `M${xa} ${y}L${xa + wa} ${y - wa}`; }).join(""), stroke:"var(--ink)", "stroke-width":0.45, fill:"none"}, gg);
+        const hp2 = hp.cloneNode(); hp2.setAttribute("stroke", ac); hp2.setAttribute("stroke-width", 0.3); gg.appendChild(hp2);
+        const cid = `clip-${o.id}-${k}`; const cp = el("clipPath", {id:cid}, gg); el("rect", {x:xa, y:-hl, width:wa, height:d.l}, cp);
+        hp.setAttribute("clip-path", `url(#${cid})`); hp2.setAttribute("clip-path", `url(#${cid})`);
+        el("rect", {x:xa, y:-hl, width:wa, height:d.l, fill:"none", stroke:ac, "stroke-width":0.33}, gg); };
+      hatch(x0, d.aisle, "a");
+      if (o.buffer){ hatch(o.aisle === "L" ? hw : -hw - 2, 2, "b"); }
+      const t = el("text", {x:x0 + d.aisle/2, y:hl - 3, "font-size":1, "text-anchor":"middle", "dominant-baseline":"central", fill:"var(--ink)", "font-weight":700, transform:`rotate(-90 ${x0 + d.aisle/2} ${hl - 3})`, "font-family":"IBM Plex Sans Condensed, sans-serif", "paint-order":"stroke", stroke:"var(--canvas)", "stroke-width":0.25}, gg); t.textContent = "NO PARKING"; }
+    // G-104: 30" x 48" clear floor space at the charge post, beyond the head of an accessible stall
+    if (ada) el("rect", {x:-2, y:-hl - 2.5, width:4, height:2.5, fill:"none", stroke:ac, "stroke-width":unit*1.5, "stroke-dasharray":`${unit*4} ${unit*3}`}, gg);
     const lab = ada ? {van:"VAN", std:"ACCESSIBLE", amb:"AMBULATORY"}[o.kind] : (P.stencil ? "EV CHARGING ONLY" : "");
-    if (lab){ const t = el("text", {x:0, y:hl - 2.5, "font-size":Math.min(1.2, d.w/8), "text-anchor":"middle", fill:ada ? "#2563eb" : "var(--ink)", "font-weight":700, "font-family":"IBM Plex Sans Condensed, sans-serif", opacity:0.85}, gg); t.textContent = lab; }
+    if (lab){ const t = el("text", {x:0, y:hl - 2.5, "font-size":Math.min(1.2, d.w/8), "text-anchor":"middle", fill:ada ? ac : "var(--ink)", "font-weight":700, "font-family":"IBM Plex Sans Condensed, sans-serif", opacity:0.85}, gg); t.textContent = lab; }
   }
 }
 function parkingExport(r3){
   const P = S.park, out = {jurisdiction:P.jur, jurisdiction_label:JUR[P.jur].label, striping:P.stripe, striping_label:(STRIPES[P.stripe] || STRIPES.w4).label,
-    stencil:!!P.stencil, aisle_marking:JUR[P.jur].hatch, ada:adaCheck(), stalls:[], signs:[]};
+    stencil:!!P.stencil, aisle_marking:`4" ${P.aisleCol === "blue" ? "blue" : "white"} border and cross striping, NO PARKING in 12" letters (Tesla G-104)`,
+    aisle_color:P.aisleCol === "blue" ? "blue" : "white", ada:adaCheck(), stalls:[], signs:[]};
   for (const o of Object.values(S.pk)){
     const tr = p => local2world(o, p).map(r3);
     if (o.type === "sign"){ out.signs.push({id:o.id, sign:o.sign, code:SIGNS[o.sign].code, label:SIGNS[o.sign].label, xy:tr([0, 0])}); continue; }
-    const d = stallDims(o), hw = d.w/2, hl = d.l/2, ax = o.aisle === "L" ? -hw - d.aisle : hw;
+    const d = stallDims(o), hw = d.w/2, hl = d.l/2, ax = o.aisle === "L" ? -hw - d.aisle : hw, bx = o.aisle === "L" ? hw : -hw - 2;
     out.stalls.push({id:o.id, kind:o.kind, name:STALL_KINDS[o.kind], x:r3(o.x), y:r3(o.y), rot:r3(o.rot), w_ft:d.w, l_ft:d.l, aisle_ft:d.aisle, aisle_side:d.aisle ? o.aisle : null,
-      outline:[[-hw,-hl],[hw,-hl],[hw,hl],[-hw,hl]].map(tr), aisle:d.aisle ? [[ax,-hl],[ax+d.aisle,-hl],[ax+d.aisle,hl],[ax,hl]].map(tr) : null});
+      side_obstructions:o.kind === "ev" ? (o.obs || 0) : null,
+      outline:[[-hw,-hl],[hw,-hl],[hw,hl],[-hw,hl]].map(tr), aisle:d.aisle ? [[ax,-hl],[ax+d.aisle,-hl],[ax+d.aisle,hl],[ax,hl]].map(tr) : null,
+      buffer:o.kind !== "ev" && o.buffer ? [[bx,-hl],[bx+2,-hl],[bx+2,hl],[bx,hl]].map(tr) : null,
+      clear_floor:o.kind !== "ev" ? [[-2,-hl-2.5],[2,-hl-2.5],[2,-hl],[-2,-hl]].map(tr) : null});
   }
   return out;
 }
@@ -707,7 +721,7 @@ function renderPark(){
     <dt>Accessible EVCS</dt><dd>${c.ok ? '<span class="pill ok">Meets scoping</span>' : '<span class="pill warn">Short</span>'} <span class="sub">(${c.n} V4 EVCS)</span></dd>
     <dt>Van / standard / amb.</dt><dd>${row("van")} · ${row("std")} · ${row("amb")}</dd>
     <dt>Van / standard size</dt><dd>${stallDims({kind:"van"}).w}' + ${stallDims({kind:"van"}).aisle}' · ${stallDims({kind:"std"}).w}' + ${stallDims({kind:"std"}).aisle}' aisle, ${stallDims({kind:"van"}).l}' long</dd></dl>
-    <div class="note">${P.jur === "CA" ? "Scoping per CBC Table 11B-228.3.2.1 (MW truck posts excluded). Van alternative: 9' stall + 8' aisle. 2% max slope at stall and aisle; accessible route to the charger. " : "Federal has no enforceable EV scoping yet: count uses the 2010 ADA 208.2 parking table as a proxy (1 in 6 van); sizes follow US Access Board EV recommendations. "}${J.hatch}. ${Object.values(TESLA_ADA).some(v => v) ? "" : "Tesla A-501 minimums not loaded yet: sizes shown are the jurisdiction's."} Verify with the AHJ.</div>`;
+    <div class="note">${P.jur === "CA" ? "Scoping per CBC Table 11B-228.3.2.1 (MW truck posts excluded). Fishbone and on-the-line ADA stalls are not allowed in CA (Tesla G-104). " : "Federal has no enforceable EV scoping yet: count uses the 2010 ADA 208.2 parking table as a proxy (1 in 6 van); sizes follow the US Access Board EV recommendations. "}Sizes are the larger of Tesla G-104 and the code. Tesla G-104: 30" x 48" clear floor space at the post (dashed), 3' clear behind the post and 1:48 max slope where the accessible route passes the stall head; 4" border and cross striping, NO PARKING in 12" letters; ADA signs per AHJ, clear of operable parts. EV stalls: Tesla G-101 minimum 9' x 17', 10'-6" wide with an obstruction on one side, 11' with both. Verify with the AHJ.</div>`;
   const pi = document.getElementById("pk-ins"), o = selected && S.pk[selected];
   if (!o){ pi.innerHTML = ""; return; }
   const opts = (M, v, f) => Object.entries(M).map(([k, x]) => `<option value="${k}"${k === v ? " selected" : ""}>${f(x)}</option>`).join("");
@@ -715,7 +729,9 @@ function renderPark(){
     ? `<div><b style="font-family:var(--f-mono)">${o.id}</b> · sign</div><div class="btns"><select data-pkf="sign">${opts(SIGNS, o.sign, x => x.label)}</select><button class="btn" type="button" data-pka="del">Delete</button></div>`
     : `<div><b style="font-family:var(--f-mono)">${o.id}</b> · ${STALL_KINDS[o.kind]} · ${stallDims(o).w}' x ${stallDims(o).l}'${stallDims(o).aisle ? ` + ${stallDims(o).aisle}' aisle` : ""}</div>
        <div class="btns"><select data-pkf="kind">${opts(STALL_KINDS, o.kind, x => x)}</select>
-       ${o.kind !== "ev" && stallDims(o).aisle ? `<button class="btn" type="button" data-pka="flip">Aisle ${o.aisle === "L" ? "left" : "right"} ⇄</button>` : ""}
+       ${o.kind !== "ev" && stallDims(o).aisle ? `<button class="btn" type="button" data-pka="flip">Aisle ${o.aisle === "L" ? "left" : "right"} ⇄</button>
+         <button class="btn" type="button" data-pka="buffer" aria-pressed="${!!o.buffer}">2' buffer</button>` : ""}
+       ${o.kind === "ev" ? `<select data-pkf="obs">${["No side obstructions (9')", "Obstruction one side (10'-6\")", "Obstructions both sides (11')"].map((t, i) => `<option value="${i}"${(+o.obs || 0) === i ? " selected" : ""}>${t}</option>`).join("")}</select>` : ""}
        <button class="btn" type="button" data-pka="-90">⟲ 90°</button><button class="btn" type="button" data-pka="90">⟳ 90°</button>
        <button class="btn" type="button" data-pka="del">Delete</button></div>`;
 }
@@ -745,23 +761,26 @@ const pkJur = document.getElementById("pk-jur"), pkStripe = document.getElementB
 pkJur.innerHTML = Object.entries(JUR).map(([k, j]) => `<option value="${k}">${j.label}</option>`).join("");
 pkStripe.innerHTML = Object.entries(STRIPES).map(([k, j]) => `<option value="${k}">${j.label}</option>`).join("");
 pkSign.innerHTML = Object.entries(SIGNS).map(([k, j]) => `<option value="${k}">${j.label}</option>`).join("");
-function syncPark(){ const P = S.park; pkJur.value = P.jur; pkStripe.value = P.stripe; pkSign.value = P.sign;
+function syncPark(){ const P = S.park; pkJur.value = P.jur; document.getElementById("pk-aisle").value = P.aisleCol || "white"; pkStripe.value = P.stripe; pkSign.value = P.sign;
   document.getElementById("pk-w").value = P.w; document.getElementById("pk-l").value = P.l; document.getElementById("pk-stencil").value = P.stencil ? "1" : "0"; }
 pkJur.onchange = e => { S.park.jur = e.target.value; render(); };
 pkStripe.onchange = e => { S.park.stripe = e.target.value; render(); };
 pkSign.onchange = e => { S.park.sign = e.target.value; render(); };
 document.getElementById("pk-stencil").onchange = e => { S.park.stencil = e.target.value === "1"; render(); };
-document.getElementById("pk-w").onchange = e => { S.park.w = Math.max(7.5, Math.min(14, +e.target.value || 9)); syncPark(); render(); };
-document.getElementById("pk-l").onchange = e => { S.park.l = Math.max(15, Math.min(24, +e.target.value || 18)); syncPark(); render(); };
+document.getElementById("pk-w").onchange = e => { S.park.w = Math.max(TESLA_STALL.w, Math.min(14, +e.target.value || 9)); syncPark(); render(); };
+document.getElementById("pk-l").onchange = e => { S.park.l = Math.max(TESLA_STALL.l, Math.min(24, +e.target.value || 18)); syncPark(); render(); };
+const pkAisle = document.getElementById("pk-aisle");
+pkAisle.innerHTML = Object.entries(AISLE_COL).map(([k, j]) => `<option value="${k}">${j.label}</option>`).join("");
+pkAisle.onchange = e => { S.park.aisleCol = e.target.value; render(); };
 const viewC = () => [S.view.x + S.view.w/2, S.view.y + S.view.h/2];
 document.getElementById("pk-posts").onclick = () => { stallsAtPosts(); render(); };
 for (const k of ["van","std","amb","ev"]) document.getElementById("pk-" + k).onclick = () => { const [x, y] = viewC(); selected = addStall(k, x, y, 0); selBoll = null; render(); };
 document.getElementById("pk-signs").onclick = () => { signsAtStalls(); render(); };
 document.getElementById("pk-addsign").onclick = () => { const [x, y] = viewC(); selected = addSign(S.park.sign, x, y); selBoll = null; render(); };
 document.getElementById("pk-ins").onclick = e => { const a = e.target.closest("[data-pka]"), o = selected && S.pk[selected]; if (!a || !o) return;
-  const v = a.dataset.pka; if (v === "del"){ delete S.pk[o.id]; selected = null; } else if (v === "flip") o.aisle = o.aisle === "L" ? "R" : "L";
+  const v = a.dataset.pka; if (v === "del"){ delete S.pk[o.id]; selected = null; } else if (v === "flip") o.aisle = o.aisle === "L" ? "R" : "L"; else if (v === "buffer") o.buffer = !o.buffer;
   else o.rot = ((o.rot + +v) % 360 + 360) % 360; render(); };
-document.getElementById("pk-ins").onchange = e => { const f = e.target.dataset.pkf, o = selected && S.pk[selected]; if (!f || !o) return; o[f] = e.target.value; delete o.auto; render(); };
+document.getElementById("pk-ins").onchange = e => { const f = e.target.dataset.pkf, o = selected && S.pk[selected]; if (!f || !o) return; o[f] = f === "obs" ? +e.target.value : e.target.value; delete o.auto; render(); };
 const siteSel = document.getElementById("site");
 siteSel.innerHTML = SITES.map(s => `<option value="${s.id}">${s.label}</option>`).join("");
 function loadSite(site){

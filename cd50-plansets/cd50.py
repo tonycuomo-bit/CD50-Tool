@@ -304,12 +304,16 @@ def parking_layout(scale=1.0):
     # stalls, accessible EVCS access aisles and signs from the layout tool's parking block (optional)
     pk = LAYOUT.get('parking') or {}; o = []
     for st in pk.get('stalls', []):
-        q = [P(v) for v in st['outline']]; ada = st['kind'] != 'ev'; col = "#1d4ed8" if ada else "#141817"
+        q = [P(v) for v in st['outline']]; ada = st['kind'] != 'ev'; col = "#1d4ed8" if ada and pk.get('aisle_color') == 'blue' else "#141817"
         o.append(L(*q[0], *q[3], st=col, sw=0.9)); o.append(L(*q[1], *q[2], st=col, sw=0.9))
-        if st['aisle']:
-            a = [P(v) for v in st['aisle']]; o.append(PG(a, fill="#dbeafe", st="#1d4ed8", sw=0.9))
-            for k in range(1, int(st['l_ft'] // 3) + 1):        # hatch lines across the aisle, 3 ft o.c.
-                t = k * 3 / st['l_ft']; o.append(L(*(np.array(a[0]) + (np.array(a[3]) - a[0]) * t), *(np.array(a[1]) + (np.array(a[2]) - a[1]) * max(0, t - 0.25)), st="#1d4ed8", sw=0.5))
+        for key in ('aisle', 'buffer'):                         # access aisle / optional 2' buffer: border + cross striping, 3 ft o.c.
+            if not st.get(key): continue
+            a = [P(v) for v in st[key]]; w = math.dist(a[0], a[1]) / F; o.append(PG(a, fill="none", st=col, sw=0.9))
+            for k in range(1, int(st['l_ft'] // 3) + 1):
+                t = k * 3 / st['l_ft']; o.append(L(*(np.array(a[0]) + (np.array(a[3]) - a[0]) * t), *(np.array(a[1]) + (np.array(a[2]) - a[1]) * max(0, t - w / st['l_ft'])), st=col, sw=0.5))
+            if key == 'aisle':
+                m = np.mean(a, axis=0); o.append(T(m[0], m[1], "NO PARKING", 5*scale, a="middle", w="bold", fill=col, rot=st['rot'] - 90))
+        if st.get('clear_floor'): o.append(PG([P(v) for v in st['clear_floor']], st=col, sw=0.6, extra=' stroke-dasharray="2 1.5"'))
         c = np.mean(q, axis=0); lab = {'van': "VAN ACCESSIBLE EVCS", 'std': "ACCESSIBLE EVCS", 'amb': "AMBULATORY EVCS"}.get(st['kind'])
         if lab: o.append(T(c[0], c[1] + 3*scale, lab, 6.5*scale, a="middle", w="bold", fill=col, rot=st['rot']))
     for sg in pk.get('signs', []):
