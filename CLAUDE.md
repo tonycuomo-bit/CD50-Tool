@@ -2,6 +2,32 @@
 
 This repo holds the tools HiON uses to semi-automate CD50 plan sets for Tesla V4 Supercharger and V4 Megacharger (MW) sites. Owner: Tony (HiON). Read this file before changing any tool or drawing.
 
+## Repo layout
+
+```
+CLAUDE.md                  this file: rules, tools, workflow, roadmap
+README.md                  short setup and build steps
+requirements.txt           Python deps for the generator (shapely, numpy)
+cd50-layout/
+  cd50-layout.html         Site Layout tool (single self-contained HTML)
+  sites/                   site aerials (USGS NAIP, public domain)
+cd50-plansets/
+  cd50.py                  plan set generator -> cd50.html + cd50_data.json
+  pdf.cjs                  Chromium print of cd50.html -> cd50.pdf (36x24 in)
+  mw_pos.json, lines_mw2.svg, mw_overlay.svgfrag   San Ysidro inputs
+  site_private.example.json  template for gitignored owner/contact details
+  source/                  WB-67 truck path scripts that regenerate the MW inputs
+cd50-intake/
+  CD50 Intake Sheet DRAFT.xlsx   draft question set
+```
+
+## Working in this repo
+
+- Private repo, default branch `main`. Do work on a branch and open a PR to `main`; Tony reviews.
+- After any change to `cd50.py` or its inputs, rebuild (`python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs`) and check the printed bollard count and conduit lengths. Look at the PDF for drawing changes.
+- A refactor that should not change the drawings must produce an identical `cd50.html` (ignore `<metadata>` blocks, which carry file provenance).
+- Never commit generated files, issued PDFs, `site_private.json`, emails, or architect source PDFs.
+
 ## What a CD set is
 
 - **CD50**: first revision of the construction documents (physical design, electrical design, applicable state/national construction and electrical codes, related construction info). This is what these tools produce.
@@ -103,13 +129,21 @@ Tony sends an address; Claude adds the site to the layout tool.
 - Jack in the Box site; owner, contacts, project number and due dates are kept outside the repo (project memory / `site_private.json`). One combined SDG&E request (8 V4 + MCS).
 - Design: coffee pad removed; 2-post MW pull-through in the NW wedge (right-in from EB Beyer, right-turn-only exit to E. Beyer); 8 V4 posts at the former FUTURE EV row; equipment yard parallel to the I-805 (west) PL, 3 ft off it. Latest set: `299E-San-Ysidro_CD50_2026-10-23_r5.pdf` in the shared project folder `cd50-plansets/`.
 
-## Open items
+## San Ysidro open items
 
-- Generalize `cd50.py`: read site, equipment and sizing from intake JSON instead of hard-coded San Ysidro values; share one sizing module with the layout tool.
-- Equipment yard location at San Ysidro still flagged TBD; conduit lengths P-1, SL-1, F-1, F-2, COM-1 are placeholders.
+- Equipment yard location still flagged TBD; conduit lengths P-1, SL-1, F-1, F-2, COM-1 are placeholders.
 - I-805-side truck lane swept path passes ~0.5 ft from the PL; needs a buffer. No on-site truck queue fits.
 - East Beyer bike lane and median added after the architect's plans; drawings pending from the architect.
-- Verify max cabinet-to-post DC run vs. Tesla V4 Install Manual; conduit fill and voltage drop at CD90.
-- Foundations are placeholders until geotech and Tesla S-501/S-502 (wind speed, soil class) are applied.
-- Confirm the Lessons Learned list and wire it into a pre-submission checker.
-- Monday.com connector fails to connect (proxy 403); monday info currently comes via email notifications.
+
+## Roadmap (priority order)
+
+1. **One sizing module with tests.** Move the sizing rules into `cd50-plansets/sizing.py` with unit tests (San Ysidro r2+ example, Cleveland/Madisonville 499 kW, the 5000 A warning). Then make the layout tool's JS match it, ideally generated from one rules table so the two can't drift.
+2. **Site input file.** Define a `site.json` schema (address, APN, posts by product, cabinet kVA setting, equipment positions, linework/aerial paths). `cd50.py` reads it instead of hard-coded San Ysidro values. Move San Ysidro into `sites/san-ysidro/site.json`, and keep its output identical.
+3. **Layout tool → generator hand-off.** The layout tool's JSON export writes that `site.json` (equipment, pads, conduit bend points), so a layout drawn in the tool builds a plan set with no code edits.
+4. **Intake → site.json.** Rebuild the intake workbook generator (lost) or read the xlsx directly, so the question set fills `site.json`.
+5. **Second site as a benchmark.** Rebuild a finished job (Cleveland or Madisonville CD100) through the pipeline and compare against the signed set. This proves the generalization.
+6. **Pre-submission checker.** Turn the confirmed Lessons Learned list into automated checks that run on `cd50_data.json`.
+7. **CI.** GitHub Action that installs deps, runs tests, builds the PDF and attaches it to the run. Add a SessionStart hook so cloud sessions install deps automatically.
+8. **CD90 engineering.** Max cabinet-to-post DC run vs. the Tesla V4 Install Manual, conduit fill and voltage drop, foundations from geotech plus Tesla S-501/S-502 (wind speed, soil class).
+
+Other notes: the Monday.com connector fails to connect (proxy 403), so monday info currently comes from email notifications.
