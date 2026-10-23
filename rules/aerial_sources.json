@@ -1,6 +1,6 @@
 {
- "_about": "Free aerial imagery sources for the address-first site start. Both tools/aerial.py and the layout tool (AERIAL_SOURCES block, copied by tools/sync_rules.py) read this table. Each source is an ArcGIS REST service: type image = ImageServer exportImage, map = MapServer export. bbox = [west, south, east, north] lon/lat coverage (null = US/world). gsd_ft = nominal ground sample distance; a catalog or metadata query replaces it with the value at the site. license: public = public domain or CC0, free for engineering use with credit; restricted = view and trace only, check the provider's terms before issuing a drawing with it (off unless asked). Add a state or county source by adding an entry; probe it with python3 tools/aerial.py --list.",
- "_sources_checked": "2026-10-23: USGS NAIP Plus catalog fields (live), SANDAG SD2023_9inch item info (public domain per SanGIS/Nearmap agreement; 3 in is partners only), Ohio OSIP most current, Indiana current imagery (CC0, 6 in 2025), CT Ortho 2023, Esri World Imagery and its metadata service (SRC_DATE, SRC_RES). Hosts other than imagery.nationalmap.gov are not yet allowed in the cloud environment. 2026-10-23 (second pass, from service directories found by web search, not probed from the cloud): Cook County 2024/2025, DRAPP 2022 (Jeffco portal, CC BY 3.0; no 2024 service found), City of Boulder 2024, Missouri 6 in 2023-24, NYS ITS Latest (covers NYC), NJ 2020, Fairfax 2023. Not added: Colorado statewide Vexcel (government only), MassGIS 2023 (tile layer on tiles.arcgis.com, export not supported), Texas StratMap (per-project services).",
+ "_about": "Free aerial imagery sources for the address-first site start. Both tools/aerial.py and the layout tool (AERIAL_SOURCES block, copied by tools/sync_rules.py) read this table. Each source is an ArcGIS REST service: type image = ImageServer exportImage, map = MapServer export. bbox = [west, south, east, north] lon/lat coverage (null = US/world). gsd_ft = nominal ground sample distance; a catalog or metadata query replaces it with the value at the site. license: public = public domain or CC0, free for engineering use with credit; restricted = vendor-licensed (Esri, EagleView/Pictometry county imagery): view and trace only, check the provider's terms before issuing a drawing with it (off unless asked). Add a state or county source by adding an entry; probe it with python3 tools/aerial.py --list.",
+ "_sources_checked": "2026-10-23: USGS NAIP Plus catalog fields (live), SANDAG SD2023_9inch item info (public domain per SanGIS/Nearmap agreement; 3 in is partners only), Ohio OSIP most current, Indiana current imagery (CC0, 6 in 2025), CT Ortho 2023, Esri World Imagery and its metadata service (SRC_DATE, SRC_RES). Hosts other than imagery.nationalmap.gov are not yet allowed in the cloud environment. 2026-10-23 (second pass, from service directories found by web search, not probed from the cloud): Cook County 2024/2025, DRAPP 2022 (Jeffco portal, CC BY 3.0; no 2024 service found), City of Boulder 2024, Missouri 6 in 2023-24, NYS ITS Latest (covers NYC), NJ 2020, Fairfax 2023. Not added: Colorado statewide Vexcel (government only), MassGIS 2023 (tile layer on tiles.arcgis.com, export not supported), Texas StratMap (per-project services). Third pass 2026-10-23 (service directories found by web search, not probed): NC, MD, VA, DC, KY, PA (PEMA + Philadelphia), WV, TN, OR, Champaign IL, DeKalb GA, Palm Beach and Pinellas FL, San Bernardino CA, Reno NV, Maricopa AZ, and vendor-licensed King WA, Hillsborough FL, Fort Worth TX. No public service found for Houston/Harris, Dallas/NCTCOG, LA County (latest public LARIAC is 2014), Fulton/Atlanta, Clark/Las Vegas, Hennepin/Minneapolis (WMS only), Utah (key), Georgia statewide (government only), Madison County IL.",
  "frame": {
   "w_ft": 700,
   "h_ft": 525,
@@ -205,6 +205,330 @@
    "date": "2020",
    "license": "public",
    "credit": "NJOGIS 2020 natural color orthophotography"
+  },
+  {
+   "id": "nc-latest",
+   "name": "North Carolina latest orthoimagery (6 in)",
+   "type": "image",
+   "url": "https://services.gis.nc.gov/secure/rest/services/Imagery/Orthoimagery_Latest/ImageServer",
+   "bbox": [
+    -84.33,
+    33.84,
+    -75.46,
+    36.59
+   ],
+   "gsd_ft": 0.5,
+   "date": "2020-2024",
+   "license": "public",
+   "credit": "NC OneMap orthoimagery program"
+  },
+  {
+   "id": "md-sixinch",
+   "name": "Maryland six-inch imagery (2023-2025)",
+   "type": "image",
+   "url": "https://mdgeodata.md.gov/imagery/rest/services/SixInch/SixInchImagery/ImageServer",
+   "bbox": [
+    -79.49,
+    37.89,
+    -75.05,
+    39.73
+   ],
+   "gsd_ft": 0.5,
+   "date": "2023-2025",
+   "license": "public",
+   "credit": "MD iMAP six-inch imagery"
+  },
+  {
+   "id": "va-vbmp",
+   "name": "Virginia VBMP most recent (1 ft, 6 in / 3 in in cities)",
+   "type": "map",
+   "url": "https://vginmaps.vdem.virginia.gov/arcgis/rest/services/VBMP_Imagery/MostRecentImagery_WGS/MapServer",
+   "bbox": [
+    -83.68,
+    36.54,
+    -75.24,
+    39.47
+   ],
+   "gsd_ft": 1.0,
+   "date": "2021-2023",
+   "license": "public",
+   "credit": "VGIN Virginia Base Mapping Program"
+  },
+  {
+   "id": "dc-2023",
+   "name": "Washington DC 2023 orthophoto (3 in)",
+   "type": "image",
+   "url": "https://imagery.dcgis.dc.gov/dcgis/rest/services/Ortho/Ortho_2023/ImageServer",
+   "bbox": [
+    -77.12,
+    38.79,
+    -76.91,
+    39.0
+   ],
+   "gsd_ft": 0.25,
+   "date": "2023-05",
+   "license": "public",
+   "credit": "DC GIS 2023 orthophoto"
+  },
+  {
+   "id": "ky-phase2",
+   "name": "Kentucky KyFromAbove Phase 2 (6 in; Louisville 3 in)",
+   "type": "image",
+   "url": "https://kyraster.ky.gov/arcgis/rest/services/ImageServices/Ky_KYAPED_Phase2_6IN/ImageServer",
+   "bbox": [
+    -89.57,
+    36.5,
+    -81.96,
+    39.15
+   ],
+   "gsd_ft": 0.5,
+   "date": "2019-2022",
+   "license": "public",
+   "credit": "KyFromAbove Partners"
+  },
+  {
+   "id": "pa-pema",
+   "name": "Pennsylvania PEMA statewide 2021-2023",
+   "type": "map",
+   "url": "https://maps.pasda.psu.edu/server/rest/services/PEMAImagery2021_2023/MapServer",
+   "bbox": [
+    -80.52,
+    39.72,
+    -74.69,
+    42.27
+   ],
+   "gsd_ft": 1.0,
+   "date": "2021-2023",
+   "license": "public",
+   "credit": "PEMA statewide imagery via PASDA"
+  },
+  {
+   "id": "philly-2024",
+   "name": "Philadelphia 2024 (3 in)",
+   "type": "map",
+   "url": "https://imagery.pasda.psu.edu/server/rest/services/pasda/PhiladelphiaImagery2024/MapServer",
+   "bbox": [
+    -75.28,
+    39.87,
+    -74.95,
+    40.14
+   ],
+   "gsd_ft": 0.25,
+   "date": "2024-05",
+   "license": "public",
+   "credit": "City of Philadelphia 2024 imagery via PASDA"
+  },
+  {
+   "id": "wv-2024",
+   "name": "West Virginia 2024 aerial photography",
+   "type": "image",
+   "url": "https://tagis.dep.wv.gov/image/rest/services/webMercator/aerial_photography_2024/ImageServer",
+   "bbox": [
+    -82.65,
+    37.2,
+    -77.72,
+    40.64
+   ],
+   "gsd_ft": 1.0,
+   "date": "2024",
+   "license": "public",
+   "credit": "WV DEP 2024 aerial photography",
+   "note": "resolution not confirmed"
+  },
+  {
+   "id": "tn-imagery",
+   "name": "Tennessee TDOT imagery (6 in from 2022, else 1 ft)",
+   "type": "map",
+   "url": "https://tnmap.tn.gov/arcgis/rest/services/BASEMAPS/IMAGERY_WEB_MERCATOR/MapServer",
+   "bbox": [
+    -90.31,
+    34.98,
+    -81.65,
+    36.68
+   ],
+   "gsd_ft": 0.5,
+   "date": "2022+",
+   "license": "public",
+   "credit": "TDOT Aerial Surveys"
+  },
+  {
+   "id": "champaign-2023",
+   "name": "Champaign IL 2023 (3 in)",
+   "type": "image",
+   "url": "https://gisportal.champaignil.gov/is/rest/services/Aerial_Imagery/COC2023_3IN/ImageServer",
+   "bbox": [
+    -88.33,
+    40.05,
+    -88.18,
+    40.17
+   ],
+   "gsd_ft": 0.25,
+   "date": "2023",
+   "license": "public",
+   "credit": "City of Champaign 2023 orthophoto"
+  },
+  {
+   "id": "dekalb-ga-2024",
+   "name": "DeKalb County GA 2024 (Atlanta east)",
+   "type": "image",
+   "url": "https://dcgis.dekalbcountyga.gov/mapping/rest/services/Imagery/Imagery2024/ImageServer",
+   "bbox": [
+    -84.35,
+    33.61,
+    -84.02,
+    33.97
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "DeKalb County GIS 2024 imagery"
+  },
+  {
+   "id": "palmbeach-2024",
+   "name": "Palm Beach County FL 2024",
+   "type": "image",
+   "url": "https://gis.pbcgov.org/image/rest/services/Aerialphotography_2024_WebMercator/ImageServer",
+   "bbox": [
+    -80.89,
+    26.32,
+    -80.03,
+    26.97
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "Palm Beach County 2024 aerial photography"
+  },
+  {
+   "id": "pinellas-2024",
+   "name": "Pinellas County FL 2024 (St. Petersburg)",
+   "type": "image",
+   "url": "https://egis.pinellas.gov/gis/rest/services/Aerials/Aerials2024/ImageServer",
+   "bbox": [
+    -82.86,
+    27.6,
+    -82.54,
+    28.18
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "Pinellas County 2024 aerials",
+   "note": "no license statement found"
+  },
+  {
+   "id": "oregon-osip-2022",
+   "name": "Oregon OSIP 2022 (1 ft)",
+   "type": "image",
+   "url": "https://imagery.oregonexplorer.info/arcgis/rest/services/OSIP_2022/OSIP_2022_WM/ImageServer",
+   "bbox": [
+    -124.7,
+    41.99,
+    -116.46,
+    46.29
+   ],
+   "gsd_ft": 1.0,
+   "date": "2022",
+   "license": "public",
+   "credit": "Oregon Statewide Imagery Program 2022"
+  },
+  {
+   "id": "sbcounty-2024",
+   "name": "San Bernardino County CA 2024 (urban area)",
+   "type": "image",
+   "url": "https://maps.sbcounty.gov/img/rest/services/y2024_IS/ImageServer",
+   "bbox": [
+    -117.8,
+    33.87,
+    -114.13,
+    35.81
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "San Bernardino County 2024 imagery",
+   "note": "resolution not confirmed"
+  },
+  {
+   "id": "reno-2025",
+   "name": "Reno NV 2025 (6 in)",
+   "type": "image",
+   "url": "https://citymaps.reno.gov/image/rest/services/Mosaics/OrthoMosaic_2025_6inch_NAD/ImageServer",
+   "bbox": [
+    -119.95,
+    39.38,
+    -119.7,
+    39.67
+   ],
+   "gsd_ft": 0.5,
+   "date": "2025",
+   "license": "public",
+   "credit": "City of Reno 2025 orthomosaic"
+  },
+  {
+   "id": "maricopa-2025",
+   "name": "Maricopa County AZ assessor aerials (flown Oct-Dec 2024; Phoenix)",
+   "type": "map",
+   "url": "https://gis.mcassessor.maricopa.gov/arcgis/rest/services/Aerials2025/MapServer",
+   "bbox": [
+    -113.34,
+    32.5,
+    -111.04,
+    34.05
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024-12",
+   "license": "public",
+   "credit": "Maricopa County Assessor aerials",
+   "note": "resolution not confirmed"
+  },
+  {
+   "id": "king-2023",
+   "name": "King County WA 2023 (3 in urban; Seattle)",
+   "type": "map",
+   "url": "https://gismaps.kingcounty.gov/arcgis/rest/services/BaseMaps/KingCo_Aerial_2023/MapServer",
+   "bbox": [
+    -122.54,
+    47.08,
+    -121.06,
+    47.78
+   ],
+   "gsd_ft": 0.25,
+   "date": "2023",
+   "license": "restricted",
+   "credit": "EagleView Technologies, Inc., King County; licensed to the county"
+  },
+  {
+   "id": "hillsborough-2024",
+   "name": "Hillsborough County FL 2024 (Tampa; Pictometry)",
+   "type": "image",
+   "url": "https://maps.hillsboroughcounty.org/arcgis/rest/services/AerialsNew/Aerials_2024/ImageServer",
+   "bbox": [
+    -82.82,
+    27.57,
+    -82.05,
+    28.17
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "restricted",
+   "credit": "Hillsborough County / Pictometry; visualization only"
+  },
+  {
+   "id": "fortworth-2024",
+   "name": "Fort Worth TX 2024 (Pictometry)",
+   "type": "image",
+   "url": "https://gis.fortworthtexas.gov/gisimage/rest/services/Orthos/Orthos_2024/ImageServer",
+   "bbox": [
+    -97.6,
+    32.55,
+    -97.03,
+    33.05
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024-02",
+   "license": "restricted",
+   "credit": "City of Fort Worth / Pictometry"
   },
   {
    "id": "usgs-naip-plus",
