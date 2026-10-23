@@ -50,6 +50,10 @@ def test_generator_matches_golden(site_id, tmp_path):
     assert got == want, f'{site_id} drawings changed; if intended, set tests/golden/{site_id}.cd50.html.sha256 to {got}'
     data = json.load(open(out / 'cd50_data.json'))
     assert data['xfmr'] and data['svc'] and data['bollards']
+    tesla = json.load(open(os.path.join(ROOT, 'rules', 'tesla_rules.json'), encoding='utf-8'))
+    cat = [c for c in data['checks'] if c['check'] == 'cat_length']
+    assert cat and all(c['ft'] <= tesla['cat_max_ft'] for c in cat), 'a CAT6 run is over the Tesla limit'
+    assert {c['run'] for c in cat} >= {r['tag'] for r in data['routes'] if r['tag'].startswith(('DC-', 'COM-'))}
 
 
 @pytest.mark.parametrize('site_id', [s for s in SITE_IDS if load(s)['files'].get('layout')])

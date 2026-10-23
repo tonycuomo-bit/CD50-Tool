@@ -158,6 +158,21 @@ else:                # geometry from the Site Layout tool export (sites/<site>/l
 def plen(p): return sum(math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]) for i in range(1, len(p)))/F
 for r in ROUTES: r['len'] = round(plen(r['pts']) + (0 if r['kind'] == 'pri' else 10))
 
+# ---------------------------------------------------------------- Tesla limits (rules/tesla_rules.json, same table as the Site Layout tool)
+TESLA = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'rules', 'tesla_rules.json'), encoding='utf-8'))
+CABS = {i['id'] for i in ITEMS.values() if i['type'] == 'cab'} if LAYOUT else {MW['tag'], V4['tag']}
+# CAT6 runs with every DC post circuit, cabinet comms run and cabinet feeder (V4DG G-106); lengths include stub-ups
+CAT = [r for r in ROUTES if r['kind'] in ('dc', 'com') or (r['kind'] == 'ac' and r['to'] in CABS)]
+CAT_MAX = max(CAT, key=lambda r: r['len'])
+CHECKS = [dict(check="cat_length", run=r['tag'], ft=r['len'], limit_ft=TESLA['cat_max_ft'], ok=r['len'] <= TESLA['cat_max_ft']) for r in CAT]
+DCT = TESLA['dc_trench']; DCN = {}
+for r in ROUTES:
+    if r['kind'] == 'dc': DCN[r['fr']] = DCN.get(r['fr'], 0) + int(re.match(r'\((\d+)\)', r['n']).group(1))
+CHECKS += [dict(check="dc_trench", cabinet=c, conduits=n, max_per_group=DCT['max_per_group'], ok=n <= DCT['max_per_group'],
+                engineered_backfill=n > DCT['no_fill_max']) for c, n in DCN.items()]
+for c in CHECKS:
+    if not c['ok']: print("WARNING: Tesla limit:", {k: v for k, v in c.items() if k != 'ok'})
+
 # ---------------------------------------------------------------- site text (templates in site.json)
 CTX = dict(XFMR=XFMR, SVC=SVC, TOT_KVA=TOT_KVA, TOT_A=TOT_A, XF_REQ=XF_REQ, MW=MW, V4=V4, NB=NB, NBT=NBT, NBR=NBR, NBF=NB-NBT-NBR,
            **{k: pv(k) for k in ('owner', 'owner_address', 'owner_contact', 'owner_email', 'architect')},
@@ -623,7 +638,11 @@ s, y4 = table(70, y3+54, [("TAG", 80), ("FROM", 190), ("TO", 90), ("CONDUIT", 12
 tot_tr = round(sum(r['len'] for r in ROUTES if r['kind'] == "dc" and r['to'].startswith("POST 1")) )
 _lenote = (f"SL-1, SL-2, {FT_MW}, {FT_V4} and COM-1 follow the trench bend points from the Site Layout tool; the SDG&E primary (P-1) is not routed yet. Lengths are measured on plan plus 10 ft for stub-ups." if LAYOUT else
            "Equipment yard location is TBD, so P-1, SL-1, F-1, F-2 and COM-1 lengths are placeholders. Lengths are measured on plan plus 10 ft for stub-ups (P-1 to PL only).")
-s, y5 = para(70, y4+20, f"{_lenote} DC runs to posts 1A-1H share one trench; total DC conduit about {tot_tr:,} ft. Verify the maximum cabinet-to-post DC run against the Tesla V4 Installation Manual. Conduit fill to be verified at CD90 with final conductor types.", 190, 11); o.append(s)
+s, y5 = para(70, y4+20, f"{_lenote} DC runs to posts 1A-1H share one trench; total DC conduit about {tot_tr:,} ft. "
+    f"Longest CAT6 run (post to cabinet, cabinet to cabinet or cabinet to switchgear) is {CAT_MAX['tag']} at {CAT_MAX['len']} ft, "
+    + (f"within the Tesla {TESLA['cat_max_ft']} ft (100 m) limit. " if CAT_MAX['len'] <= TESLA['cat_max_ft'] else f"OVER the Tesla {TESLA['cat_max_ft']} ft (100 m) limit: relocate the cabinet. ")
+    + " ".join(f"{c} trench: {n} DC post conduits" + (f", engineered backfill per the Tesla Rho table." if n > DCT['no_fill_max'] else ", native backfill allowed.") for c, n in DCN.items())
+    + " Conduit fill to be verified at CD90 with final conductor types.", 190, 11); o.append(s)
 # panel schedule SB-1
 o.append(T(1700, 96, "TABLE 4 · SB-1 DISTRIBUTION", 15, w="bold"))
 s, y6 = table(1700, 110, [("CKT", 50), ("LOAD", 200), ("BREAKER", 100), ("kVA", 90)], [
@@ -635,6 +654,8 @@ s, y7 = table(1700, y6+54, [("LOCATION", 230), ("FIXED", 70), ("REMOVABLE", 90),
     [n, str(sum(1 for _, r in b if r == "fixed")), str(sum(1 for _, r in b if r == "removable")), str(sum(1 for _, r in b if r == "rebound"))] for n, b in
     [("Equipment yard (XR-1, SB-1)", B_YARD), (f"{V4['tag']} cabinet", B_V4C), (f"V4 posts {POSTS[0][2]}-{POSTS[-1][2]}", B_POST), (f"{MW['tag']} cabinet", B_MWC), ("MW posts " + ", ".join(t for _, t in MP), B_MP)]]
     + [{"c": ["TOTAL", str(NB-NBR-NBT), str(NBR), str(NBT)]}], rh=24, sz=11.5); o.append(s)
+s, _ = notes(1700, y7+50, "TABLE 6 · TESLA DESIGN LIMITS", [f"{t}: {r} ({src})" for t, r, src in TESLA['notes']], n=118, sz=10.5); o.append(s)
+s, _ = para(1700, _+8, "Sources: " + "; ".join(f"{k} = {v}" for k, v in TESLA['sources'].items()) + ". Where they differ, the newest governs.", 128, 9.5, fill="#555"); o.append(s)
 pages.append(sheet("E-301", "LOAD CALCULATIONS & SCHEDULES", "".join(o)))
 
 # ================================================================ S-501
@@ -700,5 +721,5 @@ pages.append(sheet("S-501", "PAD, FOUNDATION & BOLLARD DETAILS", "".join(o)))
 css = "@page{size:36in 24in;margin:0}html,body{margin:0;padding:0}.page{width:36in;height:24in;page-break-after:always;overflow:hidden}.page>svg{width:36in;height:24in;display:block}"
 open(os.path.join(OUT, 'cd50.html'), 'w').write(f'<!doctype html><html><head><meta charset="utf-8"><title>CD50 {SITE["short_name"]}</title><style>{css}</style></head><body>{"".join(pages)}</body></html>')
 json.dump(dict(bollards=[[p[0], p[1], r] for p, r in BOLLARDS], routes=[{k: r[k] for k in ('tag', 'len', 'n', 'cond')} for r in ROUTES],
-               xfmr=XFMR, svc=SVC, tot_kva=TOT_KVA), open(os.path.join(OUT, 'cd50_data.json'), 'w'), indent=1)
+               xfmr=XFMR, svc=SVC, tot_kva=TOT_KVA, checks=CHECKS), open(os.path.join(OUT, 'cd50_data.json'), 'w'), indent=1)
 print("bollards", NB, "removable", NBR); [print(r['tag'], r['len']) for r in ROUTES]

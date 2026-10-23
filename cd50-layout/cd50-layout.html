@@ -169,6 +169,8 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
       <h2 id="h-sch">5 · Conduit schedule</h2>
       <div class="tablewrap"><table id="sched"></table></div>
       <div class="note">Click a conduit to add a bend point, drag a point to reroute, double-click a point to remove it. Lengths are center to center on plan, before stub-ups.</div>
+      <div id="sched-check" class="note"></div>
+      <details class="note"><summary>Tesla design limits</summary><div id="tesla-notes"></div></details>
     </section>
   </aside>
 
@@ -203,6 +205,9 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
 // BEGIN RULES (copied from rules/sizing_rules.json by tools/sync_rules.py; edit the JSON, not this line)
 const RULES = {"volts":480,"posts_per_cabinet":{"V4":8,"MW":2},"inputs":[{"kva":499,"label":"499 kW · Cleveland / Madisonville basis (600 A)"},{"kva":625,"label":"625 kVA nameplate (750 A)"},{"kva":998,"label":"998 kVA nameplate (1200 A)"},{"kva":1247,"label":"1247 kVA nameplate (1500 A)"}],"ocpd_factor":1.25,"xfmr_factor":1.25,"service_factor":1.25,"std_ocpd":[400,450,500,600,700,800,1000,1200,1600,2000,2500,3000,4000,5000],"std_xfmr":[150,225,300,500,750,1000,1500,2000,2500,3000,3750,5000],"panelboard_max_amps":800,"feeders":[{"max_amps":800,"amps_per_set":310,"cond":"500 kcmil AL"},{"max_amps":null,"amps_per_set":385,"cond":"750 kcmil AL"}],"egc_al":{"400":"1 AL","450":"1/0 AL","500":"1/0 AL","600":"2/0 AL","700":"3/0 AL","800":"3/0 AL","1000":"4/0 AL","1200":"250 kcmil AL","1600":"350 kcmil AL","2000":"400 kcmil AL","2500":"600 kcmil AL","3000":"600 kcmil AL","4000":"750 kcmil AL","5000":"1200 kcmil AL"}};
 // END RULES
+// BEGIN TESLA (copied from rules/tesla_rules.json by tools/sync_rules.py; edit the JSON, not this line)
+const TESLA = {"sources":{"V4DG":"Tesla V4 Supercharger Design Guide, rev 0 (06/23/25, plotted 04/28/26)","V4IM":"Tesla V4 Supercharger Install Manual (12/2025)","CCDM":"Tesla Commercial Charging Design Manual, NA (rev 03/18/24)"},"cat_max_ft":330,"cat_runs":"post to cabinet, cabinet to cabinet, cabinet to switchgear","posts_per_cabinet_max":8,"dc_trench":{"max_per_group":24,"group_sep_in":24,"no_fill_max":4,"max_depth_in":28},"stall":{"w":9,"l":17,"obst":[9,10.5,11]},"ada":{"van":{"w":11,"aisle":5},"std":{"w":9,"aisle":5},"amb":null,"l":18},"notes":[["Comms run length","CAT6 (shielded) post to cabinet, cabinet to cabinet or cabinet to switchgear: 330 ft (100 m) max. Checked on every DC, COM and cabinet feeder run (plan length + 10 ft stub-ups).","V4DG G-106; CCDM p.31"],["Posts per cabinet","8 V4 posts max per V4 cabinet. Multi-cabinet sites: one leader cabinet, up to 9 followers.","V4IM; V4DG G-106"],["DC post circuits","(1) 4\" conduit per post: (4) 600 kcmil AL (2 POS, 2 NEG) or (4) 350 kcmil CU, 4/0 AL or 2/0 CU EGC, Tesla signal cable bundle. 1000 V rated, 90°C min.","V4DG G-107; V4IM"],["Cabinet AC input","(5) 4\" conduits, each (3) 750 kcmil AL, no neutral; EGC 350 kcmil AL (1250 kW) or 250 kcmil AL (990 kW). EEOR confirms against NEC 250.122.","V4DG G-107"],["Breakers (Tesla)","Cabinet 1600 AF/AT 80% (2000 A for the 1500 A NEVI variant). Main 100% rated: 1 cab 1600 A, 2 cab 3000 A, 3 cab 5000 AF / 4500 AT.","V4DG G-106"],["DC post trench","Up to 24 DC post conduits per group with no spacing; over 24, 24\" between groups of 24 max. 28\" max to top of upper conduits; 24\" min cover in vehicle areas. Stack 2 high max.","V4DG G-107; supersedes CCDM 16 conduits, 24 in. depth"],["Backfill","More than 4 DC post conduits need engineered backfill per the Rho table (Rho 90 slurry 150 psi, Rho 60 concrete 3000 psi, Rho 120 tested native). 2\" min around conduits. Red warning tape 8\" below grade.","V4DG G-107"],["AC trench","Cabinet feeders: 5 conduits per cabinet, 15 per group (1200 A); 6 per cabinet, 18 per group (1500 A); 24\" between groups.","V4DG G-107"],["Conduit stub-ups","V4 cabinet: 4-6\" above concrete, bell fittings on rigid conduit, all conduits labeled. Post anchors 4\" min above foundation.","V4IM"],["Cabinet","Clearances 5' front, 3' sides, 6\" back; front clearance not over a curb drop or drive aisle. Pad slope 0.5-2%. Slabs over 50 ft need an expansion joint.","V4DG G-105"],["Post","Service side 1'-6\", non-service 5\" clear. Rear clearance not over an elevation change or road. Level within 1/4\"; leveling nuts to 4% slope.","V4DG G-101; V4IM; CCDM p.76"],["Fuel","Posts and cabinets 20 ft min from fuel dispensers and 10 ft from UST vents, all directions (NEC 514.3(B)(1)).","V4DG G-101, G-105"],["Stalls and aisles","Stall 9' x 17' min (10'-6\" / 11' with obstruction one / both sides). Drive aisle 20' min; angled stalls need a 24' two-way aisle (no V4 posts on one-way angled aisles). Trailer stall 13'-6\" x 34' with 24' aisles, 10% max of stalls.","V4DG G-101 to G-103; CCDM pp.7-19"],["Protection","Fixed bollards at supply equipment, never inside service clearances (removable there). A curb alone protects only if 6\" or higher; non-post equipment 5' min from curb face. Parking stops 4\" max high, 3' to curb, 4' to wall. Sign bottoms 80\" where people walk.","CCDM pp.22-25"]]};
+// END TESLA
 const SQ3 = Math.sqrt(3);
 const STD_OCPD = RULES.std_ocpd, STD_XFMR = RULES.std_xfmr, INPUTS = RULES.inputs;
 const nextUp = (list, v) => list.find(x => x >= v - 1e-6) ?? list[list.length-1];
@@ -344,8 +349,8 @@ const JUR = {
   CA:{label:"California (CBC 11B-812)", van:{w:12, aisle:5}, std:{w:9, aisle:5}, amb:{w:10, aisle:0}, l:18},
   FED:{label:"Federal (2010 ADA + Access Board EV guidance)", van:{w:11, aisle:5}, std:{w:8, aisle:5}, amb:null, l:18},
 };
-const TESLA_ADA = {van:{w:11, aisle:5}, std:{w:9, aisle:5}, amb:null, l:18};          // G-104: van 11' (12' CA) + 5' aisle, standard 9' + 5', 18' long
-const TESLA_STALL = {w:9, l:17, obst:[9, 10.5, 11]};                                     // G-101: min 9' x 17'; width 9' / 10'-6" / 11' with 0 / 1 / 2 side obstructions
+const TESLA_ADA = TESLA.ada;        // G-104: van 11' (12' CA) + 5' aisle, standard 9' + 5', 18' long
+const TESLA_STALL = TESLA.stall;    // G-101: min 9' x 17'; width 9' / 10'-6" / 11' with 0 / 1 / 2 side obstructions
 const AISLE_COL = {white:{label:"White (Tesla G-104)", col:"#f8fafc"}, blue:{label:"Blue", col:"#2563eb"}};
 const STRIPES = {
   w4:{label:"4\" white single line", col:"#f8fafc", dbl:false},
@@ -667,6 +672,24 @@ function render(){
   save();
 }
 
+// Tesla limits (rules/tesla_rules.json). CAT6 runs with every DC post circuit, cabinet comms run and cabinet feeder (V4DG G-106).
+const STUB_FT = 10;   // stub-up allowance added to plan length, same as the plan set generator
+function catRun(r){ return r.kind === "dc" || r.kind === "com" || (r.kind === "ac" && S.items[r.to] && S.items[r.to].type === "cab"); }
+function teslaChecks(R){
+  const T = TESLA, out = [], cat = R.filter(catRun).map(r => ({r, L:plen(pathPts(r)) + STUB_FT}));
+  if (cat.length){ const m = cat.reduce((a, b) => b.L > a.L ? b : a);
+    const over = cat.filter(c => c.L > T.cat_max_ft);
+    out.push({ok:!over.length, text:over.length ? `${over.map(c => c.r.id).join(", ")} over the ${T.cat_max_ft} ft CAT6 limit (${T.cat_runs}). Move the cabinet closer or add a cabinet.`
+      : `Longest comms run ${m.r.id} ${m.L.toFixed(0)} ft incl. stub-ups, within the ${T.cat_max_ft} ft CAT6 limit.`}); }
+  const byCab = {}; R.filter(r => r.kind === "dc").forEach(r => byCab[r.from] = (byCab[r.from] || 0) + r.n);
+  for (const [cab, n] of Object.entries(byCab)){ const D = T.dc_trench;
+    out.push({ok:n <= D.max_per_group, info:n > D.no_fill_max, text:`${cab}: ${n} DC post conduit${n > 1 ? "s" : ""} in the trench. ` + (n > D.max_per_group ? `Over ${D.max_per_group}: split into groups ${D.group_sep_in}" apart. ` : "") +
+      (n > D.no_fill_max ? `More than ${D.no_fill_max}: engineered backfill per the Tesla Rho table, ${D.max_depth_in}" max to top of conduit.` : "Native backfill allowed.")}); }
+  const posts = Object.values(S.items).filter(i => i.type === "post" && i.kind === "V4"), cabs = new Set(posts.map(p => p.cab));
+  for (const c of cabs){ const n = posts.filter(p => p.cab === c).length;
+    if (n > T.posts_per_cabinet_max) out.push({ok:false, text:`${c} feeds ${n} V4 posts; Tesla allows ${T.posts_per_cabinet_max}.`}); }
+  return out;
+}
 function fmtA(a){ return Math.round(a).toLocaleString(); }
 function renderSide(z, R){
   const res = document.getElementById("results");
@@ -709,10 +732,11 @@ function renderSide(z, R){
           <div class="note">Drag a bollard to move it. Select one and press Delete to remove it.</div>`; })()}`;
   } else ins.innerHTML = `<div class="note">${Object.keys(S.items).length} items placed. Select one on the plan to rotate it.</div>`;
   const t = document.getElementById("sched");
-  const rows = R.map(r => { const L = plen(pathPts(r)); const over = r.kind === "dc" && L > 330;
+  const rows = R.map(r => { const L = plen(pathPts(r)); const over = catRun(r) && L + STUB_FT > TESLA.cat_max_ft;
     const col = r.kind === "dc" ? "var(--conduit-dc)" : r.kind === "com" ? "var(--conduit-com)" : "var(--conduit-ac)";
-    return `<tr><td class="tag"><span class="swatch" style="background:${col}"></span>${r.id}</td><td>${r.from} → ${r.to}</td><td>(${r.n}) ${r.size}C<br><span class="note">${r.cond}</span></td><td class="n">${L.toFixed(0)} ft${over ? '<br><span class="pill warn">over 330</span>' : ""}</td></tr>`; }).join("");
+    return `<tr><td class="tag"><span class="swatch" style="background:${col}"></span>${r.id}</td><td>${r.from} → ${r.to}</td><td>(${r.n}) ${r.size}C<br><span class="note">${r.cond}</span></td><td class="n">${L.toFixed(0)} ft${over ? `<br><span class="pill warn">over ${TESLA.cat_max_ft}</span>` : ""}</td></tr>`; }).join("");
   t.innerHTML = `<thead><tr><th>Run</th><th>From → to</th><th>Conduit and wire</th><th>Length</th></tr></thead><tbody>${rows}</tbody>`;
+  document.getElementById("sched-check").innerHTML = teslaChecks(R).map(c => `<div><span class="pill ${c.ok ? (c.info ? "" : "ok") : "warn"}">${c.ok ? (c.info ? "Note" : "OK") : "Check"}</span> ${c.text}</div>`).join("");
 }
 
 function renderPark(){
@@ -736,6 +760,8 @@ function renderPark(){
        <button class="btn" type="button" data-pka="-90">⟲ 90°</button><button class="btn" type="button" data-pka="90">⟳ 90°</button>
        <button class="btn" type="button" data-pka="del">Delete</button></div>`;
 }
+document.getElementById("tesla-notes").innerHTML = TESLA.notes.map(([t, r, src]) => `<p><b>${t}.</b> ${r} <span class="sub">(${src})</span></p>`).join("") +
+  `<p class="sub">${Object.entries(TESLA.sources).map(([k, v]) => `${k}: ${v}`).join(" · ")}. Where they differ, the newest wins.</p>`;
 // ---------- inputs
 const sel = document.getElementById("input");
 sel.innerHTML = INPUTS.map(i => `<option value="${i.kva}">${i.label}</option>`).join("");

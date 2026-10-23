@@ -1,0 +1,30 @@
+{
+  "_note": "Tesla design limits used by the CD50 checks (not Tony's sizing rules; those are in sizing_rules.json). tools/sync_rules.py copies this into cd50-layout.html. Where sources differ, the newest one wins: V4DG over V4IM over CCDM. Add the source key to every rule.",
+  "sources": {
+    "V4DG": "Tesla V4 Supercharger Design Guide, rev 0 (06/23/25, plotted 04/28/26)",
+    "V4IM": "Tesla V4 Supercharger Install Manual (12/2025)",
+    "CCDM": "Tesla Commercial Charging Design Manual, NA (rev 03/18/24)"
+  },
+  "cat_max_ft": 330,
+  "cat_runs": "post to cabinet, cabinet to cabinet, cabinet to switchgear",
+  "posts_per_cabinet_max": 8,
+  "dc_trench": {"max_per_group": 24, "group_sep_in": 24, "no_fill_max": 4, "max_depth_in": 28},
+  "stall": {"w": 9, "l": 17, "obst": [9, 10.5, 11]},
+  "ada": {"van": {"w": 11, "aisle": 5}, "std": {"w": 9, "aisle": 5}, "amb": null, "l": 18},
+  "notes": [
+    ["Comms run length", "CAT6 (shielded) post to cabinet, cabinet to cabinet or cabinet to switchgear: 330 ft (100 m) max. Checked on every DC, COM and cabinet feeder run (plan length + 10 ft stub-ups).", "V4DG G-106; CCDM p.31"],
+    ["Posts per cabinet", "8 V4 posts max per V4 cabinet. Multi-cabinet sites: one leader cabinet, up to 9 followers.", "V4IM; V4DG G-106"],
+    ["DC post circuits", "(1) 4\" conduit per post: (4) 600 kcmil AL (2 POS, 2 NEG) or (4) 350 kcmil CU, 4/0 AL or 2/0 CU EGC, Tesla signal cable bundle. 1000 V rated, 90°C min.", "V4DG G-107; V4IM"],
+    ["Cabinet AC input", "(5) 4\" conduits, each (3) 750 kcmil AL, no neutral; EGC 350 kcmil AL (1250 kW) or 250 kcmil AL (990 kW). EEOR confirms against NEC 250.122.", "V4DG G-107"],
+    ["Breakers (Tesla)", "Cabinet 1600 AF/AT 80% (2000 A for the 1500 A NEVI variant). Main 100% rated: 1 cab 1600 A, 2 cab 3000 A, 3 cab 5000 AF / 4500 AT.", "V4DG G-106"],
+    ["DC post trench", "Up to 24 DC post conduits per group with no spacing; over 24, 24\" between groups of 24 max. 28\" max to top of upper conduits; 24\" min cover in vehicle areas. Stack 2 high max.", "V4DG G-107; supersedes CCDM 16 conduits, 24 in. depth"],
+    ["Backfill", "More than 4 DC post conduits need engineered backfill per the Rho table (Rho 90 slurry 150 psi, Rho 60 concrete 3000 psi, Rho 120 tested native). 2\" min around conduits. Red warning tape 8\" below grade.", "V4DG G-107"],
+    ["AC trench", "Cabinet feeders: 5 conduits per cabinet, 15 per group (1200 A); 6 per cabinet, 18 per group (1500 A); 24\" between groups.", "V4DG G-107"],
+    ["Conduit stub-ups", "V4 cabinet: 4-6\" above concrete, bell fittings on rigid conduit, all conduits labeled. Post anchors 4\" min above foundation.", "V4IM"],
+    ["Cabinet", "Clearances 5' front, 3' sides, 6\" back; front clearance not over a curb drop or drive aisle. Pad slope 0.5-2%. Slabs over 50 ft need an expansion joint.", "V4DG G-105"],
+    ["Post", "Service side 1'-6\", non-service 5\" clear. Rear clearance not over an elevation change or road. Level within 1/4\"; leveling nuts to 4% slope.", "V4DG G-101; V4IM; CCDM p.76"],
+    ["Fuel", "Posts and cabinets 20 ft min from fuel dispensers and 10 ft from UST vents, all directions (NEC 514.3(B)(1)).", "V4DG G-101, G-105"],
+    ["Stalls and aisles", "Stall 9' x 17' min (10'-6\" / 11' with obstruction one / both sides). Drive aisle 20' min; angled stalls need a 24' two-way aisle (no V4 posts on one-way angled aisles). Trailer stall 13'-6\" x 34' with 24' aisles, 10% max of stalls.", "V4DG G-101 to G-103; CCDM pp.7-19"],
+    ["Protection", "Fixed bollards at supply equipment, never inside service clearances (removable there). A curb alone protects only if 6\" or higher; non-post equipment 5' min from curb face. Parking stops 4\" max high, 3' to curb, 4' to wall. Sign bottoms 80\" where people walk.", "CCDM pp.22-25"]
+  ]
+}
