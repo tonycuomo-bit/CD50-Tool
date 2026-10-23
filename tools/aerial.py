@@ -246,7 +246,7 @@ def main(argv=None):
     ap.add_argument('--h', type=float, help='frame height ft (default 525)')
     ap.add_argument('--ftpx', type=float, help='output ft per pixel (default 0.25 for sources 1 ft or finer, else 0.5)')
     ap.add_argument('--source', help='use this source id instead of the best ranked')
-    ap.add_argument('--esri', action='store_true', help='include restricted sources (Esri World Imagery, reference only)')
+    ap.add_argument('--esri', action='store_true', help='include restricted sources (Esri World Imagery, vendor-licensed county imagery; reference only)')
     ap.add_argument('--no-enhance', action='store_true')
     ap.add_argument('--add-to-tool', action='store_true', help='add or replace the SITES entry in cd50-layout.html')
     ap.add_argument('--list', action='store_true', help='probe every source at the address (or San Ysidro) and stop')
