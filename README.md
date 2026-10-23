@@ -20,7 +20,7 @@ cp sites/site_private.example.json sites/san-ysidro/site_private.json   # option
 python3 cd50-plansets/cd50.py sites/san-ysidro && node cd50-plansets/pdf.cjs sites/san-ysidro
 ```
 
-Output is `sites/san-ysidro/out/cd50.pdf` (36 x 24 in sheets). A site laid out in the Site Layout tool needs only its exported `layout.json` plus a `site.json` (see `sites/example-tool-export/`). Rename it `<site>_CD50_<YYYY-MM-DD>[_rN].pdf` when issuing. Generated files and `site_private.json` are gitignored, so owner names, emails and phone numbers stay out of git.
+Output is `sites/san-ysidro/out/cd50.pdf` (36 x 24 in sheets). A site laid out in the Site Layout tool needs only its exported `layout.json` plus a `site.json` (see `sites/san-ysidro-r6/`). Rename it `<site>_CD50_<YYYY-MM-DD>[_rN].pdf` when issuing. Generated files and `site_private.json` are gitignored, so owner names, emails and phone numbers stay out of git.
 
 ## Tests and sizing rules
 

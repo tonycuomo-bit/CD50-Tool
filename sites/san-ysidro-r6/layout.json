@@ -1020,335 +1020,207 @@
    "item": "XR-1",
    "kind": "fixed",
    "xy": [
-    -54.443,
-    142.765
+    -48.52,
+    115.62
    ]
   },
   {
    "item": "XR-1",
    "kind": "fixed",
    "xy": [
-    -56.848,
-    139.888
+    -45.96,
+    118.69
    ]
   },
   {
    "item": "XR-1",
    "kind": "fixed",
    "xy": [
-    -59.254,
-    137.011
+    -43.39,
+    121.76
    ]
   },
   {
    "item": "XR-1",
    "kind": "fixed",
    "xy": [
-    -61.659,
-    134.134
+    -40.82,
+    124.83
    ]
   },
   {
    "item": "XR-1",
    "kind": "fixed",
    "xy": [
-    -64.065,
-    131.257
+    -38.26,
+    127.9
    ]
   },
   {
    "item": "XR-1",
    "kind": "fixed",
    "xy": [
-    -52.557,
-    121.635
+    -35.69,
+    130.97
    ]
   },
   {
    "item": "XR-1",
    "kind": "fixed",
    "xy": [
-    -50.152,
-    124.512
-   ]
-  },
-  {
-   "item": "XR-1",
-   "kind": "fixed",
-   "xy": [
-    -47.746,
-    127.389
-   ]
-  },
-  {
-   "item": "XR-1",
-   "kind": "fixed",
-   "xy": [
-    -45.341,
-    130.266
-   ]
-  },
-  {
-   "item": "XR-1",
-   "kind": "fixed",
-   "xy": [
-    -42.935,
-    133.143
-   ]
-  },
-  {
-   "item": "XR-1",
-   "kind": "fixed",
-   "xy": [
-    -61.188,
-    128.852
-   ]
-  },
-  {
-   "item": "XR-1",
-   "kind": "fixed",
-   "xy": [
-    -58.311,
-    126.446
-   ]
-  },
-  {
-   "item": "XR-1",
-   "kind": "fixed",
-   "xy": [
-    -55.434,
-    124.041
+    -33.13,
+    134.03
    ]
   },
   {
    "item": "XR-1",
    "kind": "removable",
    "xy": [
-    -45.812,
-    135.548
+    -35.94,
+    136.39
    ]
   },
   {
    "item": "XR-1",
    "kind": "removable",
    "xy": [
-    -48.689,
-    137.954
+    -38.749,
+    138.74
    ]
   },
   {
    "item": "XR-1",
    "kind": "removable",
    "xy": [
-    -51.566,
-    140.359
+    -41.56,
+    141.09
    ]
   },
   {
-   "item": "CT-1",
-   "kind": "fixed",
-   "xy": [
-    -50.036,
-    115.665
-   ]
-  },
-  {
-   "item": "CT-1",
-   "kind": "fixed",
-   "xy": [
-    -52.951,
-    118.103
-   ]
-  },
-  {
-   "item": "CT-1",
-   "kind": "fixed",
-   "xy": [
-    -55.867,
-    120.54
-   ]
-  },
-  {
-   "item": "CT-1",
-   "kind": "fixed",
-   "xy": [
-    -63.564,
-    111.335
-   ]
-  },
-  {
-   "item": "CT-1",
-   "kind": "fixed",
-   "xy": [
-    -60.649,
-    108.897
-   ]
-  },
-  {
-   "item": "CT-1",
-   "kind": "fixed",
-   "xy": [
-    -57.733,
-    106.46
-   ]
-  },
-  {
-   "item": "CT-1",
+   "item": "XR-1",
    "kind": "removable",
    "xy": [
-    -55.168,
-    109.528
+    -44.38,
+    143.44
    ]
   },
   {
-   "item": "CT-1",
+   "item": "XR-1",
    "kind": "removable",
    "xy": [
-    -52.602,
-    112.597
+    -47.19,
+    145.8
    ]
   },
   {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -54.34,
-    123.994
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -56.68,
-    125.951
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -59.02,
-    127.907
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -61.359,
-    129.864
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -63.699,
-    131.82
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -78.26,
-    114.406
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -75.92,
-    112.449
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -73.58,
-    110.493
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -71.241,
-    108.536
-   ]
-  },
-  {
-   "item": "SB-1",
-   "kind": "fixed",
-   "xy": [
-    -68.901,
-    106.58
-   ]
-  },
-  {
-   "item": "SB-1",
+   "item": "XR-1",
    "kind": "removable",
    "xy": [
-    -66.474,
-    109.482
+    -50,
+    148.15
    ]
   },
   {
    "item": "SB-1",
-   "kind": "removable",
+   "kind": "fixed",
    "xy": [
-    -64.047,
-    112.385
+    -61.35,
+    100.279
    ]
   },
   {
    "item": "SB-1",
-   "kind": "removable",
+   "kind": "fixed",
    "xy": [
-    -61.62,
-    115.287
+    -58.79,
+    103.35
    ]
   },
   {
    "item": "SB-1",
-   "kind": "removable",
+   "kind": "fixed",
    "xy": [
-    -59.193,
-    118.19
+    -56.22,
+    106.42
    ]
   },
   {
    "item": "SB-1",
-   "kind": "removable",
+   "kind": "fixed",
    "xy": [
-    -56.767,
-    121.092
+    -53.65,
+    109.49
+   ]
+  },
+  {
+   "item": "SB-1",
+   "kind": "fixed",
+   "xy": [
+    -51.09,
+    112.56
+   ]
+  },
+  {
+   "item": "SB-1",
+   "kind": "fixed",
+   "xy": [
+    -78.23,
+    114.39
+   ]
+  },
+  {
+   "item": "SB-1",
+   "kind": "fixed",
+   "xy": [
+    -75.42,
+    112.04
+   ]
+  },
+  {
+   "item": "SB-1",
+   "kind": "fixed",
+   "xy": [
+    -72.6,
+    109.69
+   ]
+  },
+  {
+   "item": "SB-1",
+   "kind": "fixed",
+   "xy": [
+    -69.79,
+    107.34
+   ]
+  },
+  {
+   "item": "SB-1",
+   "kind": "fixed",
+   "xy": [
+    -66.981,
+    104.99
+   ]
+  },
+  {
+   "item": "SB-1",
+   "kind": "fixed",
+   "xy": [
+    -64.16,
+    102.63
    ]
   },
   {
    "item": "SPR-1",
    "kind": "fixed",
    "xy": [
-    39.694,
-    53.067
+    51.29,
+    42.17
    ]
   },
   {
    "item": "SPR-1",
    "kind": "fixed",
    "xy": [
-    39.694,
-    49.433
-   ]
-  },
-  {
-   "item": "SPR-1",
-   "kind": "fixed",
-   "xy": [
-    39.694,
+    51.29,
     45.8
    ]
   },
@@ -1356,23 +1228,55 @@
    "item": "SPR-1",
    "kind": "fixed",
    "xy": [
-    39.694,
-    42.167
+    51.29,
+    49.43
    ]
   },
   {
    "item": "SPR-1",
    "kind": "fixed",
    "xy": [
-    51.294,
-    42.167
+    51.29,
+    53.07
+   ]
+  },
+  {
+   "item": "SPR-1",
+   "kind": "removable",
+   "xy": [
+    47.43,
+    53.07
+   ]
+  },
+  {
+   "item": "SPR-1",
+   "kind": "removable",
+   "xy": [
+    43.56,
+    53.07
+   ]
+  },
+  {
+   "item": "SPR-1",
+   "kind": "removable",
+   "xy": [
+    39.69,
+    53.07
    ]
   },
   {
    "item": "SPR-1",
    "kind": "fixed",
    "xy": [
-    51.294,
+    39.69,
+    49.43
+   ]
+  },
+  {
+   "item": "SPR-1",
+   "kind": "fixed",
+   "xy": [
+    39.69,
     45.8
    ]
   },
@@ -1380,39 +1284,15 @@
    "item": "SPR-1",
    "kind": "fixed",
    "xy": [
-    51.294,
-    49.433
-   ]
-  },
-  {
-   "item": "SPR-1",
-   "kind": "fixed",
-   "xy": [
-    51.294,
-    53.067
-   ]
-  },
-  {
-   "item": "SPR-1",
-   "kind": "removable",
-   "xy": [
-    47.428,
-    53.067
-   ]
-  },
-  {
-   "item": "SPR-1",
-   "kind": "removable",
-   "xy": [
-    43.561,
-    53.067
+    39.69,
+    42.17
    ]
   },
   {
    "item": "1A",
    "kind": "rebound",
    "xy": [
-    73.91,
+    73.909,
     54.333
    ]
   },
@@ -1420,7 +1300,7 @@
    "item": "1A",
    "kind": "rebound",
    "xy": [
-    78.535,
+    78.534,
     54.333
    ]
   },
@@ -1428,7 +1308,7 @@
    "item": "1B",
    "kind": "rebound",
    "xy": [
-    84.465,
+    84.466,
     54.333
    ]
   },
@@ -1436,7 +1316,7 @@
    "item": "1B",
    "kind": "rebound",
    "xy": [
-    89.09,
+    89.091,
     54.333
    ]
   },
@@ -1460,7 +1340,7 @@
    "item": "1D",
    "kind": "rebound",
    "xy": [
-    111.854,
+    111.855,
     54.333
    ]
   },
@@ -1468,7 +1348,7 @@
    "item": "1D",
    "kind": "rebound",
    "xy": [
-    116.479,
+    116.48,
     54.333
    ]
   },
@@ -1476,7 +1356,7 @@
    "item": "1E",
    "kind": "rebound",
    "xy": [
-    122.41,
+    122.409,
     54.333
    ]
   },
@@ -1484,7 +1364,7 @@
    "item": "1E",
    "kind": "rebound",
    "xy": [
-    127.035,
+    127.034,
     54.333
    ]
   },
@@ -1492,7 +1372,7 @@
    "item": "1F",
    "kind": "rebound",
    "xy": [
-    132.882,
+    132.881,
     54.333
    ]
   },
@@ -1500,7 +1380,7 @@
    "item": "1F",
    "kind": "rebound",
    "xy": [
-    137.507,
+    137.506,
     54.333
    ]
   },
@@ -1524,7 +1404,7 @@
    "item": "1H",
    "kind": "rebound",
    "xy": [
-    153.993,
+    153.994,
     54.333
    ]
   },
@@ -1532,7 +1412,7 @@
    "item": "1H",
    "kind": "rebound",
    "xy": [
-    158.618,
+    158.619,
     54.333
    ]
   },
@@ -1540,56 +1420,72 @@
    "item": "MW-1",
    "kind": "fixed",
    "xy": [
-    -112.219,
-    -2.109
+    -109.42,
+    11.62
    ]
   },
   {
    "item": "MW-1",
    "kind": "fixed",
    "xy": [
-    -109.581,
-    0.438
+    -106.871,
+    8.98
    ]
   },
   {
    "item": "MW-1",
    "kind": "fixed",
    "xy": [
-    -106.944,
-    2.986
+    -104.32,
+    6.35
+   ]
+  },
+  {
+   "item": "MW-1",
+   "kind": "removable",
+   "xy": [
+    -106.52,
+    4.23
+   ]
+  },
+  {
+   "item": "MW-1",
+   "kind": "removable",
+   "xy": [
+    -108.71,
+    2.11
+   ]
+  },
+  {
+   "item": "MW-1",
+   "kind": "removable",
+   "xy": [
+    -110.91,
+    -0.011
+   ]
+  },
+  {
+   "item": "MW-1",
+   "kind": "removable",
+   "xy": [
+    -113.101,
+    -2.13
    ]
   },
   {
    "item": "MW-1",
    "kind": "fixed",
    "xy": [
-    -104.306,
-    5.533
+    -115.65,
+    0.51
    ]
   },
   {
    "item": "MW-1",
-   "kind": "removable",
+   "kind": "fixed",
    "xy": [
-    -118.575,
-    4.473
-   ]
-  },
-  {
-   "item": "MW-1",
-   "kind": "removable",
-   "xy": [
-    -116.456,
-    2.279
-   ]
-  },
-  {
-   "item": "MW-1",
-   "kind": "removable",
-   "xy": [
-    -114.338,
-    0.085
+    -118.19,
+    3.151
    ]
   },
   {
@@ -1609,6 +1505,453 @@
    ]
   }
  ],
+ "parking": {
+  "jurisdiction": "CA",
+  "jurisdiction_label": "California (CBC 11B-812)",
+  "striping": "w4",
+  "striping_label": "4\" white single line",
+  "stencil": true,
+  "aisle_marking": "4\" white border and cross striping, NO PARKING in 12\" letters (Tesla G-104)",
+  "aisle_color": "white",
+  "ada": {
+   "n": 8,
+   "req": {
+    "van": 1,
+    "std": 1,
+    "amb": 0
+   },
+   "have": {
+    "van": 1,
+    "std": 1,
+    "amb": 0
+   },
+   "ok": true
+  },
+  "stalls": [
+   {
+    "id": "S1A",
+    "kind": "ev",
+    "name": "EV stall",
+    "x": 76.222,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 10.5,
+    "l_ft": 18,
+    "aisle_ft": 0,
+    "aisle_side": null,
+    "side_obstructions": 0,
+    "outline": [
+     [
+      70.972,
+      52.73
+     ],
+     [
+      81.472,
+      52.73
+     ],
+     [
+      81.472,
+      70.73
+     ],
+     [
+      70.972,
+      70.73
+     ]
+    ],
+    "aisle": null,
+    "buffer": null,
+    "clear_floor": null
+   },
+   {
+    "id": "S1B",
+    "kind": "ev",
+    "name": "EV stall",
+    "x": 86.778,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 10.5,
+    "l_ft": 18,
+    "aisle_ft": 0,
+    "aisle_side": null,
+    "side_obstructions": 0,
+    "outline": [
+     [
+      81.528,
+      52.73
+     ],
+     [
+      92.028,
+      52.73
+     ],
+     [
+      92.028,
+      70.73
+     ],
+     [
+      81.528,
+      70.73
+     ]
+    ],
+    "aisle": null,
+    "buffer": null,
+    "clear_floor": null
+   },
+   {
+    "id": "S1C",
+    "kind": "van",
+    "name": "Van accessible EVCS",
+    "x": 98.03,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 12,
+    "l_ft": 18,
+    "aisle_ft": 5,
+    "aisle_side": "R",
+    "side_obstructions": null,
+    "outline": [
+     [
+      92.03,
+      52.73
+     ],
+     [
+      104.03,
+      52.73
+     ],
+     [
+      104.03,
+      70.73
+     ],
+     [
+      92.03,
+      70.73
+     ]
+    ],
+    "aisle": [
+     [
+      104.03,
+      52.73
+     ],
+     [
+      109.03,
+      52.73
+     ],
+     [
+      109.03,
+      70.73
+     ],
+     [
+      104.03,
+      70.73
+     ]
+    ],
+    "buffer": null,
+    "clear_floor": [
+     [
+      96.03,
+      50.23
+     ],
+     [
+      100.03,
+      50.23
+     ],
+     [
+      100.03,
+      52.73
+     ],
+     [
+      96.03,
+      52.73
+     ]
+    ]
+   },
+   {
+    "id": "S1D",
+    "kind": "std",
+    "name": "Standard accessible EVCS",
+    "x": 113.53,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 9,
+    "l_ft": 18,
+    "aisle_ft": 5,
+    "aisle_side": "L",
+    "side_obstructions": null,
+    "outline": [
+     [
+      109.03,
+      52.73
+     ],
+     [
+      118.03,
+      52.73
+     ],
+     [
+      118.03,
+      70.73
+     ],
+     [
+      109.03,
+      70.73
+     ]
+    ],
+    "aisle": [
+     [
+      104.03,
+      52.73
+     ],
+     [
+      109.03,
+      52.73
+     ],
+     [
+      109.03,
+      70.73
+     ],
+     [
+      104.03,
+      70.73
+     ]
+    ],
+    "buffer": null,
+    "clear_floor": [
+     [
+      111.53,
+      50.23
+     ],
+     [
+      115.53,
+      50.23
+     ],
+     [
+      115.53,
+      52.73
+     ],
+     [
+      111.53,
+      52.73
+     ]
+    ]
+   },
+   {
+    "id": "S1E",
+    "kind": "ev",
+    "name": "EV stall",
+    "x": 124.722,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 10.5,
+    "l_ft": 18,
+    "aisle_ft": 0,
+    "aisle_side": null,
+    "side_obstructions": 0,
+    "outline": [
+     [
+      119.472,
+      52.73
+     ],
+     [
+      129.972,
+      52.73
+     ],
+     [
+      129.972,
+      70.73
+     ],
+     [
+      119.472,
+      70.73
+     ]
+    ],
+    "aisle": null,
+    "buffer": null,
+    "clear_floor": null
+   },
+   {
+    "id": "S1F",
+    "kind": "ev",
+    "name": "EV stall",
+    "x": 135.194,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 10.5,
+    "l_ft": 18,
+    "aisle_ft": 0,
+    "aisle_side": null,
+    "side_obstructions": 0,
+    "outline": [
+     [
+      129.944,
+      52.73
+     ],
+     [
+      140.444,
+      52.73
+     ],
+     [
+      140.444,
+      70.73
+     ],
+     [
+      129.944,
+      70.73
+     ]
+    ],
+    "aisle": null,
+    "buffer": null,
+    "clear_floor": null
+   },
+   {
+    "id": "S1G",
+    "kind": "ev",
+    "name": "EV stall",
+    "x": 145.75,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 10.5,
+    "l_ft": 18,
+    "aisle_ft": 0,
+    "aisle_side": null,
+    "side_obstructions": 0,
+    "outline": [
+     [
+      140.5,
+      52.73
+     ],
+     [
+      151,
+      52.73
+     ],
+     [
+      151,
+      70.73
+     ],
+     [
+      140.5,
+      70.73
+     ]
+    ],
+    "aisle": null,
+    "buffer": null,
+    "clear_floor": null
+   },
+   {
+    "id": "S1H",
+    "kind": "ev",
+    "name": "EV stall",
+    "x": 156.306,
+    "y": 61.73,
+    "rot": 0,
+    "w_ft": 10.5,
+    "l_ft": 18,
+    "aisle_ft": 0,
+    "aisle_side": null,
+    "side_obstructions": 0,
+    "outline": [
+     [
+      151.056,
+      52.73
+     ],
+     [
+      161.556,
+      52.73
+     ],
+     [
+      161.556,
+      70.73
+     ],
+     [
+      151.056,
+      70.73
+     ]
+    ],
+    "aisle": null,
+    "buffer": null,
+    "clear_floor": null
+   }
+  ],
+  "signs": [
+   {
+    "id": "SG1",
+    "sign": "tesla",
+    "code": "TESLA",
+    "label": "Tesla Supercharger parking sign (Tesla-furnished)",
+    "xy": [
+     76.22,
+     51.93
+    ]
+   },
+   {
+    "id": "SG2",
+    "sign": "tesla",
+    "code": "TESLA",
+    "label": "Tesla Supercharger parking sign (Tesla-furnished)",
+    "xy": [
+     86.78,
+     51.93
+    ]
+   },
+   {
+    "id": "SG3",
+    "sign": "van",
+    "code": "VAN",
+    "label": "ISA + VAN ACCESSIBLE plaque (R7-8P)",
+    "xy": [
+     98.03,
+     51.93
+    ]
+   },
+   {
+    "id": "SG4",
+    "sign": "isa",
+    "code": "ISA",
+    "label": "Accessible EVCS, ISA (R7-8 / CBC 11B-812.8)",
+    "xy": [
+     113.53,
+     51.93
+    ]
+   },
+   {
+    "id": "SG5",
+    "sign": "tesla",
+    "code": "TESLA",
+    "label": "Tesla Supercharger parking sign (Tesla-furnished)",
+    "xy": [
+     124.72,
+     51.93
+    ]
+   },
+   {
+    "id": "SG6",
+    "sign": "tesla",
+    "code": "TESLA",
+    "label": "Tesla Supercharger parking sign (Tesla-furnished)",
+    "xy": [
+     135.19,
+     51.93
+    ]
+   },
+   {
+    "id": "SG7",
+    "sign": "tesla",
+    "code": "TESLA",
+    "label": "Tesla Supercharger parking sign (Tesla-furnished)",
+    "xy": [
+     145.75,
+     51.93
+    ]
+   },
+   {
+    "id": "SG8",
+    "sign": "tesla",
+    "code": "TESLA",
+    "label": "Tesla Supercharger parking sign (Tesla-furnished)",
+    "xy": [
+     156.31,
+     51.93
+    ]
+   }
+  ]
+ },
  "routes": [
   {
    "id": "SL-1",
@@ -1667,11 +2010,27 @@
      119.2
     ],
     [
+     -49.42,
+     109.86
+    ],
+    [
+     -49.42,
+     93.5
+    ],
+    [
+     38.25,
+     93.5
+    ],
+    [
+     38.25,
+     51.28
+    ],
+    [
      45.494,
      47.617
     ]
    ],
-   "length_ft": 132.7
+   "length_ft": 173.7
   },
   {
    "id": "AC-MW-1",
@@ -1688,11 +2047,15 @@
      119.2
     ],
     [
+     -75.47,
+     108.17
+    ],
+    [
      -112.5,
      6.1
     ]
    ],
-   "length_ft": 122.2
+   "length_ft": 122.9
   },
   {
    "id": "DC-1A",
@@ -1709,11 +2072,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     76.22,
+     52.11
+    ],
+    [
      76.222,
      54.333
     ]
    ],
-   "length_ft": 31.5
+   "length_ft": 34.8
   },
   {
    "id": "DC-1B",
@@ -1730,11 +2101,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     86.78,
+     52.11
+    ],
+    [
      86.778,
      54.333
     ]
    ],
-   "length_ft": 41.8
+   "length_ft": 45.4
   },
   {
    "id": "DC-1C",
@@ -1751,11 +2130,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     96.5,
+     52.11
+    ],
+    [
      96.5,
      54.333
     ]
    ],
-   "length_ft": 51.4
+   "length_ft": 55.1
   },
   {
    "id": "DC-1D",
@@ -1772,11 +2159,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     114.17,
+     52.11
+    ],
+    [
      114.167,
      54.333
     ]
    ],
-   "length_ft": 69
+   "length_ft": 72.8
   },
   {
    "id": "DC-1E",
@@ -1793,11 +2188,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     124.72,
+     52.11
+    ],
+    [
      124.722,
      54.333
     ]
    ],
-   "length_ft": 79.5
+   "length_ft": 83.3
   },
   {
    "id": "DC-1F",
@@ -1814,11 +2217,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     135.19,
+     52.11
+    ],
+    [
      135.194,
      54.333
     ]
    ],
-   "length_ft": 90
+   "length_ft": 93.8
   },
   {
    "id": "DC-1G",
@@ -1835,11 +2246,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     145.75,
+     52.11
+    ],
+    [
      145.75,
      54.333
     ]
    ],
-   "length_ft": 100.5
+   "length_ft": 104.3
   },
   {
    "id": "DC-1H",
@@ -1856,11 +2275,19 @@
      47.617
     ],
     [
+     49.97,
+     52.11
+    ],
+    [
+     156.31,
+     52.11
+    ],
+    [
      156.306,
      54.333
     ]
    ],
-   "length_ft": 111
+   "length_ft": 114.9
   },
   {
    "id": "DC-M1A",
@@ -1919,11 +2346,39 @@
      47.617
     ],
     [
+     38.25,
+     51.28
+    ],
+    [
+     37.14,
+     52.11
+    ],
+    [
+     37.14,
+     92.39
+    ],
+    [
+     -51.31,
+     92.39
+    ],
+    [
+     -50.19,
+     110.5
+    ],
+    [
+     -61.11,
+     97.47
+    ],
+    [
+     -74.19,
+     108.42
+    ],
+    [
      -112.5,
      6.1
     ]
    ],
-   "length_ft": 163.4
+   "length_ft": 299.7
   }
  ]
 }
