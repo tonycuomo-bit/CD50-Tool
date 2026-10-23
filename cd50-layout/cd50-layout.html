@@ -626,8 +626,15 @@ document.getElementById("b-copy").onclick = async (e) => {
   try { await navigator.clipboard.writeText(layoutText()); e.target.textContent = "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
   setTimeout(() => e.target.textContent = "Copy layout.json", 1600);
 };
-document.getElementById("b-dl").onclick = () => {
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([layoutText()], {type:"application/json"})); a.download = "layout.json";
+// In the claude.ai viewer, saves go through the downloads capability; opened as a local file, a plain link works.
+document.getElementById("b-dl").onclick = async (e) => {
+  const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+  if (dl) {
+    try { await dl.save({filename: "layout.json", data: layoutText()}); }
+    catch(err){ if (err?.code !== "declined") { e.target.textContent = "Download blocked, use Copy"; setTimeout(() => e.target.textContent = "Download layout.json", 2400); } }
+    return;
+  }
+  const a =document.createElement("a"); a.href = URL.createObjectURL(new Blob([layoutText()], {type:"application/json"})); a.download = "layout.json";
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 document.getElementById("inspector").onclick = e => { const b = e.target.closest("[data-rot]"); if (!b || !selected) return; const it = S.items[selected]; it.rot = ((it.rot + +b.dataset.rot) % 360 + 360) % 360; render(); };
