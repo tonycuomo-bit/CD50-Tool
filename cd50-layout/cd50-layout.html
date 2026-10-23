@@ -167,16 +167,45 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
 
 <script>
 (() => {
+// ---------- sizing. Mirrors cd50-plansets/sizing.py; tests/test_sizing.py runs this block in node and compares.
+// BEGIN SIZING
+// BEGIN RULES (copied from rules/sizing_rules.json by tools/sync_rules.py; edit the JSON, not this line)
+const RULES = {"volts":480,"posts_per_cabinet":{"V4":8,"MW":2},"inputs":[{"kva":499,"label":"499 kW · Cleveland / Madisonville basis (600 A)"},{"kva":625,"label":"625 kVA nameplate (750 A)"},{"kva":998,"label":"998 kVA nameplate (1200 A)"},{"kva":1247,"label":"1247 kVA nameplate (1500 A)"}],"ocpd_factor":1.25,"xfmr_factor":1.25,"service_factor":1.25,"std_ocpd":[400,450,500,600,700,800,1000,1200,1600,2000,2500,3000,4000,5000],"std_xfmr":[150,225,300,500,750,1000,1500,2000,2500,3000,3750,5000],"panelboard_max_amps":800,"feeders":[{"max_amps":800,"amps_per_set":310,"cond":"500 kcmil AL"},{"max_amps":null,"amps_per_set":385,"cond":"750 kcmil AL"}],"egc_al":{"400":"1 AL","450":"1/0 AL","500":"1/0 AL","600":"2/0 AL","700":"3/0 AL","800":"3/0 AL","1000":"4/0 AL","1200":"250 kcmil AL","1600":"350 kcmil AL","2000":"400 kcmil AL","2500":"600 kcmil AL","3000":"600 kcmil AL","4000":"750 kcmil AL","5000":"1200 kcmil AL"}};
+// END RULES
 const SQ3 = Math.sqrt(3);
-const STD_OCPD = [400,450,500,600,700,800,1000,1200,1600,2000,2500,3000,4000,5000];
-const STD_XFMR = [150,225,300,500,750,1000,1500,2000,2500,3000,3750,5000];
-const INPUTS = [
-  {kva:499, label:"499 kW · Cleveland / Madisonville basis (600 A)"},
-  {kva:625, label:"625 kVA nameplate (750 A)"},
-  {kva:998, label:"998 kVA nameplate (1200 A)"},
-  {kva:1247, label:"1247 kVA nameplate (1500 A)"},
-];
+const STD_OCPD = RULES.std_ocpd, STD_XFMR = RULES.std_xfmr, INPUTS = RULES.inputs;
 const nextUp = (list, v) => list.find(x => x >= v - 1e-6) ?? list[list.length-1];
+// feeder sets for a given breaker / service rating
+function feeder(amps){
+  const f = RULES.feeders.find(f => f.max_amps === null || amps <= f.max_amps);
+  return {sets:Math.ceil(amps / f.amps_per_set), cond:f.cond};
+}
+// groups: [{kind:"V4"|"MW", posts, kva, ...}] on one service; kva is the per-cabinet input setting
+function sizeGroups(groups){
+  const G = groups.map(g => {
+    const perCab = RULES.posts_per_cabinet[g.kind];
+    const cabs = Math.max(1, Math.ceil(g.posts / perCab));
+    const cabAmps = g.kva * 1000 / (RULES.volts * SQ3);
+    const cabOcpd = nextUp(STD_OCPD, cabAmps * RULES.ocpd_factor);
+    const nameplate = INPUTS.slice(1).find(i => i.kva >= g.kva) || INPUTS[INPUTS.length - 1];
+    return {...g, perCab, cabs, cabAmps, cabOcpd, nameplate, derated:g.kva < nameplate.kva};
+  });
+  const cabs = G.reduce((a, g) => a + g.cabs, 0);
+  const totalKva = G.reduce((a, g) => a + g.kva * g.cabs, 0);
+  const totalAmps = G.reduce((a, g) => a + g.cabAmps * g.cabs, 0);
+  const xfReq = totalKva * RULES.xfmr_factor;
+  const xfmr = nextUp(STD_XFMR, xfReq);
+  const svcReq = Math.max(...G.map(g => g.cabOcpd), totalAmps * RULES.service_factor);
+  const svcAmps = nextUp(STD_OCPD, svcReq);
+  const svcOver = svcReq > STD_OCPD[STD_OCPD.length - 1];
+  const xfOver = xfReq > STD_XFMR[STD_XFMR.length - 1];
+  const svcType = svcAmps <= RULES.panelboard_max_amps ? "Panelboard" : "Switchboard";
+  const svcTag = svcType === "Panelboard" ? "PB1" : "SB-1";
+  const g0 = G[0];
+  return {G, cabs, perCab:g0.perCab, kva:g0.kva, cabAmps:g0.cabAmps, cabOcpd:g0.cabOcpd, totalKva, totalAmps, xfReq, xfmr, xfOver, svcReq, svcAmps, svcOver, svcType, svcTag,
+    derated:G.some(g => g.derated), nameplate:g0.nameplate};
+}
+// END SIZING
 
 // ---------- fetched site imagery (pre-scaled, north up; pin = address point in image feet from top-left)
 const SITES = [
@@ -205,35 +234,8 @@ function groups(){
   if (S.product === "MW") return [{...v4, kind:"MW"}];
   return [v4, {kind:"MW", posts:S.mwPosts, kva:S.mwInputKva, cabPrefix:"MW-", postPrefix:"M"}];
 }
-function size(){
-  const G = groups().map(g => {
-    const perCab = g.kind === "MW" ? 2 : 8;
-    const cabs = Math.max(1, Math.ceil(g.posts / perCab));
-    const cabAmps = g.kva * 1000 / (480 * SQ3);
-    const cabOcpd = nextUp(STD_OCPD, cabAmps * 1.25);
-    const nameplate = INPUTS.slice(1).find(i => i.kva >= g.kva) || INPUTS[3];
-    return {...g, perCab, cabs, cabAmps, cabOcpd, nameplate, derated:g.kva < nameplate.kva};
-  });
-  const cabs = G.reduce((a, g) => a + g.cabs, 0);
-  const totalKva = G.reduce((a, g) => a + g.kva * g.cabs, 0);
-  const xfReq = totalKva * 1.25;
-  const xfmr = nextUp(STD_XFMR, xfReq);
-  const svcReq = Math.max(...G.map(g => g.cabOcpd), G.reduce((a, g) => a + g.cabAmps * g.cabs, 0) * 1.25);
-  const svcAmps = nextUp(STD_OCPD, svcReq);
-  const svcOver = svcReq > STD_OCPD[STD_OCPD.length - 1];
-  const xfOver = xfReq > STD_XFMR[STD_XFMR.length - 1];
-  const svcType = svcAmps <= 800 ? "Panelboard" : "Switchboard";
-  const svcTag = svcType === "Panelboard" ? "PB1" : "SB-1";
-  const g0 = G[0];
-  return {G, cabs, perCab:g0.perCab, kva:g0.kva, cabAmps:g0.cabAmps, cabOcpd:g0.cabOcpd, totalKva, xfReq, xfmr, xfOver, svcReq, svcAmps, svcOver, svcType, svcTag,
-    derated:G.some(g => g.derated), nameplate:g0.nameplate};
-}
+function size(){ return sizeGroups(groups()); }
 const grp = (z, kind) => z.G.find(g => g.kind === kind) || z.G[0];
-// feeder sets for a given breaker / service rating
-function feeder(amps){
-  if (amps <= 800) return {sets:Math.ceil(amps/310), cond:"500 kcmil AL"};
-  return {sets:Math.ceil(amps/385), cond:"750 kcmil AL"};
-}
 
 // ---------- equipment specs (feet). Approximate footprints from the V4 template and SSC details.
 function xfmrDims(kva){

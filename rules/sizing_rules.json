@@ -1,0 +1,24 @@
+{
+  "_note": "Tony's CD50 sizing rules. Single source for cd50-plansets/sizing.py and the layout tool (tools/sync_rules.py copies this into cd50-layout.html). Do not change values without Tony.",
+  "volts": 480,
+  "posts_per_cabinet": {"V4": 8, "MW": 2},
+  "inputs": [
+    {"kva": 499,  "label": "499 kW · Cleveland / Madisonville basis (600 A)"},
+    {"kva": 625,  "label": "625 kVA nameplate (750 A)"},
+    {"kva": 998,  "label": "998 kVA nameplate (1200 A)"},
+    {"kva": 1247, "label": "1247 kVA nameplate (1500 A)"}
+  ],
+  "ocpd_factor": 1.25,
+  "xfmr_factor": 1.25,
+  "service_factor": 1.25,
+  "std_ocpd": [400, 450, 500, 600, 700, 800, 1000, 1200, 1600, 2000, 2500, 3000, 4000, 5000],
+  "std_xfmr": [150, 225, 300, 500, 750, 1000, 1500, 2000, 2500, 3000, 3750, 5000],
+  "panelboard_max_amps": 800,
+  "feeders": [
+    {"max_amps": 800,  "amps_per_set": 310, "cond": "500 kcmil AL"},
+    {"max_amps": null, "amps_per_set": 385, "cond": "750 kcmil AL"}
+  ],
+  "egc_al": {"400": "1 AL", "450": "1/0 AL", "500": "1/0 AL", "600": "2/0 AL", "700": "3/0 AL", "800": "3/0 AL",
+             "1000": "4/0 AL", "1200": "250 kcmil AL", "1600": "350 kcmil AL", "2000": "400 kcmil AL",
+             "2500": "600 kcmil AL", "3000": "600 kcmil AL", "4000": "750 kcmil AL", "5000": "1200 kcmil AL"}
+}

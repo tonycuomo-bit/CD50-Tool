@@ -7,26 +7,19 @@ import numpy as np
 F = 3.6                       # plan pts per ft (1"=20' at 72 pt/in)
 W, H = 2592, 1728             # 36x24 in sheet in pt
 DATE = "10/23/2026"
-SQ3 = math.sqrt(3)
 PENDING = "[PENDING · FROM EMAIL / MONDAY]"
 # Owner / contact details are filled in only after Tony approves the layout, and are kept out of git:
 # copy site_private.example.json to site_private.json (gitignored). Missing fields print as PENDING.
 PRIV = json.load(open('site_private.json')) if os.path.exists('site_private.json') else {}
 pv = lambda k: PRIV.get(k) or PENDING
 
-# ---------------------------------------------------------------- sizing (matches Site Layout tool v5)
-STD_OCPD = [400,450,500,600,700,800,1000,1200,1600,2000,2500,3000,4000,5000]
-STD_XFMR = [150,225,300,500,750,1000,1500,2000,2500,3000,3750,5000]
-nextup = lambda l, v: next(x for x in l if x >= v - 1e-6)
-def feeder(a): return (math.ceil(a/310), "500 kcmil AL") if a <= 800 else (math.ceil(a/385), "750 kcmil AL")
-EGC_AL = {800:"3/0 AL", 2000:"400 kcmil AL", 3000:"600 kcmil AL"}
+# ---------------------------------------------------------------- sizing (sizing.py, same rules table as the Site Layout tool)
+from sizing import size_groups, egc_al
 groups = [dict(tag="MW-1", kind="MW", posts=2, kva=1247, name="V4 Megacharger cabinet (2 posts)"),
           dict(tag="V4-1", kind="V4", posts=8, kva=1247, name="V4 Supercharger cabinet (8 posts)")]
-for g in groups:
-    g['amps'] = g['kva']*1000/(480*SQ3); g['ocpd'] = nextup(STD_OCPD, g['amps']*1.25); g['feeder'] = feeder(g['ocpd'])
-TOT_KVA = sum(g['kva'] for g in groups); TOT_A = sum(g['amps'] for g in groups)
-XF_REQ = TOT_KVA*1.25; XFMR = nextup(STD_XFMR, XF_REQ)
-SVC_REQ = max(max(g['ocpd'] for g in groups), TOT_A*1.25); SVC = nextup(STD_OCPD, SVC_REQ); SVCF = feeder(SVC)
+Z = size_groups(groups); groups = Z['groups']
+TOT_KVA, TOT_A, XF_REQ, XFMR, SVC_REQ, SVC, SVCF = (Z[k] for k in ('total_kva', 'total_amps', 'xf_req', 'xfmr', 'svc_req', 'svc', 'svc_feeder'))
+if Z['xf_over'] or Z['svc_over']: print(f"WARNING: load exceeds the largest standard size (xfmr {XF_REQ:,.0f} kVA, service {SVC_REQ:,.0f} A)")
 MW, V4 = groups
 
 # ---------------------------------------------------------------- equipment geometry (plan pts, svg frame of lines_mw.svg)
@@ -111,9 +104,9 @@ ROUTES = [
   dict(tag="SL-1", kind="ac", pts=[xrW, sbE], n=f"({SVCF[0]}) 4\"", size='4"',
        cond=f"{SVCF[0]} sets (3) {SVCF[1]} + (1) neutral per set", fr="XR-1", to="SB-1", note="Service lateral, customer-owned"),
   dict(tag="F-1", kind="ac", pts=[_sbW, _sbWo, (MWC[0]+12, MWC[1]+14)], n=f"({MW['feeder'][0]}) 4\"", size='4"',
-       cond=f"{MW['feeder'][0]} sets (3) {MW['feeder'][1]} + (1) {EGC_AL[MW['ocpd']]} EGC", fr=f"SB-1 ({MW['ocpd']} A)", to="MW-1", note="No neutral"),
+       cond=f"{MW['feeder'][0]} sets (3) {MW['feeder'][1]} + (1) {egc_al(MW['ocpd'])} EGC", fr=f"SB-1 ({MW['ocpd']} A)", to="MW-1", note="No neutral"),
   dict(tag="F-2", kind="ac", pts=[ROT((SB[0]+12*F, SB[1])), _pa, (_pa[0], 852), (1592, 852), (1592, 700), (V4C[0], V4C[1]+V4C[3]*F/2)], n=f"({V4['feeder'][0]}) 4\"", size='4"',
-       cond=f"{V4['feeder'][0]} sets (3) {V4['feeder'][1]} + (1) {EGC_AL[V4['ocpd']]} EGC", fr=f"SB-1 ({V4['ocpd']} A)", to="V4-1", note="No neutral"),
+       cond=f"{V4['feeder'][0]} sets (3) {V4['feeder'][1]} + (1) {egc_al(V4['ocpd'])} EGC", fr=f"SB-1 ({V4['ocpd']} A)", to="V4-1", note="No neutral"),
 ]
 for i, (x, y, t) in enumerate(POSTS):
     ROUTES.append(dict(tag=f"DC-{t}", kind="dc", pts=[V4cS, (V4cS[0]+6, 703+0*i), (x, 703), (x, y)], n="(1) 4\"", size='4"',
@@ -549,7 +542,7 @@ branches = [(cx-300, MW, "F-1", "MW-1", "M1A", "M1B"), (cx+130, V4, "F-2", "V4-1
 for bx, g, ft, tag, *_ in branches:
     o.append(L(bx, 560, bx, 600, sw=2.4)); o.append(brk(bx, 610, g['ocpd'], f"{g['ocpd']} A, 3P"))
     o.append(L(bx, 648, bx, 960, sw=2.4))
-    s, n = g['feeder']; o.append(T(bx+14, 700, f"{ft}: {s} SETS (3) {n}", 11)); o.append(T(bx+14, 715, f"+ (1) {EGC_AL[g['ocpd']]} EGC, ({s}) 4\" PVC, NO NEUTRAL", 11))
+    s, n = g['feeder']; o.append(T(bx+14, 700, f"{ft}: {s} SETS (3) {n}", 11)); o.append(T(bx+14, 715, f"+ (1) {egc_al(g['ocpd'])} EGC, ({s}) 4\" PVC, NO NEUTRAL", 11))
 o.append(L(cx+300, 560, cx+300, 610, sw=1.5)); o.append(brk(cx+300, 620, None)); o.append(T(cx+316, 640, "SPACE (FUTURE)", 11))
 # cabinets
 for bx, g, ft, tag, *_ in branches:
@@ -591,7 +584,7 @@ pages.append(sheet("E-201", "SINGLE-LINE DIAGRAM", "".join(o)))
 # ================================================================ E-301
 o = []
 s, y = table(70, 110, [("CABINET", 110), ("POSTS", 70), ("INPUT kVA", 100), ("AMPS @ 480 V 3Ø", 140), ("x 1.25", 100), ("BREAKER", 100), ("FEEDER SETS", 120), ("CONDUCTOR", 140), ("EGC", 130)],
-    [[g['tag'], str(g['posts']), f"{g['kva']:,}", f"{g['amps']:,.1f}", f"{g['amps']*1.25:,.1f}", f"{g['ocpd']} A", str(g['feeder'][0]), g['feeder'][1], EGC_AL[g['ocpd']]] for g in groups]
+    [[g['tag'], str(g['posts']), f"{g['kva']:,}", f"{g['amps']:,.1f}", f"{g['amps']*1.25:,.1f}", f"{g['ocpd']} A", str(g['feeder'][0]), g['feeder'][1], egc_al(g['ocpd'])] for g in groups]
     + [{"c": ["TOTAL", "10", f"{TOT_KVA:,}", f"{TOT_A:,.1f}", f"{TOT_A*1.25:,.1f}", f"{SVC:,} A MAIN", str(SVCF[0]), SVCF[1], "(neutral)"]}], rh=24, sz=11.5)
 o.append(T(70, 96, "TABLE 1 · LOAD CALCULATION & OCPD SIZING", 15, w="bold")); o.append(s)
 s, y2 = para(70, y+22, f"Amps = kVA x 1000 / (480 x 1.732). Breaker = next standard size at or above 125% of cabinet amps (CEC 240.6). Service = next standard size at or above the larger of the biggest breaker and 125% of summed cabinet amps: {TOT_A:,.1f} x 1.25 = {TOT_A*1.25:,.1f} A -> {SVC:,} A. Transformer = {TOT_KVA:,} kVA x 1.25 = {XF_REQ:,.1f} kVA -> {XFMR:,} kVA (next standard size up; never undersized). Feeder sets: up to 800 A, 500 kcmil AL at 310 A per set; above 800 A, 750 kcmil AL at 385 A per set (75°C).", 190, 11)

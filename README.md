@@ -21,6 +21,15 @@ python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs
 
 Output is `cd50-plansets/cd50.pdf` (36 x 24 in sheets). Rename it `<site>_CD50_<YYYY-MM-DD>[_rN].pdf` when issuing. Generated files and `site_private.json` are gitignored, so owner names, emails and phone numbers stay out of git.
 
+## Tests and sizing rules
+
+```
+pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
+Sizing rules live in `rules/sizing_rules.json`. After changing them, run `python3 tools/sync_rules.py` to update the layout tool.
+
 ## Truck path inputs
 
 To change the Megacharger truck lanes, edit `cd50-plansets/source/cF.json`, run `python3 mw3.py` from `cd50-plansets/source/`, copy `mw_pos.json` and `mw_overlay.svgfrag` up one level, then rebuild.
