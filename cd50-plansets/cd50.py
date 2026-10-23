@@ -8,7 +8,10 @@ if len(sys.argv) != 2: sys.exit("usage: python3 cd50-plansets/cd50.py sites/<sit
 SITE_DIR = os.path.abspath(sys.argv[1]); OUT = os.path.join(SITE_DIR, 'out'); os.makedirs(OUT, exist_ok=True)
 site_path = lambda f: os.path.join(SITE_DIR, f)
 SITE = json.load(open(site_path('site.json'), encoding='utf-8'))
-PJ, FILES, GEO = SITE['project'], SITE['files'], SITE['geometry']
+PJ, FILES, GEO = SITE['project'], SITE['files'], SITE.get('geometry', {})
+# a site exported from the Site Layout tool carries layout.json: equipment, pads, bollards, conduit paths and chargers
+LAYOUT = json.load(open(site_path(FILES['layout']), encoding='utf-8')) if FILES.get('layout') else None
+NORTH = LAYOUT['frame']['north'] if LAYOUT else GEO['north_deg']
 UT = PJ['utility']
 
 F = 3.6                       # plan pts per ft (1"=20' at 72 pt/in)
@@ -22,109 +25,136 @@ pv = lambda k: PRIV.get(k) or PENDING
 
 # ---------------------------------------------------------------- sizing (sizing.py, same rules table as the Site Layout tool)
 from sizing import size_groups, egc_al
-Z = size_groups([dict(g) for g in SITE['chargers']]); groups = Z['groups']
+Z = size_groups([dict(g) for g in (LAYOUT['chargers'] if LAYOUT else SITE['chargers'])]); groups = Z['groups']
+if LAYOUT and (LAYOUT['sizing']['xfmr_kva'], LAYOUT['sizing']['service_amps']) != (Z['xfmr'], Z['svc']):
+    print(f"WARNING: layout.json was exported with different sizing ({LAYOUT['sizing']}); re-export it from the layout tool")
 TOT_KVA, TOT_A, XF_REQ, XFMR, SVC_REQ, SVC, SVCF = (Z[k] for k in ('total_kva', 'total_amps', 'xf_req', 'xfmr', 'svc_req', 'svc', 'svc_feeder'))
 if Z['xf_over'] or Z['svc_over']: print(f"WARNING: load exceeds the largest standard size (xfmr {XF_REQ:,.0f} kVA, service {SVC_REQ:,.0f} A)")
-MW, V4 = groups               # drawings below assume one MW cabinet group then one V4 cabinet group
+# the drawings below still assume one MW cabinet group and one V4 cabinet group (roadmap step 5 widens this)
+MW, V4 = (next(g for g in groups if g['kind'] == k) for k in ('MW', 'V4'))
+FT_MW, FT_V4 = (f"AC-{MW['tag']}", f"AC-{V4['tag']}") if LAYOUT else ("F-1", "F-2")
 
 # ---------------------------------------------------------------- equipment geometry (plan pts, svg frame of the linework)
-mwp = json.load(open(site_path(FILES['mw_positions']))); TH = math.radians(mwp['rot'])
-E = np.array([math.cos(TH), math.sin(TH)]); N = np.array([math.sin(TH), -math.cos(TH)])
-# Equipment yard tucked against a property line (San Ysidro: west / I-805 PL, Tony's CD50 review): long side parallel
-# to the PL, gap_ft off it, equipment backs to the PL. Drawn axis-aligned about pivot (yx, yy), rotated by YROT; ROT() maps to plan.
-YD = GEO['yard']
-PL_A, PL_B = np.array(YD['pl_a_ft']), np.array(YD['pl_b_ft'])          # PL segment, display ft
-_u = (PL_B-PL_A)/np.linalg.norm(PL_B-PL_A); _n = np.array([_u[1], -_u[0]])  # along PL, inward normal
-YROT = math.degrees(math.atan2(_u[1], _u[0]))
-YARD_S, YARD_GAP = YD['along_ft'], YD['gap_ft']                          # ft along the PL from its first vertex, ft off the PL
-_O = (PL_A + YARD_S*_u + (YD['size_ft'][1]+YARD_GAP)*_n)*F
-YARD = (_O[0], _O[1], *YD['size_ft'])
-yx, yy = YARD[0], YARD[1]
-def ROT(p):
-    c, s_ = math.cos(math.radians(YROT)), math.sin(math.radians(YROT)); dx, dy = p[0]-yx, p[1]-yy
-    return (yx + dx*c - dy*s_, yy + dx*s_ + dy*c)
-YG = f'transform="rotate({YROT:.3f} {yx:.2f} {yy:.2f})"'
-_sb, _xr = GEO['switchboard'], GEO['transformer']
-SB = (yx+_sb['offset_ft'][0]*F, yy+_sb['offset_ft'][1]*F, *_sb['size_ft'])   # pad x,y,w,d (ft), local to the yard
-XR = (yx+_xr['offset_ft'][0]*F, yy+_xr['offset_ft'][1]*F, *_xr['size_ft'])   # doors face local +x
-V4C = (*GEO['v4_cabinet']['xy'], *GEO['v4_cabinet']['size_ft'])
-POSTX, POSTY = GEO['v4_posts']['x'], GEO['v4_posts']['y']
-POSTS = [(x, POSTY, t) for x, t in zip(POSTX, GEO['v4_posts']['tags'])]
-MWC = np.array(mwp['cab'])*F; MP = [(np.array(mwp['post1'])*F, "M1A"), (np.array(mwp['post2'])*F, "M1B")]
+if not LAYOUT:    # hand-placed San Ysidro geometry (sites without layout.json)
+    mwp = json.load(open(site_path(FILES['mw_positions']))); TH = math.radians(mwp['rot'])
+    E = np.array([math.cos(TH), math.sin(TH)]); N = np.array([math.sin(TH), -math.cos(TH)])
+    # Equipment yard tucked against a property line (San Ysidro: west / I-805 PL, Tony's CD50 review): long side parallel
+    # to the PL, gap_ft off it, equipment backs to the PL. Drawn axis-aligned about pivot (yx, yy), rotated by YROT; ROT() maps to plan.
+    YD = GEO['yard']
+    PL_A, PL_B = np.array(YD['pl_a_ft']), np.array(YD['pl_b_ft'])          # PL segment, display ft
+    _u = (PL_B-PL_A)/np.linalg.norm(PL_B-PL_A); _n = np.array([_u[1], -_u[0]])  # along PL, inward normal
+    YROT = math.degrees(math.atan2(_u[1], _u[0]))
+    YARD_S, YARD_GAP = YD['along_ft'], YD['gap_ft']                          # ft along the PL from its first vertex, ft off the PL
+    _O = (PL_A + YARD_S*_u + (YD['size_ft'][1]+YARD_GAP)*_n)*F
+    YARD = (_O[0], _O[1], *YD['size_ft'])
+    yx, yy = YARD[0], YARD[1]
+    def ROT(p):
+        c, s_ = math.cos(math.radians(YROT)), math.sin(math.radians(YROT)); dx, dy = p[0]-yx, p[1]-yy
+        return (yx + dx*c - dy*s_, yy + dx*s_ + dy*c)
+    YG = f'transform="rotate({YROT:.3f} {yx:.2f} {yy:.2f})"'
+    _sb, _xr = GEO['switchboard'], GEO['transformer']
+    SB = (yx+_sb['offset_ft'][0]*F, yy+_sb['offset_ft'][1]*F, *_sb['size_ft'])   # pad x,y,w,d (ft), local to the yard
+    XR = (yx+_xr['offset_ft'][0]*F, yy+_xr['offset_ft'][1]*F, *_xr['size_ft'])   # doors face local +x
+    V4C = (*GEO['v4_cabinet']['xy'], *GEO['v4_cabinet']['size_ft'])
+    POSTX, POSTY = GEO['v4_posts']['x'], GEO['v4_posts']['y']
+    POSTS = [(x, POSTY, t) for x, t in zip(POSTX, GEO['v4_posts']['tags'])]
+    MWC = np.array(mwp['cab'])*F; MP = [(np.array(mwp['post1'])*F, "M1A"), (np.array(mwp['post2'])*F, "M1B")]
 
-def rect_pts(x, y, w, d): return [(x, y), (x+w*F, y), (x+w*F, y+d*F), (x, y+d*F)]
-def rot_rect(c, w, d):
-    hw, hd = w*F/2, d*F/2
-    return [tuple(c + a*E*hw + b*N*hd) for a, b in ((-1,-1),(1,-1),(1,1),(-1,1))]
+    def rect_pts(x, y, w, d): return [(x, y), (x+w*F, y), (x+w*F, y+d*F), (x, y+d*F)]
+    def rot_rect(c, w, d):
+        hw, hd = w*F/2, d*F/2
+        return [tuple(c + a*E*hw + b*N*hd) for a, b in ((-1,-1),(1,-1),(1,1),(-1,1))]
 
-# bollards: points along an offset ring around a polygon, sides chosen by index, spacing <= 4 ft
-def ring(poly, off, sides, sp=4.0, removable=()):
-    P = Polygon(poly).buffer(off*F, join_style=2).exterior.coords[:-1]
-    P = [np.array(p) for p in P]
-    # match each buffered corner to nearest original corner order
-    out = []
-    n = len(P)
-    cen = np.mean(poly, axis=0); ang = lambda p: math.atan2(p[1]-cen[1], p[0]-cen[0])
-    orig = [np.array(p) for p in poly]
-    order = [min(range(n), key=lambda j: np.linalg.norm(P[j]-o)) for o in orig]
-    Q = [P[j] for j in order]
-    for s in sides:
-        a, b = Q[s], Q[(s+1) % 4]; L = np.linalg.norm(b-a)/F; k = max(1, math.ceil(L/sp))
-        for i in range(k+1):
-            out.append((tuple(a+(b-a)*i/k), s in removable))
-    # dedupe corners
-    res = []
-    for p, r in out:
-        if all(np.hypot(p[0]-q[0], p[1]-q[1]) > 1.0 for q, _ in res): res.append((p, r))
-    return res
+    # bollards: points along an offset ring around a polygon, sides chosen by index, spacing <= 4 ft
+    def ring(poly, off, sides, sp=4.0, removable=()):
+        P = Polygon(poly).buffer(off*F, join_style=2).exterior.coords[:-1]
+        P = [np.array(p) for p in P]
+        # match each buffered corner to nearest original corner order
+        out = []
+        n = len(P)
+        cen = np.mean(poly, axis=0); ang = lambda p: math.atan2(p[1]-cen[1], p[0]-cen[0])
+        orig = [np.array(p) for p in poly]
+        order = [min(range(n), key=lambda j: np.linalg.norm(P[j]-o)) for o in orig]
+        Q = [P[j] for j in order]
+        for s in sides:
+            a, b = Q[s], Q[(s+1) % 4]; L = np.linalg.norm(b-a)/F; k = max(1, math.ceil(L/sp))
+            for i in range(k+1):
+                out.append((tuple(a+(b-a)*i/k), s in removable))
+        # dedupe corners
+        res = []
+        for p, r in out:
+            if all(np.hypot(p[0]-q[0], p[1]-q[1]) > 1.0 for q, _ in res): res.append((p, r))
+        return res
 
-yard_poly = rect_pts(yx, yy, YARD[2], YARD[3])
-B_YARD = [(ROT(p), r) for p, r in ring(yard_poly, 1.0, [0,1,3], removable=(1,))]   # no posts on the PL side; SE end (XR-1 doors) removable
-v4c_poly = rect_pts(*V4C)
-B_V4C = ring(v4c_poly, 3.0, [1,2,3], removable=(2,))           # north side is landscape at PL
-B_POST = []
-for x, y, _ in POSTS:
-    for dx in (-2.3125, 2.3125): B_POST.append(((x+dx*F, y), "rebound"))     # Tesla S-502: 2'-3 3/4" each side of post CL on 5'-11" CIP pad
-mwc_poly = rot_rect(MWC, 6.2, 5.0)
-B_MWC = ring(mwc_poly, 3.0, [1,2,3], removable=(2,))
-B_MP = []
-for p, _ in MP:
-    B_MP.append((tuple(p - 5.583*E*F), "rebound"))                          # Tesla MW guide G-102 fig. 4: bollard 5'-7" from post, drive-thru
-def kinds(b): return [(p, ("removable" if r else "fixed") if isinstance(r, bool) else r) for p, r in b]
-# drop any bollard that would sit inside the WB-67 swept path (Tony: none in the path of traffic)
-from shapely.geometry import Point as _Pt
-_frag = open(site_path(FILES['swept_path'])).read()
-SWEPT = Polygon([tuple(map(float, q.split(','))) for q in re.findall(r'<polygon points="([^"]+)"', _frag)[0].split()])
-def clear_path(b): return [(p, r) for p, r in b if not SWEPT.buffer(0.5*F).contains(_Pt(p))]
-B_YARD, B_V4C, B_MWC = [clear_path(kinds(b)) for b in (B_YARD, B_V4C, B_MWC)]
-BOLLARDS = B_YARD + B_V4C + B_POST + B_MWC + B_MP
-NB = len(BOLLARDS); NBR = sum(1 for _, r in BOLLARDS if r == "removable"); NBT = sum(1 for _, r in BOLLARDS if r == "rebound")
+    yard_poly = rect_pts(yx, yy, YARD[2], YARD[3])
+    B_YARD = [(ROT(p), r) for p, r in ring(yard_poly, 1.0, [0,1,3], removable=(1,))]   # no posts on the PL side; SE end (XR-1 doors) removable
+    v4c_poly = rect_pts(*V4C)
+    B_V4C = ring(v4c_poly, 3.0, [1,2,3], removable=(2,))           # north side is landscape at PL
+    B_POST = []
+    for x, y, _ in POSTS:
+        for dx in (-2.3125, 2.3125): B_POST.append(((x+dx*F, y), "rebound"))     # Tesla S-502: 2'-3 3/4" each side of post CL on 5'-11" CIP pad
+    mwc_poly = rot_rect(MWC, 6.2, 5.0)
+    B_MWC = ring(mwc_poly, 3.0, [1,2,3], removable=(2,))
+    B_MP = []
+    for p, _ in MP:
+        B_MP.append((tuple(p - 5.583*E*F), "rebound"))                          # Tesla MW guide G-102 fig. 4: bollard 5'-7" from post, drive-thru
+    def kinds(b): return [(p, ("removable" if r else "fixed") if isinstance(r, bool) else r) for p, r in b]
+    # drop any bollard that would sit inside the WB-67 swept path (Tony: none in the path of traffic)
+    from shapely.geometry import Point as _Pt
+    _frag = open(site_path(FILES['swept_path'])).read()
+    SWEPT = Polygon([tuple(map(float, q.split(','))) for q in re.findall(r'<polygon points="([^"]+)"', _frag)[0].split()])
+    def clear_path(b): return [(p, r) for p, r in b if not SWEPT.buffer(0.5*F).contains(_Pt(p))]
+    B_YARD, B_V4C, B_MWC = [clear_path(kinds(b)) for b in (B_YARD, B_V4C, B_MWC)]
+    BOLLARDS = B_YARD + B_V4C + B_POST + B_MWC + B_MP
+    NB = len(BOLLARDS); NBR = sum(1 for _, r in BOLLARDS if r == "removable"); NBT = sum(1 for _, r in BOLLARDS if r == "rebound")
 
-# ---------------------------------------------------------------- conduit routes (plan pts)
-# Still San Ysidro-specific: trench waypoints and label spots are hand-placed. Roadmap step 3 (layout tool export)
-# will supply routes per site.
-sbE = ROT((SB[0]+SB[2]*F, SB[1]+SB[3]*F/2)); xrW = ROT((XR[0], SB[1]+SB[3]*F/2))
-_xrN = ROT((XR[0]+XR[2]*F/2, XR[1])); _pa = ROT((SB[0]+12*F, yy-4*F)); _pac = ROT((SB[0]+12*F, yy-3*F))
-_sbW = ROT((SB[0], SB[1]+SB[3]*F/2)); _sbWo = ROT((yx-4*F, SB[1]+SB[3]*F/2)); _cnw = ROT((yx-3*F, yy-3*F)); _cw = ROT((yx-3*F, SB[1]+SB[3]*F/2-3))
-V4cS = (V4C[0]+V4C[2]*F, V4C[1]+V4C[3]*F*0.6)
-ROUTES = [
-  dict(tag="P-1", kind="pri", pts=[_xrN, ROT((XR[0]+XR[2]*F/2, yy-6*F)), (ROT((XR[0]+XR[2]*F/2, yy-6*F))[0], 640)], n="(2) 5\"", size='5"',
-       cond=f"{UT} primary cable (by utility)", fr=f"{UT} POC (Beyer Blvd, TBD)", to="XR-1", note=f"Trench/conduit by owner per {UT} design"),
-  dict(tag="SL-1", kind="ac", pts=[xrW, sbE], n=f"({SVCF[0]}) 4\"", size='4"',
-       cond=f"{SVCF[0]} sets (3) {SVCF[1]} + (1) neutral per set", fr="XR-1", to="SB-1", note="Service lateral, customer-owned"),
-  dict(tag="F-1", kind="ac", pts=[_sbW, _sbWo, (MWC[0]+12, MWC[1]+14)], n=f"({MW['feeder'][0]}) 4\"", size='4"',
-       cond=f"{MW['feeder'][0]} sets (3) {MW['feeder'][1]} + (1) {egc_al(MW['ocpd'])} EGC", fr=f"SB-1 ({MW['ocpd']} A)", to="MW-1", note="No neutral"),
-  dict(tag="F-2", kind="ac", pts=[ROT((SB[0]+12*F, SB[1])), _pa, (_pa[0], 852), (1592, 852), (1592, 700), (V4C[0], V4C[1]+V4C[3]*F/2)], n=f"({V4['feeder'][0]}) 4\"", size='4"',
-       cond=f"{V4['feeder'][0]} sets (3) {V4['feeder'][1]} + (1) {egc_al(V4['ocpd'])} EGC", fr=f"SB-1 ({V4['ocpd']} A)", to="V4-1", note="No neutral"),
-]
-for i, (x, y, t) in enumerate(POSTS):
-    ROUTES.append(dict(tag=f"DC-{t}", kind="dc", pts=[V4cS, (V4cS[0]+6, 703+0*i), (x, 703), (x, y)], n="(1) 4\"", size='4"',
-        cond="(4) 600 kcmil AL (2+, 2-), #2/0 CU EGC, Tesla signal wire", fr="V4-1", to=f"POST {t}", note="Common trench in planter"))
-for p, t in MP:
-    ROUTES.append(dict(tag=f"DC-{t}", kind="dc", pts=[tuple(MWC), tuple(p)], n="(2) 4\"", size='4"',
-        cond="2 sets (4) 750 kcmil AL, EGC, Tesla signal wire", fr="MW-1", to=f"POST {t}", note="Verify fill; upsize to 5\" if required"))
-ROUTES.append(dict(tag="COM-1", kind="com", pts=[(V4C[0], V4C[1]+V4C[3]*F/2), (1588, 703), (1588, 848), (_pac[0]-4, 848), _pac, _cnw, _cw, (MWC[0]+8, MWC[1]+18)],
-    n='(1) 1-1/4"', size='1-1/4"', cond="(2) CAT6 shielded (etherloop)", fr="V4-1", to="MW-1", note="Shares F-1/F-2 trench"))
+    # ---------------------------------------------------------------- conduit routes (plan pts)
+    # Still San Ysidro-specific: trench waypoints and label spots are hand-placed. Roadmap step 3 (layout tool export)
+    # will supply routes per site.
+    sbE = ROT((SB[0]+SB[2]*F, SB[1]+SB[3]*F/2)); xrW = ROT((XR[0], SB[1]+SB[3]*F/2))
+    _xrN = ROT((XR[0]+XR[2]*F/2, XR[1])); _pa = ROT((SB[0]+12*F, yy-4*F)); _pac = ROT((SB[0]+12*F, yy-3*F))
+    _sbW = ROT((SB[0], SB[1]+SB[3]*F/2)); _sbWo = ROT((yx-4*F, SB[1]+SB[3]*F/2)); _cnw = ROT((yx-3*F, yy-3*F)); _cw = ROT((yx-3*F, SB[1]+SB[3]*F/2-3))
+    V4cS = (V4C[0]+V4C[2]*F, V4C[1]+V4C[3]*F*0.6)
+    ROUTES = [
+      dict(tag="P-1", kind="pri", pts=[_xrN, ROT((XR[0]+XR[2]*F/2, yy-6*F)), (ROT((XR[0]+XR[2]*F/2, yy-6*F))[0], 640)], n="(2) 5\"", size='5"',
+           cond=f"{UT} primary cable (by utility)", fr=f"{UT} POC (Beyer Blvd, TBD)", to="XR-1", note=f"Trench/conduit by owner per {UT} design"),
+      dict(tag="SL-1", kind="ac", pts=[xrW, sbE], n=f"({SVCF[0]}) 4\"", size='4"',
+           cond=f"{SVCF[0]} sets (3) {SVCF[1]} + (1) neutral per set", fr="XR-1", to="SB-1", note="Service lateral, customer-owned"),
+      dict(tag="F-1", kind="ac", pts=[_sbW, _sbWo, (MWC[0]+12, MWC[1]+14)], n=f"({MW['feeder'][0]}) 4\"", size='4"',
+           cond=f"{MW['feeder'][0]} sets (3) {MW['feeder'][1]} + (1) {egc_al(MW['ocpd'])} EGC", fr=f"SB-1 ({MW['ocpd']} A)", to="MW-1", note="No neutral"),
+      dict(tag="F-2", kind="ac", pts=[ROT((SB[0]+12*F, SB[1])), _pa, (_pa[0], 852), (1592, 852), (1592, 700), (V4C[0], V4C[1]+V4C[3]*F/2)], n=f"({V4['feeder'][0]}) 4\"", size='4"',
+           cond=f"{V4['feeder'][0]} sets (3) {V4['feeder'][1]} + (1) {egc_al(V4['ocpd'])} EGC", fr=f"SB-1 ({V4['ocpd']} A)", to="V4-1", note="No neutral"),
+    ]
+    for i, (x, y, t) in enumerate(POSTS):
+        ROUTES.append(dict(tag=f"DC-{t}", kind="dc", pts=[V4cS, (V4cS[0]+6, 703+0*i), (x, 703), (x, y)], n="(1) 4\"", size='4"',
+            cond="(4) 600 kcmil AL (2+, 2-), #2/0 CU EGC, Tesla signal wire", fr="V4-1", to=f"POST {t}", note="Common trench in planter"))
+    for p, t in MP:
+        ROUTES.append(dict(tag=f"DC-{t}", kind="dc", pts=[tuple(MWC), tuple(p)], n="(2) 4\"", size='4"',
+            cond="2 sets (4) 750 kcmil AL, EGC, Tesla signal wire", fr="MW-1", to=f"POST {t}", note="Verify fill; upsize to 5\" if required"))
+    ROUTES.append(dict(tag="COM-1", kind="com", pts=[(V4C[0], V4C[1]+V4C[3]*F/2), (1588, 703), (1588, 848), (_pac[0]-4, 848), _pac, _cnw, _cw, (MWC[0]+8, MWC[1]+18)],
+        n='(1) 1-1/4"', size='1-1/4"', cond="(2) CAT6 shielded (etherloop)", fr="V4-1", to="MW-1", note="Shares F-1/F-2 trench"))
+else:                # geometry from the Site Layout tool export (sites/<site>/layout.json, tool feet)
+    ORG = LAYOUT['frame']['origin_ft']; VBO = (0.0, 0.0)            # frame origin = top-left of the site image / linework
+    if FILES.get('linework'):
+        _vb = re.search(r'viewBox="([-\d.]+) ([-\d.]+)', open(site_path(FILES['linework'])).read()); VBO = (float(_vb.group(1)), float(_vb.group(2)))
+    def P(p): return ((p[0]-ORG[0])*F + VBO[0], (p[1]-ORG[1])*F + VBO[1])
+    ITEMS = {i['id']: {**i, 'c': P((i['x'], i['y'])), 'body': [P(q) for q in i['body']],
+                       'pad': [P(q) for q in i['pad']] if i['pad'] else None,
+                       'front_clear': [P(q) for q in i['front_clear']] if i['front_clear'] else None} for i in LAYOUT['items']}
+    def of(t, k=None): return [i for i in ITEMS.values() if i['type'] == t and (k is None or i['kind'] == k)]
+    POSTS = [(i['c'][0], i['c'][1], i['id']) for i in of('post', 'V4')]
+    POSTX = [p[0] for p in POSTS]; POSTY = POSTS[0][1] if POSTS else 0
+    MP = [(np.array(i['c']), i['id']) for i in of('post', 'MW')]
+    MWC = np.array(of('cab', 'MW')[0]['c']) if of('cab', 'MW') else None
+    SVC_TYPES = ('xfmr', 'svc', 'ct', 'mtr')
+    def _bl(pred): return [(P(b['xy']), b['kind']) for b in LAYOUT['bollards'] if pred(ITEMS[b['item']])]
+    B_YARD = _bl(lambda i: i['type'] in SVC_TYPES); B_V4C = _bl(lambda i: i['type'] == 'cab' and i['kind'] == 'V4')
+    B_POST = _bl(lambda i: i['type'] == 'post' and i['kind'] == 'V4'); B_MWC = _bl(lambda i: i['type'] == 'cab' and i['kind'] == 'MW')
+    B_MP = _bl(lambda i: i['type'] == 'post' and i['kind'] == 'MW')
+    BOLLARDS = B_YARD + B_V4C + B_POST + B_MWC + B_MP
+    NB = len(BOLLARDS); NBR = sum(1 for _, r in BOLLARDS if r == "removable"); NBT = sum(1 for _, r in BOLLARDS if r == "rebound")
+    ROUTES = [dict(tag=r['id'], kind=r['kind'], pts=[P(q) for q in r['path']], n=f"({r['n']}) {r['size']}", size=r['size'], cond=r['cond'],
+                   fr=r['from'], to=("POST " if ITEMS[r['to']]['type'] == 'post' else "") + r['to'], note=r['fn']) for r in LAYOUT['routes']]
 def plen(p): return sum(math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]) for i in range(1, len(p)))/F
 for r in ROUTES: r['len'] = round(plen(r['pts']) + (0 if r['kind'] == 'pri' else 10))
 
@@ -188,7 +218,7 @@ def scalebar(x, y, ftper=20, label='1" = 20\'-0"'):
     o.append(T(x+segs[-1][1]*k+12, y+7, label, 11, w="bold"))
     return "".join(o)
 def north(x, y, r=24):
-    return (f'<g transform="rotate({GEO["north_deg"]} {x} {y})"><circle cx="{x}" cy="{y}" r="{r}" fill="#fff" stroke="#141817" stroke-width="1.4"/>'
+    return (f'<g transform="rotate({NORTH} {x} {y})"><circle cx="{x}" cy="{y}" r="{r}" fill="#fff" stroke="#141817" stroke-width="1.4"/>'
             f'<path d="M{x} {y-r+3} L{x+9} {y+r-8} L{x} {y+r-15} L{x-9} {y+r-8} Z" fill="#141817"/>'
             f'<text x="{x}" y="{y-r-5}" font-size="15" text-anchor="middle" font-weight="bold">N</text></g>')
 def view_title(x, y, num, title, scale):
@@ -197,16 +227,25 @@ def view_title(x, y, num, title, scale):
             + T(x+52, y+2, title, 20, w="bold") + L(x+52, y+9, x+52+len(title)*11.5, y+9, sw=1.5) + T(x+52, y+26, scale, 12))
 
 # ---------------------------------------------------------------- base linework
-src = open(site_path(FILES['linework'])).read()
-inner = src[src.index('>', src.index('<svg'))+1: src.rindex('</svg>')]
-cut = inner.find('<g font-family="Arial, Helvetica, sans-serif" fill="#141817"><rect x="106.0"')
-base = inner[:cut]
-base = base.replace('<rect x="80.0" y="60.0" width="2275.0" height="1630.0" fill="#ffffff"/>', '')
-mw_i = base.find('<g id="mw-truck"'); mw_end = base.find('</g>', base.rfind('WB-67 SWEPT PATHS')) + 4
-site_lines, truck = base[:mw_i] + base[mw_end:], base[mw_i:mw_end]
-# drop the dark equipment glyphs from the truck layer (redrawn as tagged equipment)
-truck_plain = re.sub(r'<circle cx="[^"]+" cy="[^"]+" r="5" fill="#4c1d95"/><text[^>]*>MW 1[AB]</text>', '', truck)
-truck_plain = re.sub(r'<rect x="[^"]+" y="[^"]+" width="20" height="16" fill="#6d28d9"[^>]*/><text[^>]*>MW CABINET \(2 POSTS\)</text>', '', truck_plain)
+if not FILES.get('linework'):   # layout-tool site with only an aerial: use the aerial as the plan background
+    _fw, _fh = LAYOUT['frame']['size_ft']
+    site_lines = (f'<image x="0" y="0" width="{_fw*F:.1f}" height="{_fh*F:.1f}" opacity="0.55" preserveAspectRatio="none" '
+                  f'href="data:image/jpeg;base64,{base64.b64encode(open(site_path(FILES["aerial"]), "rb").read()).decode()}"/>')
+    src = '<svg><g id="mw-truck"></g><!--WB-67 SWEPT PATHS--></svg>'
+else:
+    src = open(site_path(FILES['linework'])).read()
+if FILES.get('linework'):
+    inner = src[src.index('>', src.index('<svg'))+1: src.rindex('</svg>')]
+    cut = inner.find('<g font-family="Arial, Helvetica, sans-serif" fill="#141817"><rect x="106.0"')
+    base = inner[:cut]
+    base = base.replace('<rect x="80.0" y="60.0" width="2275.0" height="1630.0" fill="#ffffff"/>', '')
+    mw_i = base.find('<g id="mw-truck"'); mw_end = base.find('</g>', base.rfind('WB-67 SWEPT PATHS')) + 4
+    site_lines, truck = base[:mw_i] + base[mw_end:], base[mw_i:mw_end]
+    # drop the dark equipment glyphs from the truck layer (redrawn as tagged equipment)
+    truck_plain = re.sub(r'<circle cx="[^"]+" cy="[^"]+" r="5" fill="#4c1d95"/><text[^>]*>MW 1[AB]</text>', '', truck)
+    truck_plain = re.sub(r'<rect x="[^"]+" y="[^"]+" width="20" height="16" fill="#6d28d9"[^>]*/><text[^>]*>MW CABINET \(2 POSTS\)</text>', '', truck_plain)
+else:
+    truck_plain = ''
 
 COL = dict(ac="#b42318", dc="#1d4ed8", pri="#6b7280", com="#047857", eq="#141817")
 def equipment(scale=1.0, tags=True, clear=True):
@@ -259,6 +298,46 @@ def conduits(labels=True, sc=1.0):
         o.append(tag((MWC[0]+MP[0][0][0])/2+22, (MWC[1]+MP[0][0][1])/2, "DC-M1A", COL['dc']))
         o.append(tag((MWC[0]+MP[1][0][0])/2-26, (MWC[1]+MP[1][0][1])/2+4, "DC-M1B", COL['dc']))
     return "".join(o)
+# layout-tool sites: every item is drawn from its exported footprint (pad, body, front clearance) instead of the yard model
+EQ_FILL = dict(xfmr="#cbd5e1", svc="#99f6e4", ct="#e2e8f0", mtr="#e2e8f0")
+def equipment_layout(scale=1.0, tags=True, clear=True):
+    o = []; ts = 9*scale
+    its = [i for i in ITEMS.values() if i['type'] != 'post']
+    if clear:
+        for i in its:
+            if i['front_clear']: o.append(PG(i['front_clear'], fill="#fde68a", st="#b45309", sw=0.6, extra=' fill-opacity="0.45" stroke-dasharray="3 2"'))
+    for i in its:
+        fill = ("#c4b5fd" if i['kind'] == "MW" else "#fdba74") if i['type'] == 'cab' else EQ_FILL[i['type']]
+        if i['pad']: o.append(PG(i['pad'], fill="#ffffff", st="#141817", sw=0.8, extra=' stroke-dasharray="4 2"'))
+        if i['shape'] == 'round': o.append(f'<circle cx="{i["c"][0]:.1f}" cy="{i["c"][1]:.1f}" r="{i["size_ft"][0]*F/2:.1f}" fill="{fill}" stroke="#141817" stroke-width="0.8"/>')
+        else: o.append(PG(i['body'], fill=fill, st="#141817", sw=1.1))
+        if tags and i['type'] != 'mtr':
+            sub = {'xfmr': f"{XFMR} kVA", 'svc': f"{SVC} A", 'cab': f"{(MW if i['kind'] == 'MW' else V4)['kva']} kVA"}.get(i['type'])
+            ex = max(q[0] for q in (i['pad'] or i['body']))
+            o.append(T(ex+4*scale, i['c'][1]+3*scale, i['id'] + (f"  {sub}" if sub else ""), ts+1, w="bold"))
+    for i in of('post'):
+        cx, cy = i['c']; mw = i['kind'] == 'MW'
+        if mw: o.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="4.2" fill="#4c1d95"/>')
+        else: o.append(f'<ellipse cx="{cx:.1f}" cy="{cy:.1f}" rx="{1.9*F/2:.1f}" ry="{0.9*F/2+0.6:.1f}" fill="#1f2937" transform="rotate({i["rot"]} {cx:.1f} {cy:.1f})"/>')
+        if tags: o.append(T(cx + (8 if mw else 0), cy - (5 if mw else 8*scale), i['id'], ts + (1 if mw else 0), a="start" if mw else "middle", w="bold", fill="#4c1d95" if mw else "#141817"))
+    for (x, y), rem in BOLLARDS:
+        if rem == "rebound": o.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="1.6" fill="#f97316" stroke="#141817" stroke-width="0.7"/>')
+        else: o.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="1.7" fill="{"#fff" if rem == "removable" else "#eab308"}" stroke="#141817" stroke-width="0.8"/>')
+    return "".join(o)
+def conduits_layout(labels=True, sc=1.0):
+    o = []; dash = dict(ac="", dc="", pri=' stroke-dasharray="12 4 2 4"', com=' stroke-dasharray="5 3"')
+    for r in ROUTES: o.append(PL(r['pts'], st=COL[r['kind']], sw=2.0 if r['kind'] in ("ac", "pri") else 1.3, extra=dash[r['kind']]))
+    if labels:
+        def tag(x, y, s, c, rot=0): return (f'<g transform="rotate({rot:.1f} {x:.1f} {y:.1f})">' + R(x-len(s)*3.3*sc-3, y-8*sc, len(s)*6.6*sc+6, 12*sc, fill="#fff", st=c, sw=0.8) + T(x, y+1.5*sc, s, 9*sc, a="middle", w="bold", fill=c) + '</g>')
+        for r in ROUTES:
+            if r['kind'] == 'dc' and r['to'].startswith("POST ") and r['to'][5:] in [t for _, _, t in POSTS]: continue   # V4 DC runs share one label
+            p = r['pts']; k = max(range(1, len(p)), key=lambda i: math.hypot(p[i][0]-p[i-1][0], p[i][1]-p[i-1][1]))
+            ang = math.degrees(math.atan2(p[k][1]-p[k-1][1], p[k][0]-p[k-1][0])); ang = ang-180 if ang > 90 else ang+180 if ang < -90 else ang
+            o.append(tag((p[k][0]+p[k-1][0])/2, (p[k][1]+p[k-1][1])/2 - 9, r['tag'], COL[r['kind']], rot=ang))
+        if POSTS:
+            mx = sum(POSTX)/len(POSTX); o.append(tag(mx, POSTY-49, f"DC-{POSTS[0][2]}…{POSTS[-1][2]} ({len(POSTS)}) 4\" COMMON TRENCH", COL['dc']))
+    return "".join(o)
+if LAYOUT: equipment, conduits = equipment_layout, conduits_layout
 def plan(x, y, vb, scale, layers):
     vx, vy, vw, vh = vb
     return f'<svg x="{x}" y="{y}" width="{vw*scale}" height="{vh*scale}" viewBox="{vx} {vy} {vw} {vh}" overflow="hidden">{"".join(layers)}</svg>'
@@ -354,7 +433,10 @@ s, y = notes(cols[3], 90, "OPEN ITEMS FOR CD90", txt('open_items'), n=40); o.app
 pages.append(sheet("G-002", "GENERAL NOTES", "".join(o)))
 
 # ================================================================ A-101
-VB = tuple(GEO['views']['site_plan']); TX, TY = 590, 80
+def centered(pts, w, h):
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    return ((min(xs)+max(xs))/2 - w/2, (min(ys)+max(ys))/2 - h/2, w, h)
+VB = centered([i['c'] for i in ITEMS.values()], 1720, 1460) if LAYOUT else tuple(GEO['views']['site_plan']); TX, TY = 590, 80
 o = [plan(TX, TY, VB, 1.0, [site_lines, truck_plain, equipment(tags=True, clear=False)])]
 o.append(view_title(TX, 1620, "1", "SITE PLAN & TRUCK CIRCULATION", 'SCALE: 1" = 20\'-0"'))
 o.append(scalebar(TX+520, 1622)); o.append(north(TX+1640, 1610))
@@ -381,11 +463,15 @@ for c, t, d in [(COL['pri'], f"{UT} primary (by utility)", ' stroke-dasharray="1
 for c, t in [("#eab308", "Guard post, fixed (CFC 312)"), ("#ffffff", "Guard post, removable"), ("#f97316", "Tesla rebounding bollard")]:
     o.append(f'<circle cx="90" cy="{y-4}" r="5" fill="{c}" stroke="#141817" stroke-width="1"/>'); o.append(T(120, y, t, 11.5)); y += 22
 o.append(R(78, y-12, 24, 12, fill="#fde68a", st="#b45309", sw=0.6, extra=' fill-opacity="0.45"')); o.append(T(120, y, "Working / door clearance", 11.5)); y += 34
-s, y = table(70, y, [("TAG", 70), ("EQUIPMENT", 200), ("RATING", 140)], [
+def rating(i): return {'xfmr': f"{XFMR:,} kVA", 'svc': f"{SVC:,} A, 480Y/277", 'cab': f"{(MW if i['kind'] == 'MW' else V4)['kva']} kVA"}.get(i['type'], "Utility")
+def post_range(ps): return f"{ps[0]}-{ps[-1]}" if len(ps) > 1 else ps[0]
+tag_rows = ([[i['id'], i['name'].split(',')[0][:32], rating(i)] for i in ITEMS.values() if i['type'] != 'post']
+            + [[post_range([t for _, t in MP]), "Megacharger posts", str(len(MP))], [post_range([t for *_, t in POSTS]), "V4 Supercharger posts", str(len(POSTS))]]
+            ) if LAYOUT else [
     ["XR-1", "Utility pad-mount transformer", f"{XFMR:,} kVA"], ["SB-1", "Service switchboard", f"{SVC:,} A, 480Y/277"],
     ["MW-1", "V4 Megacharger cabinet", f"{MW['kva']} kVA"], ["V4-1", "V4 Supercharger cabinet", f"{V4['kva']} kVA"],
-    ["M1A-B", "Megacharger posts", "2"], ["1A-1H", "V4 Supercharger posts", "8"],
-], rh=21, sz=10.5); o.append(s)
+    ["M1A-B", "Megacharger posts", "2"], ["1A-1H", "V4 Supercharger posts", "8"]]
+s, y = table(70, y, [("TAG", 70), ("EQUIPMENT", 200), ("RATING", 140)], tag_rows, rh=21, sz=10.5); o.append(s)
 pages.append(sheet("E-101", "ELECTRICAL SITE PLAN", "".join(o)))
 
 # ================================================================ E-102 (1"=10')
@@ -394,22 +480,26 @@ eq = equipment(scale=0.6, tags=True, clear=True); cd = conduits(labels=False)
 def dims(x, y, x2, y2, txt, off=0, vert=False):
     if vert: return L(x, y, x, y2, sw=0.6) + L(x-4, y, x+4, y, sw=0.6) + L(x-4, y2, x+4, y2, sw=0.6) + T(x-5, (y+y2)/2, txt, 5.5, a="middle", rot=-90)
     return L(x, y, x2, y, sw=0.6) + L(x, y-4, x, y+4, sw=0.6) + L(x2, y-4, x2, y+4, sw=0.6) + T((x+x2)/2, y-3, txt, 5.5, a="middle")
-dyard = (dims(yx, yy-22, yx+YARD[2]*F, 0, YD['dim_label']) + dims(yx-14, yy, 0, yy+YARD[3]*F, f"{YARD[3]}'-0\"", vert=True)
-         + dims(SB[0], SB[1]+SB[3]*F+5, SB[0]+SB[2]*F, 0, f"{SB[2]}' PAD") + dims(XR[0], XR[1]+XR[3]*F+5, XR[0]+XR[2]*F, 0, f"{XR[2]}' PAD")
-         + T(XR[0]+XR[2]*F+15, XR[1]+XR[3]*F/2, "8' DOOR CLEAR", 5, rot=90, a="middle")
-         + T(SB[0]+SB[2]*F/2, SB[1]-4*F+9, "4' WORKING SPACE", 5, a="middle"))
-dyard = f'<g {YG}>' + dyard + '</g>'
+if LAYOUT: dyard = ""
+else:
+    dyard = (dims(yx, yy-22, yx+YARD[2]*F, 0, YD['dim_label']) + dims(yx-14, yy, 0, yy+YARD[3]*F, f"{YARD[3]}'-0\"", vert=True)
+             + dims(SB[0], SB[1]+SB[3]*F+5, SB[0]+SB[2]*F, 0, f"{SB[2]}' PAD") + dims(XR[0], XR[1]+XR[3]*F+5, XR[0]+XR[2]*F, 0, f"{XR[2]}' PAD")
+             + T(XR[0]+XR[2]*F+15, XR[1]+XR[3]*F/2, "8' DOOR CLEAR", 5, rot=90, a="middle")
+             + T(SB[0]+SB[2]*F/2, SB[1]-4*F+9, "4' WORKING SPACE", 5, a="middle"))
+    dyard = f'<g {YG}>' + dyard + '</g>'
 # view 1: equipment yard + MW cabinet area
-VB1 = tuple(GEO['views']['enlarged_yard'])
+VB1 = centered([q for i in ITEMS.values() if i['type'] in SVC_TYPES or (i['type'] == 'cab' and i['kind'] == 'MW') for q in i['pad'] or i['body']], 560, 580) if LAYOUT else tuple(GEO['views']['enlarged_yard'])
 o.append(plan(70, 90, VB1, 2.0, [f'<g opacity="0.35">{site_lines}{truck_plain}</g>', cd, eq, dyard]))
 o.append(R(70, 90, VB1[2]*2, VB1[3]*2, sw=1))
 o.append(view_title(70, 90+VB1[3]*2+50, "1", "ENLARGED PLAN · EQUIPMENT YARD & MEGACHARGER", 'SCALE: 1" = 10\'-0"'))
 o.append(scalebar(760, 90+VB1[3]*2+52, 10, '1" = 10\'-0"'))
 # view 2: V4 row
-VB2 = tuple(GEO['views']['enlarged_v4_row'])
-drow = (dims(POSTX[0], 735, POSTX[1], 0, "10'-6\"") + T(1620, 670, "PL", 6, w="bold")
-        + T(1700, 727, "WHEEL STOP (TYP.)", 5) + T(1610, 718, "CURB", 5))
-ws = "".join(R(x-3*F, POSTY+9*F/3.6*3.6/3.6+10, 6*F, 0.5*F, fill="#9ca3af", sw=0.4) for x in POSTX)
+VB2 = centered([q for i in ITEMS.values() if i['kind'] == 'V4' for q in i['pad'] or i['body']], 510, 130) if LAYOUT else tuple(GEO['views']['enlarged_v4_row'])
+if LAYOUT: drow = ws = ""
+else:
+    drow = (dims(POSTX[0], 735, POSTX[1], 0, "10'-6\"") + T(1620, 670, "PL", 6, w="bold")
+            + T(1700, 727, "WHEEL STOP (TYP.)", 5) + T(1610, 718, "CURB", 5))
+    ws = "".join(R(x-3*F, POSTY+9*F/3.6*3.6/3.6+10, 6*F, 0.5*F, fill="#9ca3af", sw=0.4) for x in POSTX)
 o.append(plan(1250, 90, VB2, 2.0, [f'<g opacity="0.45">{site_lines}</g>', ws, cd, eq, drow]))
 o.append(R(1250, 90, VB2[2]*2.0, VB2[3]*2.0, sw=1))
 o.append(view_title(1250, 90+VB2[3]*2.0+50, "2", "ENLARGED PLAN · V4 SUPERCHARGER ROW", 'SCALE: 1" = 10\'-0"'))
@@ -441,7 +531,7 @@ o.append(L(cx-380, 470, cx-380, 900, sw=1.5, extra=' stroke-dasharray="6 3"')); 
 gx, gy = cx-380, 900
 o.append(L(gx-18, gy, gx+18, gy, sw=2) + L(gx-12, gy+6, gx+12, gy+6, sw=2) + L(gx-6, gy+12, gx+6, gy+12, sw=2))
 o.append(T(gx+14, gy-20, "GROUNDING ELECTRODE SYSTEM PER CEC 250.50 (GEC 3/0 CU MIN.)", 11))
-branches = [(cx-300, MW, "F-1", "MW-1", "M1A", "M1B"), (cx+130, V4, "F-2", "V4-1", None, None)]
+branches = [(cx-300, MW, FT_MW, MW['tag']), (cx+130, V4, FT_V4, V4['tag'])]
 for bx, g, ft, tag, *_ in branches:
     o.append(L(bx, 560, bx, 600, sw=2.4)); o.append(brk(bx, 610, g['ocpd'], f"{g['ocpd']} A, 3P"))
     o.append(L(bx, 648, bx, 960, sw=2.4))
@@ -455,7 +545,7 @@ for bx, g, ft, tag, *_ in branches:
     o.append(T(bx, 1043, "HIGHEST NAMEPLATE" if g['kind'] == "V4" else "NAMEPLATE (ASSUMED)", 9, a="middle", fill="#555"))
 # posts
 mwx = cx-300
-for i, t in enumerate(["M1A", "M1B"]):
+for i, t in enumerate([t for _, t in MP]):
     px = mwx-70+i*140; o.append(L(mwx, 1050, mwx, 1090, sw=2, st=COL['dc'])); o.append(L(mwx, 1090, px, 1090, sw=2, st=COL['dc'])); o.append(L(px, 1090, px, 1170, sw=2, st=COL['dc']))
     o.append(R(px-26, 1170, 52, 70, sw=1.5, fill="#ede9fe")); o.append(T(px, 1210, t, 13, a="middle", w="bold"))
     o.append(T(px, 1260, f"DC-{t}", 10, a="middle", fill=COL['dc']))
@@ -471,7 +561,7 @@ o.append(L(mwx+110, 1000, v4x-110, 1000, st=COL['com'], sw=2, extra=' stroke-das
 o.append(view_title(70, 1620, "1", "SINGLE-LINE DIAGRAM", "NOT TO SCALE"))
 s, y = notes(1640, 120, "SLD NOTES", txt('sld_notes'), n=58, sz=11.5); o.append(s)
 s, y = table(1640, y+30, [("LOAD SUMMARY", 300), ("", 300)], [
-    ["MW-1 (2 MW posts)", f"{MW['kva']:,} kVA · {MW['amps']:,.1f} A"], ["V4-1 (8 V4 posts)", f"{V4['kva']:,} kVA · {V4['amps']:,.1f} A"],
+    [f"{MW['tag']} ({MW['posts']} MW posts)", f"{MW['kva']:,} kVA · {MW['amps']:,.1f} A"], [f"{V4['tag']} ({V4['posts']} V4 posts)", f"{V4['kva']:,} kVA · {V4['amps']:,.1f} A"],
     {"c": ["TOTAL CONNECTED", f"{TOT_KVA:,} kVA · {TOT_A:,.1f} A"]}, ["Service @ 125%", f"{TOT_A*1.25:,.1f} A -> {SVC:,} A"],
     ["Transformer @ 125%", f"{XF_REQ:,.1f} kVA -> {XFMR:,} kVA"],
 ], rh=24, sz=11.5); o.append(s)
@@ -481,18 +571,30 @@ pages.append(sheet("E-201", "SINGLE-LINE DIAGRAM", "".join(o)))
 o = []
 s, y = table(70, 110, [("CABINET", 110), ("POSTS", 70), ("INPUT kVA", 100), ("AMPS @ 480 V 3Ø", 140), ("x 1.25", 100), ("BREAKER", 100), ("FEEDER SETS", 120), ("CONDUCTOR", 140), ("EGC", 130)],
     [[g['tag'], str(g['posts']), f"{g['kva']:,}", f"{g['amps']:,.1f}", f"{g['amps']*1.25:,.1f}", f"{g['ocpd']} A", str(g['feeder'][0]), g['feeder'][1], egc_al(g['ocpd'])] for g in groups]
-    + [{"c": ["TOTAL", "10", f"{TOT_KVA:,}", f"{TOT_A:,.1f}", f"{TOT_A*1.25:,.1f}", f"{SVC:,} A MAIN", str(SVCF[0]), SVCF[1], "(neutral)"]}], rh=24, sz=11.5)
+    + [{"c": ["TOTAL", str(sum(g['posts'] for g in groups)), f"{TOT_KVA:,}", f"{TOT_A:,.1f}", f"{TOT_A*1.25:,.1f}", f"{SVC:,} A MAIN", str(SVCF[0]), SVCF[1], "(neutral)"]}], rh=24, sz=11.5)
 o.append(T(70, 96, "TABLE 1 · LOAD CALCULATION & OCPD SIZING", 15, w="bold")); o.append(s)
 s, y2 = para(70, y+22, f"Amps = kVA x 1000 / (480 x 1.732). Breaker = next standard size at or above 125% of cabinet amps (CEC 240.6). Service = next standard size at or above the larger of the biggest breaker and 125% of summed cabinet amps: {TOT_A:,.1f} x 1.25 = {TOT_A*1.25:,.1f} A -> {SVC:,} A. Transformer = {TOT_KVA:,} kVA x 1.25 = {XF_REQ:,.1f} kVA -> {XFMR:,} kVA (next standard size up; never undersized). Feeder sets: up to 800 A, 500 kcmil AL at 310 A per set; above 800 A, 750 kcmil AL at 385 A per set (75°C).", 190, 11)
 o.append(s)
-eqrows = [
-    ["XR-1", "Utility pad-mount transformer", f"{XFMR:,} kVA, primary TBD - 480Y/277 V", "9.0' x 9.0'", f"{sum(1 for _ in B_YARD)} (yard)", f"By {UT}; doors east, 8' clear"],
-    ["SB-1", "Service switchboard, utility metering section", f"{SVC:,} A, 480Y/277 V, 3Ø 4W", "16.7' x 6.2'", "(yard)", "NEMA 3R; GFP + arc energy reduction"],
-    ["MW-1", "Tesla V4 Megacharger cabinet", f"{MW['kva']} kVA input, {MW['ocpd']} A feeder", "6.2' x 5.0'", str(len(B_MWC)), "Serves M1A, M1B"],
-    ["V4-1", "Tesla V4 Supercharger cabinet", f"{V4['kva']} kVA (nameplate), {V4['ocpd']} A", "5.6' x 4.9'", str(len(B_V4C)), "Serves 1A-1H"],
-    ["M1A, M1B", "Tesla V4 Megacharger posts", "MW DC", "Island", str(len(B_MP)), "Pull-through truck stalls"],
-    ["1A-1H", "Tesla V4 Supercharger posts", "V4 DC", "4.67' x 2.5'", str(len(B_POST)), "1C van-accessible, 1D accessible"],
-]
+if LAYOUT:
+    def _nb(iid): return sum(1 for b in LAYOUT['bollards'] if b['item'] == iid)
+    def _full(i):
+        g = MW if i['kind'] == 'MW' else V4
+        return {'xfmr': f"{XFMR:,} kVA, primary TBD - 480Y/277 V", 'svc': f"{SVC:,} A, 480Y/277 V, 3Ø 4W", 'cab': f"{g['kva']} kVA input, {g['ocpd']} A feeder"}.get(i['type'], f"{UT} metering")
+    def _note(i):
+        if i['type'] == 'cab': return "Serves " + post_range([p['id'] for p in of('post') if p['cab'] == i['id']])
+        return {'xfmr': f"By {UT}; 8' clear at doors", 'svc': "NEMA 3R; GFP + arc energy reduction"}.get(i['type'], f"Per {UT}")
+    eqrows = [[i['id'], i['name'], _full(i), f"{i['pad_ft'][0]}' x {i['pad_ft'][1]}'" if i['pad_ft'] else "-", str(_nb(i['id'])), _note(i)] for i in ITEMS.values() if i['type'] != 'post']
+    eqrows += [[post_range([t for _, t in MP]), "Tesla V4 Megacharger posts", "MW DC", "Island", str(len(B_MP)), "Pull-through truck stalls"],
+               [post_range([t for *_, t in POSTS]), "Tesla V4 Supercharger posts", "V4 DC", "4.67' x 2.5'", str(len(B_POST)), "See CBC 11B notes for accessible stalls"]]
+else:
+    eqrows = [
+        ["XR-1", "Utility pad-mount transformer", f"{XFMR:,} kVA, primary TBD - 480Y/277 V", "9.0' x 9.0'", f"{sum(1 for _ in B_YARD)} (yard)", f"By {UT}; doors east, 8' clear"],
+        ["SB-1", "Service switchboard, utility metering section", f"{SVC:,} A, 480Y/277 V, 3Ø 4W", "16.7' x 6.2'", "(yard)", "NEMA 3R; GFP + arc energy reduction"],
+        ["MW-1", "Tesla V4 Megacharger cabinet", f"{MW['kva']} kVA input, {MW['ocpd']} A feeder", "6.2' x 5.0'", str(len(B_MWC)), "Serves M1A, M1B"],
+        ["V4-1", "Tesla V4 Supercharger cabinet", f"{V4['kva']} kVA (nameplate), {V4['ocpd']} A", "5.6' x 4.9'", str(len(B_V4C)), "Serves 1A-1H"],
+        ["M1A, M1B", "Tesla V4 Megacharger posts", "MW DC", "Island", str(len(B_MP)), "Pull-through truck stalls"],
+        ["1A-1H", "Tesla V4 Supercharger posts", "V4 DC", "4.67' x 2.5'", str(len(B_POST)), "1C van-accessible, 1D accessible"],
+    ]
 o.append(T(70, y2+40, "TABLE 2 · EQUIPMENT SCHEDULE", 15, w="bold"))
 s, y3 = table(70, y2+54, [("TAG", 90), ("DESCRIPTION", 290), ("RATING", 270), ("PAD (APPROX.)", 120), ("BOLLARDS", 90), ("NOTES", 270)], eqrows, rh=24, sz=11.5); o.append(s)
 o.append(T(70, y3+40, "TABLE 3 · FEEDER & CONDUIT SCHEDULE", 15, w="bold"))
@@ -503,13 +605,13 @@ s, y5 = para(70, y4+20, f"Equipment yard location is TBD, so P-1, SL-1, F-1, F-2
 # panel schedule SB-1
 o.append(T(1700, 96, "TABLE 4 · SB-1 DISTRIBUTION", 15, w="bold"))
 s, y6 = table(1700, 110, [("CKT", 50), ("LOAD", 200), ("BREAKER", 100), ("kVA", 90)], [
-    ["MAIN", "Service main (LSIG)", f"{SVC:,} A 3P", f"{TOT_KVA:,}"], ["1", "MW-1 Megacharger cab.", f"{MW['ocpd']} A 3P", f"{MW['kva']:,}"],
-    ["2", "V4-1 Supercharger cab.", f"{V4['ocpd']} A 3P", f"{V4['kva']:,}"], ["3", "SPD", "Per mfr.", "-"], ["4", "Space (future)", "-", "-"],
+    ["MAIN", "Service main (LSIG)", f"{SVC:,} A 3P", f"{TOT_KVA:,}"], ["1", f"{MW['tag']} Megacharger cab.", f"{MW['ocpd']} A 3P", f"{MW['kva']:,}"],
+    ["2", f"{V4['tag']} Supercharger cab.", f"{V4['ocpd']} A 3P", f"{V4['kva']:,}"], ["3", "SPD", "Per mfr.", "-"], ["4", "Space (future)", "-", "-"],
 ], rh=24, sz=11.5); o.append(s)
 o.append(T(1700, y6+40, "TABLE 5 · BOLLARD COUNT", 15, w="bold"))
 s, y7 = table(1700, y6+54, [("LOCATION", 230), ("FIXED", 70), ("REMOVABLE", 90), ("REBOUNDING", 100)], [
     [n, str(sum(1 for _, r in b if r == "fixed")), str(sum(1 for _, r in b if r == "removable")), str(sum(1 for _, r in b if r == "rebound"))] for n, b in
-    [("Equipment yard (XR-1, SB-1)", B_YARD), ("V4-1 cabinet", B_V4C), ("V4 posts 1A-1H", B_POST), ("MW-1 cabinet", B_MWC), ("MW posts M1A, M1B", B_MP)]]
+    [("Equipment yard (XR-1, SB-1)", B_YARD), (f"{V4['tag']} cabinet", B_V4C), (f"V4 posts {POSTS[0][2]}-{POSTS[-1][2]}", B_POST), (f"{MW['tag']} cabinet", B_MWC), ("MW posts " + ", ".join(t for _, t in MP), B_MP)]]
     + [{"c": ["TOTAL", str(NB-NBR-NBT), str(NBR), str(NBT)]}], rh=24, sz=11.5); o.append(s)
 pages.append(sheet("E-301", "LOAD CALCULATIONS & SCHEDULES", "".join(o)))
 
@@ -552,7 +654,13 @@ o.append(T(ox2, oy2+230, "B. V4 POSTS: REBOUNDING BOLLARD EACH SIDE, 2'-3 3/4\" 
 o.append(T(ox2, oy2+248, "6\" dia., on 5'-11\" CIP pad, min. 4.5\" from pad edge, (3) 3/8\" SS Hilti KB-TZ2, 2.5\" embed. Wheel stop in stall.", 11))
 # pad schedule
 o.append(T(1580, 96, "PAD & FOUNDATION SCHEDULE (PRELIMINARY)", 15, w="bold"))
-s, y = table(1580, 110, [("ITEM", 150), ("PAD SIZE", 120), ("THICKNESS", 110), ("NOTES", 340)], [
+_THK = {'xfmr': (f"Per {UT}", f"{UT} standard pad, grounding ring"), 'svc': ("8\" min.", "#4 @ 12\" EW; conduit window per mfr."),
+        'ct': (f"Per {UT}", "Utility rack / CT cabinet"), 'cab': ("Per Tesla", "Tesla templatized S-sheets")}
+pad_rows = ([[f"{i['id']} pad", f"{i['pad_ft'][0]}' x {i['pad_ft'][1]}'", *_THK[i['type']]] for i in ITEMS.values() if i['pad_ft'] and i['type'] in _THK]
+            + [["V4 post foundation", "Per Tesla", "Per Tesla", "Precast or cast-in-place per Tesla"],
+               ["MW post islands", "Per civil", "6\" curb", "Rebounding bollard 5'-7\" upstream of post"],
+               ["V4 post CIP pad", "5'-11\" x 2'-0\"", "Per Tesla S-502", "107 / 135 mph options; rebounding bollards"],
+               ["Bollard footing", "18\" dia.", "3'-0\" deep", "See detail 1"]]) if LAYOUT else [
     ["XR-1 pad", "9.0' x 9.0'", f"Per {UT}", f"{UT} standard pad, grounding ring"],
     ["SB-1 pad", "16.7' x 6.2'", "8\" min.", "#4 @ 12\" EW; conduit window per mfr."],
     ["Equipment yard slab", "42' x 20'", "6\" min.", "Curbed; slope to drain"],
@@ -562,7 +670,8 @@ s, y = table(1580, 110, [("ITEM", 150), ("PAD SIZE", 120), ("THICKNESS", 110), (
     ["MW post islands", "Per civil", "6\" curb", "Rebounding bollard 5'-7\" upstream of post"],
     ["V4 post CIP pad", "5'-11\" x 2'-0\"", "Per Tesla S-502", "107 / 135 mph options; rebounding bollards"],
     ["Bollard footing", "18\" dia.", "3'-0\" deep", "See detail 1"],
-], rh=24, sz=11.5); o.append(s)
+]
+s, y = table(1580, 110, [("ITEM", 150), ("PAD SIZE", 120), ("THICKNESS", 110), ("NOTES", 340)], pad_rows, rh=24, sz=11.5); o.append(s)
 s, y = notes(1580, y+40, "STRUCTURAL NOTES", txt('structural_notes'), n=62, sz=11.5); o.append(s)
 pages.append(sheet("S-501", "PAD, FOUNDATION & BOLLARD DETAILS", "".join(o)))
 

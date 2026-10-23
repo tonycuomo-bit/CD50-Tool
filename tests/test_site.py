@@ -40,13 +40,23 @@ def test_generator_matches_golden(site_id, tmp_path):
     """Drawings for a committed site must not change unless intended. Builds from a copy without site_private.json.
     If a change is intended, check the new PDF, then update tests/golden/<site>.cd50.html.sha256 (see CLAUDE.md)."""
     pytest.importorskip('shapely')
-    src = os.path.join(SITES, site_id)
-    for f in os.listdir(src):
-        if os.path.isfile(os.path.join(src, f)) and f != 'site_private.json': shutil.copy(os.path.join(src, f), tmp_path)
-    r = subprocess.run([sys.executable, os.path.join(ROOT, 'cd50-plansets', 'cd50.py'), str(tmp_path)], capture_output=True, text=True)
+    sites = tmp_path / 'sites'      # copy of sites/ without any site_private.json or out/ (sites may share files via ../)
+    shutil.copytree(SITES, sites, ignore=shutil.ignore_patterns('site_private.json', 'out'))
+    r = subprocess.run([sys.executable, os.path.join(ROOT, 'cd50-plansets', 'cd50.py'), str(sites / site_id)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    got = hashlib.sha256(open(tmp_path / 'out' / 'cd50.html', 'rb').read()).hexdigest()
+    out = sites / site_id / 'out'
+    got = hashlib.sha256(open(out / 'cd50.html', 'rb').read()).hexdigest()
     want = open(os.path.join(GOLDEN, f'{site_id}.cd50.html.sha256')).read().strip()
     assert got == want, f'{site_id} drawings changed; if intended, set tests/golden/{site_id}.cd50.html.sha256 to {got}'
-    data = json.load(open(tmp_path / 'out' / 'cd50_data.json'))
+    data = json.load(open(out / 'cd50_data.json'))
     assert data['xfmr'] and data['svc'] and data['bollards']
+
+
+@pytest.mark.parametrize('site_id', [s for s in SITE_IDS if load(s)['files'].get('layout')])
+def test_layout_export_format(site_id):
+    lay = json.load(open(os.path.join(SITES, site_id, load(site_id)['files']['layout']), encoding='utf-8'))
+    tool = open(os.path.join(ROOT, 'cd50-layout', 'cd50-layout.html'), encoding='utf-8').read()
+    assert lay['format'] == 'cd50-layout/1' and 'format:"cd50-layout/1"' in tool
+    ids = {i['id'] for i in lay['items']}
+    assert all(b['item'] in ids for b in lay['bollards']) and all(r['from'] in ids and r['to'] in ids for r in lay['routes'])
+    assert {g['kind'] for g in lay['chargers']} == {'MW', 'V4'}       # drawings need one MW and one V4 group for now

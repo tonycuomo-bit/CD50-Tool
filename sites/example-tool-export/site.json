@@ -1,0 +1,280 @@
+{
+ "_note": "Example: San Ysidro rebuilt from a Site Layout tool export (layout.json). Equipment, pads, bollards, conduit paths and chargers come from layout.json; the V4 row was placed at the r5 positions, the service yard and MW layout are the tool's own. Text is copied from sites/san-ysidro and still describes the r5 design.",
+ "id": "example-tool-export",
+ "short_name": "Layout tool export (example)",
+ "date": "10/23/2026",
+ "project": {
+  "title_lines": [
+   "299 E. SAN YSIDRO BLVD",
+   "EV CHARGING HUB",
+   "SAN DIEGO, CA 92173"
+  ],
+  "headline": "299 E. SAN YSIDRO BLVD · LAYOUT TOOL EXPORT (EXAMPLE)",
+  "subtitle": "CD50 PRELIMINARY CONSTRUCTION DESIGN · V4 MEGACHARGER (2 POSTS, PULL-THROUGH) + V4 SUPERCHARGER (8 POSTS) ON ONE SERVICE",
+  "location_line": "SAN DIEGO, CALIFORNIA 92173 · SDG&E SERVICE TERRITORY",
+  "apn_short": "666-100-12-00 (VERIFY)",
+  "utility": "SDG&E",
+  "utility_primary": "SDG&E PRIMARY (VOLTAGE TBD, TYP. 12 kV)",
+  "ahj_short": "CITY OF SAN DIEGO DSD",
+  "designer": "HiON EV",
+  "contractor": "TBD"
+ },
+ "files": {
+  "aerial": "../san-ysidro/san-ysidro-299e_0.5ftpx_700x525ft.jpg",
+  "aerial_caption": "SITE AERIAL (USGS NAIP 2022, NORTH UP, APPROX. 700' x 525')",
+  "linework": "../san-ysidro/lines_mw2.svg",
+  "layout": "layout.json"
+ },
+ "text": {
+  "project_data": [
+   [
+    "Site address",
+    "299 E. San Ysidro Blvd, San Diego, CA 92173"
+   ],
+   [
+    "APN",
+    "666-100-12-00 (per SANDAG parcel data; verify with title)"
+   ],
+   [
+    "Property owner",
+    "{owner} (to be confirmed)"
+   ],
+   [
+    "Owner contact",
+    "{owner_contact}, {owner}"
+   ],
+   [
+    "Designer",
+    "HiON EV"
+   ],
+   [
+    "Contractor of record",
+    "TBD"
+   ],
+   [
+    "Jurisdiction (AHJ)",
+    "City of San Diego, Development Services"
+   ],
+   [
+    "Electric utility",
+    "San Diego Gas & Electric (SDG&E)"
+   ],
+   [
+    "Charging equipment",
+    "Tesla V4 Megacharger + V4 Supercharger"
+   ],
+   [
+    "Site area (approx.)",
+    "56,050 sf (traced from SD1.1 site plan)"
+   ],
+   [
+    "Adjacent use",
+    "Jack in the Box restaurant (by others)"
+   ],
+   [
+    "Zoning",
+    "[TBD AT CD90]"
+   ],
+   [
+    "Design stage",
+    "CD50 · first revision, not sealed"
+   ]
+  ],
+  "design_summary": [
+   [
+    "Megacharger posts",
+    "2 (pull-through, WB-67 semi)  ·  1 cabinet MW-1 @ {MW[kva]} kVA"
+   ],
+   [
+    "Supercharger posts",
+    "8 (passenger)  ·  1 cabinet V4-1 @ {V4[kva]} kVA (highest nameplate)"
+   ],
+   [
+    "Connected load",
+    "{TOT_KVA:,} kVA  ·  {TOT_A:,.0f} A @ 480Y/277 V, 3Ø"
+   ],
+   [
+    "Utility transformer",
+    "XR-1 {XFMR:,} kVA pad-mount ({TOT_KVA:,} x 1.25 = {XF_REQ:,.0f} kVA, next size up)"
+   ],
+   [
+    "Service equipment",
+    "SB-1 {SVC:,} A switchboard, 480Y/277 V, 3Ø 4W, utility metering section"
+   ],
+   [
+    "Cabinet breakers",
+    "MW-1 {MW[ocpd]} A  ·  V4-1 {V4[ocpd]} A  (125% of cabinet input)"
+   ],
+   [
+    "Truck access",
+    "Right-in from EB Beyer Blvd; right-turn-only exit onto EB Beyer Blvd"
+   ],
+   [
+    "Bollards",
+    "{NB} total: {NBT} Tesla rebounding at posts, {NBF} fixed + {NBR} removable guard posts"
+   ]
+  ],
+  "scope": [
+   "Install (2) Tesla V4 Megacharger posts in two 15' x 80' pull-through truck stalls with (1) Megacharger cabinet, on the former coffee-pad area in the NW portion of the lot.",
+   "Install (8) Tesla V4 Supercharger posts at the north parking row (former FUTURE EV / EVCS stalls), including the van-accessible EV stall, with (1) V4 cabinet in the planter behind the row.",
+   "New SDG&E {XFMR:,} kVA pad-mount transformer and new {SVC:,} A, 480Y/277 V switchboard in a new bollard-protected equipment yard. Both chargers are fed from this one service.",
+   "New one-way truck entrance (right-in from EB Beyer Blvd) and right-turn-only truck exit onto eastbound E. Beyer Blvd with R3-2 signage and pavement arrows (by civil / traffic engineer, subject to City approval).",
+   "Underground conduit, trenching, pads, foundations, bollards, striping, signage and accessible route improvements for the charging stalls."
+  ],
+  "applicable_codes": [
+   "California Electrical Code (CEC), current adopted edition, incl. Art. 625 EV power transfer systems and Art. 230/240/250/110.",
+   "California Building Code (CBC) incl. Chapter 11B accessibility (11B-228.3 EV charging stations, 11B-812).",
+   "California Green Building Standards Code (CALGreen), California Fire Code, City of San Diego Municipal Code.",
+   "SDG&E Electric Service Standards & Guide Manual (ESSGM); EUSERC metering requirements.",
+   "Tesla V4 Supercharger and V4 Megacharger installation manuals and templatized plan sets."
+  ],
+  "project_team": [
+   [
+    "Property owner",
+    "{owner} (to be confirmed)",
+    "{owner_address}"
+   ],
+   [
+    "Owner contact",
+    "{owner_contact}",
+    "{owner_email}"
+   ],
+   [
+    "Designer",
+    "HiON EV",
+    "{designer_email}"
+   ],
+   [
+    "Contractor of record",
+    "TBD",
+    ""
+   ],
+   [
+    "Architect (site)",
+    "{architect}",
+    "{architect_phone}"
+   ],
+   [
+    "Electrical engineer of record",
+    "[TBD AT CD90]",
+    ""
+   ],
+   [
+    "Civil / traffic engineer",
+    "[TBD]",
+    ""
+   ],
+   [
+    "Utility",
+    "SDG&E (planner TBD)",
+    ""
+   ],
+   [
+    "Charging equipment",
+    "Tesla",
+    ""
+   ]
+  ],
+  "general_notes": [
+   "This is a CD50 preliminary design for coordination and review only. It is not sealed and shall not be used for permit or construction. Dimensions and equipment locations will be verified at CD90 and CD100.",
+   "Base site information is traced from Marks Architects SD1.1 Site Dimension Plan (Jack in the Box, dated 12-30-2025) at 1\"=20'. Aerial context is approximate. A boundary and topographic survey is required before CD90.",
+   "Property owner is shown as {owner} pending confirmation of the owner / lessee entity. APN is from SANDAG parcel data and shall be verified against title.",
+   "Contractor shall verify all existing conditions, utilities and dimensions in the field and report discrepancies before starting work.",
+   "Call DigAlert (811) at least two working days before excavation. Pothole existing utilities at all crossings.",
+   "All work shall comply with the applicable codes on G-001, Tesla installation manuals, SDG&E requirements and City of San Diego standards.",
+   "Restore all disturbed paving, curb, landscaping and irrigation to match existing or better.",
+   "The adjacent Jack in the Box building, drive aisles and parking are by others; keep its operations and fire access open during construction."
+  ],
+  "truck_notes": [
+   "The Megacharger stalls are a concept checked with a simulated WB-67 swept path (R41' / R64' centerline). The civil engineer shall confirm with AutoTURN before CD90.",
+   "The I-805-side swept path comes to about 0.5 ft of the property line near the NW corner. Provide a curb buffer or shift the lanes; Caltrans right-of-way coordination may be needed.",
+   "No on-site truck queue fits behind the charging stalls (straight lengths about 100' and 86'). Queuing on E. Beyer Blvd is not allowed; operations plan TBD.",
+   "Truck entrance is right-in only from eastbound E. Beyer Blvd. The truck exit is right-turn only onto eastbound E. Beyer Blvd (R3-2 No Left Turn sign, right-turn arrows). Simulated WB-67 right turns stay in the eastbound lanes, south of the Beyer centerline. Traffic study and City approval required; a signal is not assumed."
+  ],
+  "electrical_notes": [
+   "Service: SDG&E {XFMR:,} kVA pad-mount transformer XR-1 to {SVC:,} A, 480Y/277 V, 3-phase, 4-wire switchboard SB-1 with EUSERC utility metering section. Final transformer size and primary voltage by SDG&E.",
+   "Cabinet breakers are sized at 125% of cabinet input current: MW-1 {MW[kva]} kVA = {MW[amps]:,.0f} A, {MW[ocpd]} A breaker; V4-1 {V4[kva]} kVA = {V4[amps]:,.0f} A, {V4[ocpd]} A breaker.",
+   "V4-1 is commissioned at its highest nameplate rating, {V4[kva]} kVA (1500 A). No derate table is needed.",
+   "Ground-fault protection of equipment is required on the main (CEC 230.95, 1000 A and larger, 480Y/277 V). Arc energy reduction is required for breakers rated 1200 A and larger (CEC 240.87).",
+   "Cabinet feeders are 3-wire plus EGC with no neutral. Parallel conductors per CEC 310.10(G). Aluminum conductors shall be compact AA-8000 series, XHHW-2.",
+   "Conduit below grade: Schedule 40 PVC, Schedule 80 PVC or RMC where exposed and at stub-ups. Minimum cover 24\" (36\" under truck paving). Provide pull ropes in spare conduits.",
+   "Available fault current, coordination and arc-flash studies at CD90 once SDG&E provides transformer impedance.",
+   "Grounding electrode system at SB-1 per CEC 250.50; bond cabinets and posts per Tesla requirements.",
+   "Conduit lengths on E-301 are plan estimates plus 10 ft for stub-ups. Voltage drop calculations at CD90."
+  ],
+  "bollard_notes": [
+   "Provide vehicle impact protection at all electrical equipment: transformer, switchboard, charger cabinets and charger posts. Locations on E-101 and E-102; details on S-501.",
+   "V4 posts (Tesla templatized S-502): recommended rebounding bollard each side of every post, 2'-3 3/4\" from post centerline on the 5'-11\" CIP post pad, 6\" dia., min. 4.5\" from pad edge, (3) 3/8\" SS Hilti Kwik-Bolt TZ2 with 2.5\" min. embedment. Optional rear bollard where the back of the post faces traffic.",
+   "Megacharger posts (Tesla MW Design Guide G-102, fig. 4, drive-thru stalls): rebounding bollard on the island 5'-7\" from each post on the entry side. Confirm with Tesla for 15' truck stalls.",
+   "Cabinets and switchboard: guard posts per California Fire Code 312: steel pipe min. 4\" dia. (6\" shown), concrete filled, 3' min. above grade (4' shown), 3' deep in 15\" min. dia. footing (18\" shown), max. 4' on center, 3' from the equipment.",
+   "Keep Tesla cabinet clearances clear of fixed posts: 5' front, 3' sides, 6\" back (V4 Design Manual / MW Design Guide). Posts within the front clearance are removable (sleeve-mounted).",
+   "Transformer XR-1: bollards per SDG&E requirements (Tesla G-001 utility note 4); 3' clear all sides and 8' at the doors, removable at the doors. Verify with the executed SDG&E design."
+  ],
+  "accessibility_notes": [
+   "With 10 EV charging spaces (5 to 25 range), provide at least 1 van-accessible and 1 standard-accessible EV space (CBC 11B-228.3.2.1). Posts 1C (van) and 1D (standard) serve the existing accessible EV / EVCS stalls.",
+   "Accessible EV spaces need an accessible route to the charger; operable parts at 48\" max. reach; access aisle striping and signage per CBC 11B-812.",
+   "Megacharger truck stalls are not counted toward passenger accessible spaces; confirm with AHJ."
+  ],
+  "open_items": [
+   "Confirm owner / lessee entity, verify APN, and name the contractor of record.",
+   "Boundary / topo survey and utility locate.",
+   "Set the equipment yard location (currently TBD) with SDG&E and the owner: POC, primary voltage, transformer size; then update feeder routes and lengths.",
+   "Confirm MW cabinet input setting (1247 kVA assumed) and V4 cabinet at 1247 kVA nameplate.",
+   "AutoTURN truck check and traffic study for the right-turn-only truck exit (City approval).",
+   "Caltrans / I-805 right-of-way buffer at the NW corner.",
+   "Tesla post pad and foundation option from templatized S-502 by wind speed (107 / 135 mph) and soils; SDG&E bollard layout.",
+   "Geotechnical report for pad and post foundations.",
+   "Confirm accessible stall layout with the AHJ.",
+   "Lighting, signage and stormwater by civil."
+  ],
+  "a101_keynotes": [
+   "New one-way truck entrance, right-in only from eastbound E. Beyer Blvd.",
+   "Megacharger stalls 1 and 2, 15' x 80' pull-through (WB-67).",
+   "Megacharger posts M1A and M1B on raised islands with bollards.",
+   "Megacharger cabinet MW-1 on concrete pad.",
+   "Truck exit: RIGHT TURN ONLY onto eastbound E. Beyer Blvd. R3-2 No Left Turn sign and right-turn pavement arrows.",
+   "WB-67 swept paths (simulated). Civil to confirm with AutoTURN.",
+   "Equipment yard: XR-1 transformer and SB-1 switchboard, tucked 3' off the west (I-805) property line to keep the interior open for traffic. LOCATION TBD, pending SDG&E design and owner review; shown for sizing and routing only.",
+   "V4 Supercharger posts 1A-1H at the north parking row.",
+   "V4 cabinet V4-1 in the planter behind the row.",
+   "Existing Jack in the Box building, parking and drive aisles (by others).",
+   "Former coffee pad, parking row and drive-thru removed from the design."
+  ],
+  "a101_site_data": [
+   "Site area about 56,050 sf; cleared west area about 22,600 sf after removing the coffee pad.",
+   "Parking: 10 EV spaces (8 V4 + 2 MW truck). Passenger EV row keeps 3 FUTURE EV stalls.",
+   "North arrow is 26.5° from sheet up (plan rotated to the SD1.1 orientation)."
+  ],
+  "e101_notes": [
+   "Conduit routes are schematic. Final routing, depth and crossings at CD90 after survey and utility locate.",
+   "Feeders F-1 and F-2 and comms COM-1 share a common trench from SB-1. Separate DC from AC per Tesla requirements.",
+   "DC runs to posts 1A-1H share one trench in the planter behind the stall heads.",
+   "Equipment yard (XR-1, SB-1) LOCATION TBD. SDG&E primary P-1 route, POC and all feeder lengths from the yard will change when it is set.",
+   "Shaded areas are working / door clearances (SB-1 4', XR-1 8', V4-1 front).",
+   "Bollards protect all equipment; open circles are removable. See S-501.",
+   "See E-201 for the single-line diagram and E-301 for feeder and conduit schedules."
+  ],
+  "e102_notes": [
+   "Equipment yard runs parallel to the west (I-805) property line, 3'-0\" off it, with equipment backs toward the PL and fronts facing the site. Guard posts 1'-0\" outside the yard on the three open sides at 4'-0\" max. on center (CFC 312; SDG&E governs at XR-1). Removable posts at the SE end for transformer door access.",
+   "SB-1 front faces into the site (NE) with 4'-0\" min. working space; two egress paths required for 1200 A and larger equipment over 6' wide (CEC 110.26(C)(3)).",
+   "XR-1 doors face the SE end of the yard with 8'-0\" clear. Transformer pad, grounding and bollards per SDG&E ESSGM.",
+   "V4-1 sits in the planter behind the stall heads, 5'-0\" front clearance toward the curb. Removable bollards in front, fixed bollards on the sides.",
+   "Each V4 post is centred on its stall head on a 5'-11\" x 2'-0\" CIP pad, with a Tesla rebounding bollard 2'-3 3/4\" each side (S-502). Wheel stop in each stall.",
+   "Posts 1C and 1D serve the van-accessible and standard-accessible EV stalls; keep the access aisle and route clear.",
+   "MW-1 pad is set 3'-6\" min. from the truck swept path; guard posts on the sides clear of the truck path (none inside the swept path). Each Megacharger post has a rebounding bollard 5'-7\" upstream on its island (Tesla G-102)."
+  ],
+  "sld_notes": [
+   "Equipment ratings are preliminary and follow the CD50 sizing rules: transformer = total cabinet kVA x 1.25, next standard size up; breakers = 125% of cabinet input, next standard size up; service = 125% of summed cabinet amps.",
+   "Cabinet input settings are assumptions until confirmed: MW-1 1247 kVA nameplate, V4-1 1247 kVA (highest V4 nameplate).",
+   "Main breaker requires ground-fault protection of equipment (CEC 230.95) and arc energy reduction (CEC 240.87).",
+   "SB-1 AIC rating, coordination and arc-flash labels from studies at CD90.",
+   "Feeders to Tesla cabinets are 3-wire plus EGC. Confirm conductor counts and terminations with the Tesla cabinet lug data.",
+   "Spare space in SB-1 for a future cabinet; future load requires recheck of XR-1 and SB-1."
+  ],
+  "structural_notes": [
+   "Foundations are placeholders until the geotechnical report and the Tesla templatized S-501/S-502 (wind speed and soil class) are applied at CD90.",
+   "Concrete f'c = 3,000 psi min. at 28 days for pads and bollard footings unless Tesla or SDG&E require more.",
+   "Wind speed, seismic design category and soil class per ASCE 7 for the site; confirm at CD90."
+  ]
+ }
+}
