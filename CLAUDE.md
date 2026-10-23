@@ -7,12 +7,16 @@ This repo holds the tools HiON uses to semi-automate CD50 plan sets for Tesla V4
 ```
 CLAUDE.md                  this file: rules, tools, workflow, roadmap
 README.md                  short setup and build steps
-requirements.txt           Python deps for the generator (shapely, numpy)
+requirements.txt           Python deps for the generator (shapely, numpy); requirements-dev.txt adds pytest
+rules/sizing_rules.json    Tony's sizing rules, the one table both tools use
+tests/                     pytest suite (sizing rules, Python/JS parity)
+tools/sync_rules.py        copies the rules table into the layout tool
 cd50-layout/
   cd50-layout.html         Site Layout tool (single self-contained HTML)
   sites/                   site aerials (USGS NAIP, public domain)
 cd50-plansets/
   cd50.py                  plan set generator -> cd50.html + cd50_data.json
+  sizing.py                sizing calcs (cabinets, breakers, transformer, service, feeders, EGC)
   pdf.cjs                  Chromium print of cd50.html -> cd50.pdf (36x24 in)
   mw_pos.json, lines_mw2.svg, mw_overlay.svgfrag   San Ysidro inputs
   site_private.example.json  template for gitignored owner/contact details
@@ -24,6 +28,7 @@ cd50-intake/
 ## Working in this repo
 
 - Private repo, default branch `main`. Do work on a branch and open a PR to `main`; Tony reviews.
+- Run `python3 -m pytest` before every PR (needs `pip install -r requirements-dev.txt`; the parity test also needs node).
 - After any change to `cd50.py` or its inputs, rebuild (`python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs`) and check the printed bollard count and conduit lengths. Look at the PDF for drawing changes.
 - A refactor that should not change the drawings must produce an identical `cd50.html` (ignore `<metadata>` blocks, which carry file provenance).
 - Never commit generated files, issued PDFs, `site_private.json`, emails, or architect source PDFs.
@@ -54,7 +59,7 @@ A short question set drives everything (post counts, product, cabinet input sett
 - **Service/switchboard**: max(largest cabinet OCPD, 125% of summed cabinet amps), next standard size. Warn above 5000 A.
 - **Mixed MW + V4** on one shared transformer and service is supported.
 - Example (San Ysidro r2+): MW-1 1247 + V4-1 1247 = 2494 kVA, XR-1 3750 kVA, SB-1 4000 A, 2000 A cabinet breakers.
-- The sizing code exists in two places: the layout tool JS and the top of `cd50.py`. Keep them identical.
+- **One rules table**: `rules/sizing_rules.json` (standard sizes, factors, posts per cabinet, input choices, feeders, EGC). `cd50-plansets/sizing.py` reads it; `tools/sync_rules.py` copies it into the layout tool's `RULES` block. The tool's `sizeGroups()` (between `// BEGIN SIZING` and `// END SIZING`) mirrors `size_groups()` line for line, and `tests/test_sizing.py` runs both and compares. To change a rule: edit the JSON (with Tony's OK), run `python3 tools/sync_rules.py`, then `python3 -m pytest`.
 
 ## Bollards and clearances
 
@@ -137,7 +142,7 @@ Tony sends an address; Claude adds the site to the layout tool.
 
 ## Roadmap (priority order)
 
-1. **One sizing module with tests.** Move the sizing rules into `cd50-plansets/sizing.py` with unit tests (San Ysidro r2+ example, Cleveland/Madisonville 499 kW, the 5000 A warning). Then make the layout tool's JS match it, ideally generated from one rules table so the two can't drift.
+1. ~~One sizing module with tests.~~ Done: `rules/sizing_rules.json`, `sizing.py`, `tests/test_sizing.py`.
 2. **Site input file.** Define a `site.json` schema (address, APN, posts by product, cabinet kVA setting, equipment positions, linework/aerial paths). `cd50.py` reads it instead of hard-coded San Ysidro values. Move San Ysidro into `sites/san-ysidro/site.json`, and keep its output identical.
 3. **Layout tool → generator hand-off.** The layout tool's JSON export writes that `site.json` (equipment, pads, conduit bend points), so a layout drawn in the tool builds a plan set with no code edits.
 4. **Intake → site.json.** Rebuild the intake workbook generator (lost) or read the xlsx directly, so the question set fills `site.json`.
