@@ -77,6 +77,11 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
 @media (max-width:860px){.app{grid-template-columns:1fr;height:auto}.canvaswrap{min-height:480px}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 .sketch-dark{}
+.chk{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)}
+.app.locked .side>section:not(#addrblock){opacity:.45}
+.gate{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;background:color-mix(in srgb,var(--canvas) 82%,transparent);
+  font-family:var(--f-display);font-size:18px;color:var(--muted)}
+.cands td input{margin:0}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) image.sketch{filter:invert(1) hue-rotate(180deg)}}
 :root[data-theme="dark"] image.sketch{filter:invert(1) hue-rotate(180deg)}
 </style>
@@ -85,8 +90,19 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
   <aside class="side">
     <div class="head">
       <h1>CD50 Site Layout</h1>
-      <div class="sub">Answer the sizing questions, load the overhead view, then place equipment and route conduit.</div>
+      <div class="sub">Start with the project address. The tool finds the best free aerial for it, then you size, place equipment and route conduit.</div>
     </div>
+
+    <section class="block" aria-labelledby="h-addr" id="addrblock">
+      <h2 id="h-addr">0 · Project address</h2>
+      <form id="addrform" class="row2" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
+        <label class="f">Site address (required)<input id="addr" type="text" autocomplete="street-address" placeholder="Street, city, state ZIP" required></label>
+        <button class="btn primary" id="b-addr" type="submit">Find aerial</button>
+      </form>
+      <label class="chk"><input id="addr-esri" type="checkbox"> Include Esri World Imagery (reference and tracing only)</label>
+      <div class="note" id="addrstatus" role="status" aria-live="polite">Enter the address to start. Every free source that covers the site is checked and the sharpest, newest image loads at an exact scale, north up, pinned on the address.</div>
+      <div class="tablewrap" id="aerialcands" hidden></div>
+    </section>
 
     <section class="block" aria-labelledby="h-size">
       <h2 id="h-size">1 · Sizing</h2>
@@ -109,7 +125,7 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
 
     <section class="block" aria-labelledby="h-site">
       <h2 id="h-site">2 · Site view</h2>
-      <div class="note" id="imgnote">Showing a sample lot. Load or paste (Ctrl+V) a screenshot of the overhead view (Google Earth or similar), crop to the work area, then set the scale from a known dimension such as a 9 ft stall.</div>
+      <div class="note" id="imgnote">Showing a sample lot. Use step 0 to fetch the aerial for the address, or load or paste (Ctrl+V) a screenshot of the overhead view, crop to the work area, then set the scale from a known dimension such as a 9 ft stall.</div>
       <div class="btns">
         <label class="btn primary" for="file">Load overhead image</label>
         <input id="file" type="file" accept="image/*" hidden>
@@ -199,6 +215,7 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
     <div class="hint" id="hint">Drag empty space to pan, scroll to zoom.</div>
     <div class="canvaswrap">
       <svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="gate" id="gate" hidden>Enter the project address in step 0 to start.</div>
       <div class="scalebox" id="scalebox" hidden>
         <span id="scalemeas"></span>
         <label for="scaleft">True length (ft)</label>
@@ -868,7 +885,7 @@ function loadSite(site){
     if (site.mwLayout || site.svcLayout){ const svcT = ["svc","xfmr","ct","mtr"];
       Object.values(S.items).filter(i => (site.mwLayout && i.kind === "MW") || (site.svcLayout && svcT.includes(i.type))).forEach(i => { i.x = null; });
       S.routes = {}; arrange(size(), true); }
-    if (SITE_FOLDER[site.id] && !pdfSite.value) pdfSite.value = SITE_FOLDER[site.id];
+    const fo = SITE_FOLDER[site.id] || site.folder; if (fo && !pdfSite.value) pdfSite.value = fo;
     syncInputs(); setMode("select");
   }; im.src = site.src;
 }
@@ -901,7 +918,7 @@ function siteLayout(){
     for (const b of bollards(it, s)) boll.push({item:it.id, kind:b.k, xy:tr([b.x, b.y])});
   }
   const im = S.img;
-  return {format:"cd50-layout/1", exported:new Date().toISOString().slice(0, 10),
+  return {format:"cd50-layout/1", exported:new Date().toISOString().slice(0, 10), project:{address:S.address || null, geo:S.geo || null},
     frame:im ? {site:im.site || null, origin_ft:[r3(im.x), r3(im.y)], size_ft:[r3(im.w / im.ppf), r3(im.h / im.ppf)], north:im.north || 0} : null,
     sizing:{total_kva:z.totalKva, xfmr_kva:z.xfmr, service_amps:z.svcAmps, service_tag:z.svcTag},
     chargers:z.G.map(g => ({tag:`${g.cabPrefix}1`, kind:g.kind, posts:g.posts, kva:g.kva,
@@ -931,7 +948,7 @@ document.getElementById("b-dl").onclick = async (e) => {
 const BUILD_TRIGGER = "trig_01SUGXsC5acu3krHpFg7uN6A";
 const SITE_FOLDER = {"san-ysidro-299e":"san-ysidro-r6", "san-ysidro-299e-sketch":"san-ysidro-r6"};
 const pdfSite = document.getElementById("pdf-site"), pdfStatus = document.getElementById("pdf-status");
-const pdfFolder = () => pdfSite.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || SITE_FOLDER[S.img?.site] || "";
+const pdfFolder = () => pdfSite.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || SITE_FOLDER[S.img?.site] || (SITES.find(s => s.id === S.img?.site) || {}).folder || "";
 document.getElementById("b-pdf").onclick = async (e) => {
   const site = pdfFolder();
   if (!site){ pdfStatus.textContent = "Enter the site folder name first (the folder under sites/ in the repo)."; pdfSite.focus(); return; }
@@ -985,6 +1002,149 @@ function loadImageFile(f) {
     S.sketch = true; syncInputs(); fit(); render(); setMode("crop");
   }; im.src = rd.result; }; rd.readAsDataURL(f);
 }
+
+// ---------- address first: geocode the project address, rank the free aerial sources at the site, load the best one.
+// Same method as tools/aerial.py: a local Transverse Mercator frame in US ft centred on the address, so ft/px is exact,
+// north is up and the pin is the image centre. Works wherever the browser can reach the sources (opened as a local file);
+// when it can't (the claude.ai viewer blocks outside hosts), it hands the address to Claude to run tools/aerial.py.
+// BEGIN AERIAL (synced from rules/aerial_sources.json by tools/sync_rules.py)
+const AERIAL = {"frame":{"w_ft":700,"h_ft":525,"ft_per_px":[0.25,0.5],"fine_gsd_ft":1.0},"sources":[{"id":"sandag-2023-9in","name":"SANDAG / SanGIS 2023 orthoimagery (Nearmap, 9 in)","type":"image","url":"https://gis.sandag.org/sdgis/rest/services/Imagery/SD2023_9inch/ImageServer","bbox":[-117.61,32.53,-116.08,33.51],"gsd_ft":0.75,"date":"2023-01-06","license":"public","credit":"SANDAG/SanGIS 2023 orthoimagery (Nearmap), 9 in, public domain"},{"id":"ohio-osip","name":"Ohio OSIP most current (6 in to 1 ft)","type":"image","url":"https://maps.ohio.gov/image/rest/services/osip_most_current/ImageServer","bbox":[-84.82,38.4,-80.52,41.98],"gsd_ft":0.5,"date":"2024","license":"public","credit":"Ohio OSIP III orthoimagery (OGRIP)"},{"id":"indiana-current","name":"Indiana current orthoimagery (6 in, 2025)","type":"image","url":"https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer","bbox":[-88.1,37.77,-84.78,41.77],"gsd_ft":0.5,"date":"2025","license":"public","credit":"Indiana GIO statewide orthoimagery, CC0"},{"id":"ct-2023","name":"Connecticut 2023 orthoimagery (CT ECO)","type":"image","url":"https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023/ImageServer","bbox":[-73.73,40.98,-71.78,42.05],"gsd_ft":0.25,"date":"2023","license":"public","credit":"CT ECO 2023 statewide orthoimagery"},{"id":"usgs-naip-plus","name":"USGS NAIP Plus (NAIP 0.6 m, HRO where flown)","type":"image","url":"https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer","bbox":null,"gsd_ft":1.97,"date":null,"license":"public","catalog":true,"credit":"USGS NAIP Plus, public domain"},{"id":"usgs-imagery-only","name":"USGS National Map imagery basemap (HRO / NAIP)","type":"map","url":"https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer","bbox":null,"gsd_ft":1.0,"date":null,"license":"public","credit":"USGS The National Map imagery, public domain"},{"id":"esri-world-imagery","name":"Esri World Imagery (Maxar / Vexcel / local, often 0.3 m or better)","type":"map","url":"https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer","metadata":"https://metadata.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Metadata_2026_r02/MapServer","bbox":null,"gsd_ft":1.0,"date":null,"license":"restricted","credit":"Esri World Imagery (Esri, Maxar, Earthstar Geographics and the GIS user community); reference and tracing only"}]};
+// END AERIAL
+const FIND_TRIGGER = "trig_01P1kxJyaUCwJf9Aypx7m9VK";   // Tony's "CD50 layout tool: Find aerial" scheduled task
+const FTUS = 1200 / 3937, SD_BBOX = [-117.61, 32.53, -116.08, 33.51];
+const addrIn = document.getElementById("addr"), addrStatus = document.getElementById("addrstatus"), candBox = document.getElementById("aerialcands");
+const inBox = (lon, lat, b) => !b || (b[0] <= lon && lon <= b[2] && b[1] <= lat && lat <= b[3]);
+const qs = p => Object.entries(p).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
+const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + " timed out")), ms))]);
+const getJSON = async (url, p) => { const r = await withTimeout(fetch(url + "?" + qs(p)), 15000, "request"); const d = await r.json(); if (d.error) throw new Error(d.error.message || "service error"); return d; };
+let jsonpN = 0;
+function jsonp(url, p){ return withTimeout(new Promise((res, rej) => {
+  const cb = "cd50jsonp" + (++jsonpN), sc = document.createElement("script");
+  window[cb] = d => { delete window[cb]; sc.remove(); res(d); };
+  sc.onerror = () => { delete window[cb]; sc.remove(); rej(new Error("blocked")); };
+  sc.src = url + "?" + qs({...p, format:"jsonp", callback:cb}); document.head.appendChild(sc);
+}), 12000, "geocoder"); }
+const slugify = a => (a.toLowerCase().split(",")[0].replace(/[^a-z0-9 ]+/g, " ").trim().split(/\s+/).slice(0, 5).join("-")) || "site";
+const normAddr = a => a.toLowerCase().replace(/[.,#]/g, " ").replace(/\b(east)\b/g, "e").replace(/\b(west)\b/g, "w").replace(/\b(boulevard)\b/g, "blvd").replace(/\s+/g, " ").trim();
+async function geocodeAddr(a){
+  let g = null;
+  try { const d = await jsonp("https://geocoding.geo.census.gov/geocoder/locations/onelineaddress", {address:a, benchmark:"Public_AR_Current"});
+    const m = d.result.addressMatches[0]; if (m) g = {lon:m.coordinates.x, lat:m.coordinates.y, matched:m.matchedAddress, source:"US Census geocoder (address range)"}; } catch(e){}
+  if (!g || inBox(g.lon, g.lat, SD_BBOX)) try {
+    const d = await getJSON("https://geo.sandag.org/server/rest/services/SANDAG_COMPOSITE_LOCATOR/GeocodeServer/findAddressCandidates", {SingleLine:a, outSR:4326, outFields:"Addr_type,Loc_name", f:"json"});
+    const c = (d.candidates || []).filter(x => x.score >= 90).sort((p, q) => (p.attributes.Addr_type !== "PointAddress") - (q.attributes.Addr_type !== "PointAddress") || !/APN/.test(p.attributes.Loc_name) - !/APN/.test(q.attributes.Loc_name) || q.score - p.score)[0];
+    if (c && inBox(c.location.x, c.location.y, SD_BBOX)) g = {lon:c.location.x, lat:c.location.y, matched:c.address, source:`SANDAG address point (${c.attributes.Loc_name})`};
+  } catch(e){}
+  return g;
+}
+const localSR = (lon, lat) => JSON.stringify({wkt:'PROJCS["CD50 local TM",GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],' +
+  `PARAMETER["Central_Meridian",${lon.toFixed(7)}],PARAMETER["Scale_Factor",1.0],PARAMETER["Latitude_Of_Origin",${lat.toFixed(7)}],UNIT["Foot_US",0.3048006096012192]]`});
+function exportURL(src, sr, wFt, hFt, w, h){
+  const p = {bbox:[-wFt/2, -hFt/2, wFt/2, hFt/2].join(","), bboxSR:sr, imageSR:sr, size:`${w},${h}`, f:"image", format:"jpg"};
+  return src.type === "image" ? src.url + "/exportImage?" + qs({...p, interpolation:"RSP_CubicConvolution"}) : src.url + "/export?" + qs({...p, transparent:false, dpi:96});
+}
+const loadImg = url => withTimeout(new Promise((res, rej) => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => res(im); im.onerror = () => rej(new Error("not reachable")); im.src = url; }), 30000, "image");
+function blankImg(im){ try { const c = document.createElement("canvas"); c.width = 64; c.height = 48; const x = c.getContext("2d"); x.drawImage(im, 0, 0, 64, 48);
+  const d = x.getImageData(0, 0, 64, 48).data; let s = 0, s2 = 0; for (let i = 0; i < d.length; i += 4){ const v = (d[i] + d[i+1] + d[i+2]) / 3; s += v; s2 += v*v; }
+  const n = d.length / 4; return Math.sqrt(s2/n - (s/n)**2) < 4; } catch(e){ return false; } }
+async function siteInfo(src, lon, lat){
+  let gsd = src.gsd_ft, date = src.date, detail = null; const pt = {geometry:`${lon},${lat}`, geometryType:"esriGeometryPoint", inSR:4326, f:"json"};
+  try {
+    if (src.catalog){ const d = await getJSON(src.url + "/query", {...pt, spatialRel:"esriSpatialRelIntersects", where:"Category=1", outFields:"Name,resolution_value,resolution_units,acquisition_date,agency", returnGeometry:false});
+      const rows = (d.features || []).map(f => f.attributes).filter(a => a.resolution_value != null)
+        .map(a => ({g:a.resolution_value / (/^met/i.test(a.resolution_units || "") ? FTUS : 1), d:a.acquisition_date ? new Date(a.acquisition_date).toISOString().slice(0, 10) : "", n:a.Name}))
+        .sort((p, q) => p.g - q.g || (q.d > p.d) - (q.d < p.d));
+      if (rows[0]){ gsd = rows[0].g; date = rows[0].d || null; detail = rows[0].n; } }
+    if (src.metadata){ const d = await getJSON(src.metadata + "/identify", {...pt, sr:4326, layers:"all", tolerance:1, mapExtent:[lon-.001, lat-.001, lon+.001, lat+.001].join(","), imageDisplay:"400,400,96", returnGeometry:false});
+      for (const r of d.results || []){ const a = Object.fromEntries(Object.entries(r.attributes).map(([k, v]) => [k.toUpperCase(), v])); const res = a.SRC_RES ?? a["RESOLUTION (M)"];
+        if (res != null && res !== "" && res !== "Null"){ gsd = +res / FTUS; const t = String(a.SRC_DATE ?? ""); if (/^\d{8}$/.test(t)) date = `${t.slice(0,4)}-${t.slice(4,6)}-${t.slice(6)}`; detail = a.NICE_DESC || a.SRC_DESC || null; break; } } }
+  } catch(e){}
+  return {gsd, date, detail};
+}
+const rankCands = c => c.filter(x => x.ok).sort((p, q) => Math.round(p.gsd*100) - Math.round(q.gsd*100) || ((q.date || "") > (p.date || "")) - ((q.date || "") < (p.date || "")));
+function sharpen(im, w, h, gsd, ftpx){
+  // contrast stretch (0.4% clip) + unsharp mask sized to the source pixels; same intent as enhance() in tools/aerial.py
+  const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"); x.drawImage(im, 0, 0, w, h);
+  let D; try { D = x.getImageData(0, 0, w, h); } catch(e){ return null; }
+  const d = D.data, n = w * h, hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i += 4) hist[(d[i] + d[i+1] + d[i+2]) / 3 | 0]++;
+  let lo = 0, hi = 255, acc = 0; while (acc + hist[lo] < n * .004) acc += hist[lo++]; acc = 0; while (acc + hist[hi] < n * .004) acc += hist[hi--];
+  const k = 255 / Math.max(1, hi - lo), up = Math.max(1, gsd / ftpx), r = Math.max(1, Math.round(.6 * up)), amt = up > 1.5 ? .8 : .6;
+  const src = new Float32Array(d.length), tmp = new Float32Array(d.length), blur = new Float32Array(d.length);
+  for (let i = 0; i < d.length; i++) src[i] = (i & 3) === 3 ? 255 : Math.max(0, Math.min(255, (d[i] - lo) * k));
+  const box = (a, b, horiz) => { const L = horiz ? w : h, M = horiz ? h : w, st = horiz ? 4 : 4 * w, rs = horiz ? 4 * w : 4;
+    for (let m = 0; m < M; m++) for (let ch = 0; ch < 3; ch++){ const o = m * rs + ch; let s = 0;
+      for (let j = -r; j <= r; j++) s += a[o + Math.min(L - 1, Math.max(0, j)) * st];
+      for (let l = 0; l < L; l++){ b[o + l * st] = s / (2 * r + 1); s += a[o + Math.min(L - 1, l + r + 1) * st] - a[o + Math.max(0, l - r) * st]; } } };
+  box(src, tmp, true); box(tmp, blur, false);
+  for (let i = 0; i < d.length; i++) if ((i & 3) !== 3){ const diff = src[i] - blur[i]; d[i] = Math.abs(diff) < 2 ? src[i] : src[i] + amt * diff; }
+  x.putImageData(D, 0, 0); return c.toDataURL("image/jpeg", .86);
+}
+function addSiteOption(site){ if (![...siteSel.options].some(o => o.value === site.id)) siteSel.insertAdjacentHTML("afterbegin", `<option value="${site.id}"></option>`);
+  siteSel.querySelector(`option[value="${CSS.escape(site.id)}"]`).textContent = site.label; }
+function setAddress(a, geo){ S.address = a; S.geo = geo || S.geo || null; addrIn.value = a; save(); gate(); }
+function gate(){ const on = !S.address; document.querySelector(".app").classList.toggle("locked", on); document.getElementById("gate").hidden = !on;
+  document.querySelectorAll(".side>section:not(#addrblock)").forEach(el => { el.inert = on; }); if (!on && !addrIn.value) addrIn.value = S.address; }
+let lastCands = null;
+function showCands(c, g){
+  const fr = AERIAL.frame;
+  candBox.hidden = false;
+  candBox.innerHTML = `<table class="cands"><thead><tr><th></th><th>Source</th><th>Native</th><th>Date</th></tr></thead><tbody>${c.map((x, i) => `<tr>
+    <td>${x.ok ? `<input type="radio" name="aerial" value="${i}" aria-label="Use ${x.src.name}"${x === lastCands.best ? " checked" : ""}>` : ""}</td>
+    <td>${x.src.name}${x.src.license !== "public" ? ' <span class="pill warn">reference only</span>' : ""}${x.ok ? "" : `<div class="sub">${x.why}</div>`}</td>
+    <td class="n">${x.ok ? x.gsd.toFixed(2) + " ft" : "–"}</td><td class="n">${x.ok ? (x.date || "?") : ""}</td></tr>`).join("")}</tbody></table>
+    <div class="note">Frame ${fr.w_ft} × ${fr.h_ft} ft, north up, centred on ${g.matched} (${g.source}). Pick another row to compare.</div>`;
+}
+async function useCand(x, g){
+  const fr = AERIAL.frame, ftpx = x.gsd <= fr.fine_gsd_ft ? fr.ft_per_px[0] : fr.ft_per_px[1];
+  const w = Math.round(fr.w_ft / ftpx), h = Math.round(fr.h_ft / ftpx);
+  addrStatus.textContent = `Loading ${x.src.name} at ${ftpx} ft/px…`;
+  const im = await loadImg(exportURL(x.src, localSR(g.lon, g.lat), fr.w_ft, fr.h_ft, w, h));
+  const src = sharpen(im, w, h, x.gsd, ftpx) || im.src, slug = slugify(g.matched);
+  const site = {id:"addr-" + slug, folder:slug, label:g.matched, wFt:fr.w_ft, hFt:fr.h_ft, pin:[fr.w_ft/2, fr.h_ft/2], address:g.matched,
+    credit:`${x.src.credit}, ${x.date || "date unknown"} (${x.gsd.toFixed(2)} ft native), ${ftpx} ft/px, north up, local TM frame centred on the address; contrast and unsharp mask applied. Pin from ${g.source}.` +
+      (x.src.license !== "public" ? " Reference and tracing only: check the license before issuing drawings with it." : ""), src};
+  const i = SITES.findIndex(s => s.id === site.id); if (i >= 0) SITES[i] = site; else SITES.push(site);
+  S.aerialSite = {...site, src:null}; addSiteOption(site); loadSite(site);
+  addrStatus.textContent = `Loaded ${x.src.name}, ${x.date || "date unknown"}, ${x.gsd.toFixed(2)} ft native at ${ftpx} ft/px. Scale is set; the pin marks the address.`;
+}
+async function findAerial(a){
+  const btn = document.getElementById("b-addr"); btn.disabled = true; candBox.hidden = true;
+  try {
+    const na = normAddr(a), pre = SITES.find(s => { const L = normAddr(s.address || s.label); const k = L.split(" ").slice(0, 3).join(" "); return na.startsWith(k) || L.startsWith(na.split(" ").slice(0, 3).join(" ")); });
+    if (pre){ loadSite(pre); setAddress(pre.address || pre.label.split(" · ")[0]); addrStatus.textContent = `Loaded the saved aerial for ${pre.label}. ${pre.credit || ""}`; return; }
+    addrStatus.textContent = "Looking up the address…";
+    const g = await geocodeAddr(a);
+    if (!g){ setAddress(a); return askClaude(a, "The address lookup could not be reached from this page"); }
+    setAddress(g.matched, {lon:+g.lon.toFixed(7), lat:+g.lat.toFixed(7), source:g.source});
+    addrStatus.textContent = `Found ${g.matched}. Checking aerial sources…`;
+    const esri = document.getElementById("addr-esri").checked, sr = localSR(g.lon, g.lat), fr = AERIAL.frame, pw = 320, ph = Math.round(320 * fr.h_ft / fr.w_ft);
+    const c = await Promise.all(AERIAL.sources.filter(s => inBox(g.lon, g.lat, s.bbox)).map(async src => {
+      if (src.license !== "public" && !esri) return {src, ok:false, why:"Skipped: reference-only license (tick the box to include)"};
+      try { const [inf, im] = await Promise.all([siteInfo(src, g.lon, g.lat), loadImg(exportURL(src, sr, fr.w_ft, fr.h_ft, pw, ph))]);
+        return blankImg(im) ? {src, ok:false, why:"No imagery at this site"} : {src, ok:true, ...inf}; }
+      catch(e){ return {src, ok:false, why:"Not reachable from this page"}; } }));
+    const ok = rankCands(c);
+    if (!ok.length) return askClaude(g.matched, "None of the aerial sources could be reached from this page");
+    lastCands = {c, g, best:ok[0]}; showCands(c, g); await useCand(ok[0], g);
+  } catch(e){ addrStatus.textContent = `Could not load the aerial (${e.message}). Try again, or paste a screenshot.`; }
+  finally { btn.disabled = false; }
+}
+async function askClaude(a, why){
+  const site = slugify(a), esri = document.getElementById("addr-esri").checked;
+  const mcp = window.claude?.use ? await window.claude.use("mcp").catch(() => null) : null;
+  if (mcp && FIND_TRIGGER){
+    try { await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id:FIND_TRIGGER, text:JSON.stringify({address:a, site, esri})}, {cache:false});
+      addrStatus.textContent = `${why}, so it went to Claude, which will fetch and rank the aerials, add "${a}" to Fetched site imagery and post when it's ready (a few minutes). Size the site meanwhile.`; return; }
+    catch(err){ if (err?.code === "server_not_connected"){ addrStatus.textContent = "Connect Claude Code in claude.ai Settings → Connectors, then try again."; return; } }
+  }
+  const cmd = `python3 tools/aerial.py "${a}" --site ${site} --add-to-tool${esri ? " --esri" : ""}`;
+  try { await navigator.clipboard.writeText(cmd); addrStatus.textContent = `${why}. Copied the command to run in the CD50-Tool folder: ${cmd}`; }
+  catch(e){ addrStatus.textContent = `${why}. In the CD50-Tool folder run: ${cmd}`; }
+}
+document.getElementById("addrform").onsubmit = e => { e.preventDefault(); const a = addrIn.value.trim(); if (a) findAerial(a); };
+candBox.onchange = e => { const i = e.target.name === "aerial" && +e.target.value; if (lastCands && i !== false) useCand(lastCands.c[i], lastCands.g).catch(err => { addrStatus.textContent = `Could not load that source (${err.message}).`; }); };
+if (S.aerialSite && S.img && S.img.site === S.aerialSite.id && !SITES.some(s => s.id === S.aerialSite.id)){ SITES.push({...S.aerialSite, src:S.img.src}); addSiteOption(S.aerialSite); }
 
 // ---------- modes
 const hints = {
@@ -1072,6 +1232,6 @@ window.addEventListener("resize", () => render());
 if (!S.img) S.img = sampleLot();
 buildItems(size());
 if (!S.view) fit();
-syncInputs(); syncPark(); setMode("select");
+syncInputs(); syncPark(); setMode("select"); gate();
 })();
 </script>

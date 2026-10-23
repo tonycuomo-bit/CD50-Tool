@@ -1,14 +1,15 @@
-"""Copy rules/sizing_rules.json (RULES) and rules/tesla_rules.json (TESLA) into the Site Layout tool
+"""Copy rules/sizing_rules.json (RULES), rules/tesla_rules.json (TESLA) and rules/aerial_sources.json (AERIAL) into the Site Layout tool
 (cd50-layout/cd50-layout.html).
 
-Run after editing either rules JSON:  python3 tools/sync_rules.py
+Run after editing any of the rules JSON files:  python3 tools/sync_rules.py
 Use --check to fail (exit 1) if the tool is out of date instead of writing it.
 """
 import json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, 'cd50-layout', 'cd50-layout.html')
-BLOCKS = {name: os.path.join(ROOT, 'rules', f) for name, f in (('RULES', 'sizing_rules.json'), ('TESLA', 'tesla_rules.json'))}
+BLOCKS = {name: os.path.join(ROOT, 'rules', f) for name, f in
+          (('RULES', 'sizing_rules.json'), ('TESLA', 'tesla_rules.json'), ('AERIAL', 'aerial_sources.json'))}
 
 
 def pat(name): return re.compile(rf'(// BEGIN {name}[^\n]*\n)const {name} = .*?;\n(// END {name})', re.S)
