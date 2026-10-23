@@ -153,6 +153,20 @@ def site_info(src, lon, lat):
     return gsd, date, detail
 
 
+def hosts(src):
+    return sorted({urllib.parse.urlparse(u).hostname for u in (src['url'], src.get('metadata')) if u})
+
+
+def blocked_better(cfg, cands, best):
+    """Sources that cover the site and are nominally sharper than the winner but did not answer: name them and their hosts."""
+    by_id = {s['id']: s for s in cfg['sources']}
+    lim = best['gsd_ft'] if best else 99
+    out = [c for c in cands if c.get('status') not in ('ok', 'no imagery at this site') and not c['status'].startswith('skipped')
+           and by_id[c['id']]['gsd_ft'] < lim]
+    return [{'id': c['id'], 'name': c['name'], 'gsd_ft': by_id[c['id']]['gsd_ft'], 'status': c['status'], 'hosts': hosts(by_id[c['id']])}
+            for c in sorted(out, key=lambda c: by_id[c['id']]['gsd_ft'])]
+
+
 def rank_key(c): return (round(c['gsd_ft'], 2), [-ord(ch) for ch in (c.get('date') or '0')])
 
 
@@ -236,8 +250,11 @@ def main(argv=None):
     ap.add_argument('--no-enhance', action='store_true')
     ap.add_argument('--add-to-tool', action='store_true', help='add or replace the SITES entry in cd50-layout.html')
     ap.add_argument('--list', action='store_true', help='probe every source at the address (or San Ysidro) and stop')
+    ap.add_argument('--domains', action='store_true', help='print every host the sources use (for the network allow list) and stop')
     a = ap.parse_args(argv)
     cfg = json.load(open(SOURCES, encoding='utf-8'))
+    if a.domains:
+        print('\n'.join(sorted({h for s in cfg['sources'] for h in hosts(s)}))); return 0
     fr = cfg['frame']
     wft, hft = a.w or fr['w_ft'], a.h or fr['h_ft']
     address = a.address or ('299 E San Ysidro Blvd, San Diego, CA 92173' if a.list else None)
@@ -254,6 +271,11 @@ def main(argv=None):
     for c in sorted(cands, key=lambda c: (c.get('status') != 'ok', rank_key(c) if 'gsd_ft' in c else (99,))):
         res = f"{c['gsd_ft']:.2f} ft native, {c.get('date') or 'date ?'}" if c.get('status') == 'ok' else ''
         print(f"  {'*' if ok and c is ok[0] else ' '} {c['id']:<20} [{c['license']}] {c['status']}  {res}")
+    bb = blocked_better(cfg, cands, ok[0] if ok else None)
+    if bb:
+        print('Sharper sources cover this site but did not answer from here:')
+        for b in bb: print(f"    {b['name']} (~{b['gsd_ft']:g} ft): {b['status']}")
+        print('  To use them, allow these domains: ' + ', '.join(sorted({h for b in bb for h in b['hosts']})))
     if a.list: return 0
     if not ok: sys.exit('No source returned imagery here. Check the network policy (see rules/aerial_sources.json) or pass --lonlat.')
     best = ok[0]
@@ -278,7 +300,7 @@ def main(argv=None):
     meta = {'format': 'cd50-aerial/1', 'created': datetime.date.today().isoformat(), 'address': address or g['matched'], 'geocode': g,
             'frame': {'w_ft': wft, 'h_ft': hft, 'ft_per_px': ftpx, 'px': list(im.size), 'pin_ft': [wft / 2, hft / 2],
                       'crs': 'Transverse Mercator, NAD83, US survey ft, k=1, origin at the address point', 'wkt': json.loads(sr)['wkt']},
-            'image': stem + '.jpg', 'chosen': best['id'], 'credit': credit, 'enhanced': not a.no_enhance,
+            'image': stem + '.jpg', 'chosen': best['id'], 'blocked_better': bb, 'credit': credit, 'enhanced': not a.no_enhance,
             'candidates': [{k: v for k, v in c.items() if not k.startswith('_')} for c in cands]}
     json.dump(meta, open(os.path.join(outdir, 'aerial.json'), 'w', encoding='utf-8'), indent=1)
     print(f"Saved {os.path.relpath(os.path.join(outdir, stem + '.jpg'), ROOT)}  {im.size[0]}x{im.size[1]} px at {ftpx:g} ft/px")

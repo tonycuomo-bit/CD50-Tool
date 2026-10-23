@@ -63,3 +63,19 @@ def test_layout_tool_requires_the_address():
     assert 'id="addrblock"' in TOOL_HTML and 'id="addr"' in TOOL_HTML and 'gate();' in TOOL_HTML
     assert re.search(r'const FIND_TRIGGER = "trig_\w+"', TOOL_HTML)
     assert 'project:{address:S.address' in TOOL_HTML                     # the address goes out with layout.json
+
+
+def test_blocked_better_names_sharper_sources_and_their_hosts():
+    cands = [{'id': 'usgs-naip-plus', 'name': 'NAIP', 'status': 'ok', 'gsd_ft': 1.97},
+             {'id': 'cook-2025', 'name': 'Cook', 'status': 'host not reachable (blocked by network policy or offline)'},
+             {'id': 'esri-world-imagery', 'name': 'Esri', 'status': 'skipped (restricted license; use --esri)'}]
+    bb = aerial.blocked_better(CFG, cands, cands[0])
+    assert [b['id'] for b in bb] == ['cook-2025'] and bb[0]['hosts'] == ['gis.cookcountyil.gov']
+    assert aerial.blocked_better(CFG, cands[:1], cands[0]) == []
+
+
+def test_every_source_host_is_listed_in_claude_md():
+    doc = open(os.path.join(ROOT, 'CLAUDE.md'), encoding='utf-8').read()
+    for s in CFG['sources']:
+        for h in aerial.hosts(s):
+            assert f'`{h}`' in doc, f'{h} missing from the network list in CLAUDE.md'

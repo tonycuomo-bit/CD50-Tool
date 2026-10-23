@@ -1,36 +1,245 @@
 {
-  "_about": "Free aerial imagery sources for the address-first site start. Both tools/aerial.py and the layout tool (AERIAL_SOURCES block, copied by tools/sync_rules.py) read this table. Each source is an ArcGIS REST service: type image = ImageServer exportImage, map = MapServer export. bbox = [west, south, east, north] lon/lat coverage (null = US/world). gsd_ft = nominal ground sample distance; a catalog or metadata query replaces it with the value at the site. license: public = public domain or CC0, free for engineering use with credit; restricted = view and trace only, check the provider's terms before issuing a drawing with it (off unless asked). Add a state or county source by adding an entry; probe it with python3 tools/aerial.py --list.",
-  "_sources_checked": "2026-10-23: USGS NAIP Plus catalog fields (live), SANDAG SD2023_9inch item info (public domain per SanGIS/Nearmap agreement; 3 in is partners only), Ohio OSIP most current, Indiana current imagery (CC0, 6 in 2025), CT Ortho 2023, Esri World Imagery and its metadata service (SRC_DATE, SRC_RES). Hosts other than imagery.nationalmap.gov are not yet allowed in the cloud environment.",
-  "frame": {"w_ft": 700, "h_ft": 525, "ft_per_px": [0.25, 0.5], "fine_gsd_ft": 1.0},
-  "sources": [
-    {"id": "sandag-2023-9in", "name": "SANDAG / SanGIS 2023 orthoimagery (Nearmap, 9 in)", "type": "image",
-     "url": "https://gis.sandag.org/sdgis/rest/services/Imagery/SD2023_9inch/ImageServer",
-     "bbox": [-117.61, 32.53, -116.08, 33.51], "gsd_ft": 0.75, "date": "2023-01-06", "license": "public",
-     "credit": "SANDAG/SanGIS 2023 orthoimagery (Nearmap), 9 in, public domain"},
-    {"id": "ohio-osip", "name": "Ohio OSIP most current (6 in to 1 ft)", "type": "image",
-     "url": "https://maps.ohio.gov/image/rest/services/osip_most_current/ImageServer",
-     "bbox": [-84.82, 38.40, -80.52, 41.98], "gsd_ft": 0.5, "date": "2024", "license": "public",
-     "credit": "Ohio OSIP III orthoimagery (OGRIP)"},
-    {"id": "indiana-current", "name": "Indiana current orthoimagery (6 in, 2025)", "type": "image",
-     "url": "https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer",
-     "bbox": [-88.10, 37.77, -84.78, 41.77], "gsd_ft": 0.5, "date": "2025", "license": "public",
-     "credit": "Indiana GIO statewide orthoimagery, CC0"},
-    {"id": "ct-2023", "name": "Connecticut 2023 orthoimagery (CT ECO)", "type": "image",
-     "url": "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023/ImageServer",
-     "bbox": [-73.73, 40.98, -71.78, 42.05], "gsd_ft": 0.25, "date": "2023", "license": "public",
-     "credit": "CT ECO 2023 statewide orthoimagery"},
-    {"id": "usgs-naip-plus", "name": "USGS NAIP Plus (NAIP 0.6 m, HRO where flown)", "type": "image",
-     "url": "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer",
-     "bbox": null, "gsd_ft": 1.97, "date": null, "license": "public", "catalog": true,
-     "credit": "USGS NAIP Plus, public domain"},
-    {"id": "usgs-imagery-only", "name": "USGS National Map imagery basemap (HRO / NAIP)", "type": "map",
-     "url": "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer",
-     "bbox": null, "gsd_ft": 1.0, "date": null, "license": "public",
-     "credit": "USGS The National Map imagery, public domain"},
-    {"id": "esri-world-imagery", "name": "Esri World Imagery (Maxar / Vexcel / local, often 0.3 m or better)", "type": "map",
-     "url": "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer",
-     "metadata": "https://metadata.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Metadata_2026_r02/MapServer",
-     "bbox": null, "gsd_ft": 1.0, "date": null, "license": "restricted",
-     "credit": "Esri World Imagery (Esri, Maxar, Earthstar Geographics and the GIS user community); reference and tracing only"}
-  ]
+ "_about": "Free aerial imagery sources for the address-first site start. Both tools/aerial.py and the layout tool (AERIAL_SOURCES block, copied by tools/sync_rules.py) read this table. Each source is an ArcGIS REST service: type image = ImageServer exportImage, map = MapServer export. bbox = [west, south, east, north] lon/lat coverage (null = US/world). gsd_ft = nominal ground sample distance; a catalog or metadata query replaces it with the value at the site. license: public = public domain or CC0, free for engineering use with credit; restricted = view and trace only, check the provider's terms before issuing a drawing with it (off unless asked). Add a state or county source by adding an entry; probe it with python3 tools/aerial.py --list.",
+ "_sources_checked": "2026-10-23: USGS NAIP Plus catalog fields (live), SANDAG SD2023_9inch item info (public domain per SanGIS/Nearmap agreement; 3 in is partners only), Ohio OSIP most current, Indiana current imagery (CC0, 6 in 2025), CT Ortho 2023, Esri World Imagery and its metadata service (SRC_DATE, SRC_RES). Hosts other than imagery.nationalmap.gov are not yet allowed in the cloud environment. 2026-10-23 (second pass, from service directories found by web search, not probed from the cloud): Cook County 2024/2025, DRAPP 2022 (Jeffco portal, CC BY 3.0; no 2024 service found), City of Boulder 2024, Missouri 6 in 2023-24, NYS ITS Latest (covers NYC), NJ 2020, Fairfax 2023. Not added: Colorado statewide Vexcel (government only), MassGIS 2023 (tile layer on tiles.arcgis.com, export not supported), Texas StratMap (per-project services).",
+ "frame": {
+  "w_ft": 700,
+  "h_ft": 525,
+  "ft_per_px": [
+   0.25,
+   0.5
+  ],
+  "fine_gsd_ft": 1.0
+ },
+ "sources": [
+  {
+   "id": "sandag-2023-9in",
+   "name": "SANDAG / SanGIS 2023 orthoimagery (Nearmap, 9 in)",
+   "type": "image",
+   "url": "https://gis.sandag.org/sdgis/rest/services/Imagery/SD2023_9inch/ImageServer",
+   "bbox": [
+    -117.61,
+    32.53,
+    -116.08,
+    33.51
+   ],
+   "gsd_ft": 0.75,
+   "date": "2023-01-06",
+   "license": "public",
+   "credit": "SANDAG/SanGIS 2023 orthoimagery (Nearmap), 9 in, public domain"
+  },
+  {
+   "id": "ohio-osip",
+   "name": "Ohio OSIP most current (6 in to 1 ft)",
+   "type": "image",
+   "url": "https://maps.ohio.gov/image/rest/services/osip_most_current/ImageServer",
+   "bbox": [
+    -84.82,
+    38.4,
+    -80.52,
+    41.98
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "Ohio OSIP III orthoimagery (OGRIP)"
+  },
+  {
+   "id": "indiana-current",
+   "name": "Indiana current orthoimagery (6 in, 2025)",
+   "type": "image",
+   "url": "https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer",
+   "bbox": [
+    -88.1,
+    37.77,
+    -84.78,
+    41.77
+   ],
+   "gsd_ft": 0.5,
+   "date": "2025",
+   "license": "public",
+   "credit": "Indiana GIO statewide orthoimagery, CC0"
+  },
+  {
+   "id": "ct-2023",
+   "name": "Connecticut 2023 orthoimagery (CT ECO)",
+   "type": "image",
+   "url": "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023/ImageServer",
+   "bbox": [
+    -73.73,
+    40.98,
+    -71.78,
+    42.05
+   ],
+   "gsd_ft": 0.25,
+   "date": "2023",
+   "license": "public",
+   "credit": "CT ECO 2023 statewide orthoimagery"
+  },
+  {
+   "id": "fairfax-2023-3in",
+   "name": "Fairfax County VA 2023 aerial (3 in)",
+   "type": "image",
+   "url": "https://www.fairfaxcounty.gov/gisimagery/rest/services/AerialPhotography/2023AerialPhotography3inch/ImageServer",
+   "bbox": [
+    -77.54,
+    38.59,
+    -77.04,
+    39.06
+   ],
+   "gsd_ft": 0.25,
+   "date": "2023",
+   "license": "public",
+   "credit": "Fairfax County GIS 2023 aerial photography, 3 in"
+  },
+  {
+   "id": "cook-2025",
+   "name": "Cook County IL 2025 orthoimagery (6 in, Chicago)",
+   "type": "image",
+   "url": "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer",
+   "bbox": [
+    -88.27,
+    41.46,
+    -87.52,
+    42.16
+   ],
+   "gsd_ft": 0.5,
+   "date": "2025",
+   "license": "public",
+   "credit": "Cook County GIS 2025 orthoimagery, 6 in",
+   "note": "public county service; no license statement found, credit Cook County"
+  },
+  {
+   "id": "cook-2024",
+   "name": "Cook County IL 2024 orthoimagery (6 in, Chicago)",
+   "type": "image",
+   "url": "https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2024/ImageServer",
+   "bbox": [
+    -88.27,
+    41.46,
+    -87.52,
+    42.16
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "Cook County GIS 2024 orthoimagery, 6 in",
+   "note": "public county service; no license statement found, credit Cook County"
+  },
+  {
+   "id": "boulder-city-2024",
+   "name": "City of Boulder CO 2024 aerial",
+   "type": "image",
+   "url": "https://gis.bouldercolorado.gov/ags_svr1/rest/services/raster/2024_Aerial_City_of_Boulder/ImageServer",
+   "bbox": [
+    -105.31,
+    39.95,
+    -105.17,
+    40.1
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "City of Boulder 2024 aerial imagery",
+   "note": "resolution and public access not confirmed; the probe tells"
+  },
+  {
+   "id": "drapp-2022",
+   "name": "Denver region DRAPP 2022 (6 in; Denver, Boulder, Golden)",
+   "type": "image",
+   "url": "https://gisportal.jeffco.us/image/rest/services/DRAPP/DRAPP2022/ImageServer",
+   "bbox": [
+    -105.75,
+    39.13,
+    -103.7,
+    40.3
+   ],
+   "gsd_ft": 0.5,
+   "date": "2022",
+   "license": "public",
+   "credit": "DRCOG Denver Regional Aerial Photography Project 2022, CC BY 3.0"
+  },
+  {
+   "id": "missouri-2024",
+   "name": "Missouri statewide 2023-24 (6 in)",
+   "type": "image",
+   "url": "https://stateimagery.msdis.missouri.edu/arcgis/rest/services/Missouri_6inch_Statewide_2023_2024_Dynamic/ImageServer",
+   "bbox": [
+    -95.78,
+    35.99,
+    -89.09,
+    40.62
+   ],
+   "gsd_ft": 0.5,
+   "date": "2024",
+   "license": "public",
+   "credit": "MSDIS Missouri statewide 6 in orthoimagery 2023-2024"
+  },
+  {
+   "id": "nys-latest",
+   "name": "New York State latest orthoimagery (NYC 6 in source, served ~1 ft)",
+   "type": "map",
+   "url": "https://orthos.its.ny.gov/arcgis/rest/services/wms/Latest/MapServer",
+   "bbox": [
+    -79.77,
+    40.48,
+    -71.78,
+    45.02
+   ],
+   "gsd_ft": 1.0,
+   "date": "2021-2025",
+   "license": "public",
+   "credit": "NYS ITS GIS orthoimagery program (latest, 2021-2025)"
+  },
+  {
+   "id": "nj-2020",
+   "name": "New Jersey 2020 orthophotography (1 ft)",
+   "type": "map",
+   "url": "https://maps.nj.gov/arcgis/rest/services/Basemap/Orthos_Natural_2020_NJ_WM/MapServer",
+   "bbox": [
+    -75.57,
+    38.92,
+    -73.88,
+    41.36
+   ],
+   "gsd_ft": 1.0,
+   "date": "2020",
+   "license": "public",
+   "credit": "NJOGIS 2020 natural color orthophotography"
+  },
+  {
+   "id": "usgs-naip-plus",
+   "name": "USGS NAIP Plus (NAIP 0.6 m, HRO where flown)",
+   "type": "image",
+   "url": "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer",
+   "bbox": null,
+   "gsd_ft": 1.97,
+   "date": null,
+   "license": "public",
+   "catalog": true,
+   "credit": "USGS NAIP Plus, public domain"
+  },
+  {
+   "id": "usgs-imagery-only",
+   "name": "USGS National Map imagery basemap (HRO / NAIP)",
+   "type": "map",
+   "url": "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer",
+   "bbox": null,
+   "gsd_ft": 1.0,
+   "date": null,
+   "license": "public",
+   "credit": "USGS The National Map imagery, public domain"
+  },
+  {
+   "id": "esri-world-imagery",
+   "name": "Esri World Imagery (Maxar / Vexcel / local, often 0.3 m or better)",
+   "type": "map",
+   "url": "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer",
+   "metadata": "https://metadata.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Metadata_2026_r02/MapServer",
+   "bbox": null,
+   "gsd_ft": 1.0,
+   "date": null,
+   "license": "restricted",
+   "credit": "Esri World Imagery (Esri, Maxar, Earthstar Geographics and the GIS user community); reference and tracing only"
+  }
+ ]
 }
