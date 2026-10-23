@@ -19,7 +19,7 @@ cp cd50-plansets/site_private.example.json cd50-plansets/site_private.json   # o
 python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs
 ```
 
-Output is `cd50-plansets/cd50.pdf` (36 x 24 in sheets). Rename it `<site>_CD50_<YYYY-MM-DD>[_rN].pdf` when issuing. Generated files and `site_private.json` are gitignored, so owner names, emails and phone numbers never land in this public repo.
+Output is `cd50-plansets/cd50.pdf` (36 x 24 in sheets). Rename it `<site>_CD50_<YYYY-MM-DD>[_rN].pdf` when issuing. Generated files and `site_private.json` are gitignored, so owner names, emails and phone numbers stay out of git.
 
 ## Truck path inputs
 

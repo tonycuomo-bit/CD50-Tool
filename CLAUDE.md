@@ -61,7 +61,7 @@ Bollards are required at **all** equipment, in both the drawings and the layout 
   python3 cd50-plansets/cd50.py && node cd50-plansets/pdf.cjs   # cd50.html + cd50_data.json, then cd50.pdf (36x24 in)
   ```
   `cd50.py` prints the bollard count and conduit route lengths. `pdf.cjs` uses globally installed Playwright and launches `/opt/pw-browsers/chromium`, falling back to Playwright's own Chromium. Copy `cd50.pdf` to the dated, revisioned name below. Generated files are gitignored.
-- Owner / contact details: the repo is public, so they never go in git. `cd50.py` reads them from `cd50-plansets/site_private.json` (gitignored; copy `site_private.example.json`). Missing fields print as `[PENDING · FROM EMAIL / MONDAY]`. Do not hard-code names, emails or phone numbers in the code.
+- Owner / contact details: keep them out of git anyway (the repo was public at first and may be shared). `cd50.py` reads them from `cd50-plansets/site_private.json` (gitignored; copy `site_private.example.json`). Missing fields print as `[PENDING · FROM EMAIL / MONDAY]`. Do not hard-code names, emails or phone numbers in the code.
 - Inputs it reads (all in `cd50-plansets/`): `mw_pos.json` (MW cabinet/post positions + rotation), `lines_mw2.svg` (site linework with right-turn-only truck exit), `mw_overlay.svgfrag` (WB-67 swept path polygon), optional `site_private.json`, plus the site aerial at `../cd50-layout/sites/`.
 - Upstream scripts in `cd50-plansets/source/`: `truck.py` (WB-67 kinematics, L1 19.5 / L2 45.5 ft), `cF.json` (truck lane config), `mw3.py` (regenerates the three MW input files from `cF.json`; run it from `source/` and copy outputs up), `compose.py`, `site_poly.npy`. Change truck lanes in `cF.json`, rerun `mw3.py`, then `cd50.py`.
 - It is currently San Ysidro-specific: equipment coordinates, post X positions, yard placement and note text are hard-coded. `PENDING` marks owner/APN fields waiting on approval.
@@ -95,7 +95,7 @@ Tony sends an address; Claude adds the site to the layout tool.
 - Tony's work folder (Windows, OneDrive): `C:\Users\acuom\OneDrive\Documents\HiON Claude`
 - Reference set: `...\HiON Claude\Reference Data and Files\CD50 Design and Data` holds signed CD100 examples (DTC, Madisonville, Golden, Cleveland), Tesla reviews and Review Index, `Lessons Learned.xlsx` (41 lessons, unconfirmed), V4 Docs, MW V4. All PDFs have outlined text, so read them as images. No CAD templates.
 - Project shared folder (Claude project files, `/mnt/project-files/`): same subfolders as this repo, plus issued PDFs, older layout tool versions and architect-derived sketches.
-- Repo: https://github.com/tonycuomo-bit/CD50-Tool (public).
+- Repo: https://github.com/tonycuomo-bit/CD50-Tool (private since 2026-10-23; default branch `main`).
 - Analysis write-up: https://claude.ai/artifact/NJa5JvakJwk2CgqkSgwFpW
 
 ## Active site: San Ysidro (299 E. San Ysidro Blvd, San Diego)
