@@ -67,6 +67,11 @@ def test_layout_tool_requires_the_address():
     assert 'db.doc("aerials/" + id).onSnapshot' in TOOL_HTML and '"/_blob/" + d.asset_id' in TOOL_HTML
 
 
+def test_layout_tool_imports_google_earth():
+    assert 'id="gefile"' in TOOL_HTML and 'function parseKml(' in TOOL_HTML and 'DecompressionStream("deflate-raw")' in TOOL_HTML
+    assert 'function geCalibrate(' in TOOL_HTML
+
+
 def test_blocked_better_names_sharper_sources_and_their_hosts():
     cands = [{'id': 'usgs-naip-plus', 'name': 'NAIP', 'status': 'ok', 'gsd_ft': 1.97},
              {'id': 'cook-2025', 'name': 'Cook', 'status': 'host not reachable (blocked by network policy or offline)'},
