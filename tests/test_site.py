@@ -66,3 +66,21 @@ def test_layout_export_format(site_id):
     assert {g['kind'] for g in lay['chargers']} == {'MW', 'V4'}       # drawings need one MW and one V4 group for now
     for pl in (lay.get('landscape') or {}).get('plants', []):        # generic plants only; species are picked at CD90
         assert pl['species'] == 'TBD' and pl['dia_ft'] > 0 and f'code:"{pl["code"]}"' in tool
+
+
+def test_site_images_sheets(tmp_path):
+    """Layout tool site_images: vicinity map on G-001, boxed lot image on G-003 and sketch on A-100, before A-101."""
+    import base64, io
+    from PIL import Image
+    def uri(fmt):
+        b = io.BytesIO(); Image.new('RGB', (40, 30), 'gray').save(b, fmt); return f'data:image/{fmt.lower()};base64,' + base64.b64encode(b.getvalue()).decode()
+    src = os.path.join(SITES, 'san-ysidro-r6'); site = load('san-ysidro-r6')
+    site['files'] = {k: (os.path.join(src, v) if k != 'layout' and not k.endswith('_caption') else v) for k, v in site['files'].items()}
+    lay = json.load(open(os.path.join(src, site['files']['layout']), encoding='utf-8'))
+    lay['site_images'] = {'vicinity': {'src': uri('JPEG')}, 'lot': {'src': uri('JPEG'), 'install_box': [0.2, 0.2, 0.6, 0.7]}, 'sketch': {'src': uri('PNG')}}
+    json.dump(site, open(tmp_path / 'site.json', 'w')); json.dump(lay, open(tmp_path / site['files']['layout'], 'w'))
+    subprocess.run([sys.executable, os.path.join(ROOT, 'cd50-plansets', 'cd50.py'), str(tmp_path)], check=True, capture_output=True)
+    out = open(tmp_path / 'out' / 'cd50.html', encoding='utf-8').read()
+    assert 'VICINITY MAP' in out and 'PROPOSED EV CHARGING INSTALL AREA' in out
+    nums = re.findall(r'font-size="44"[^>]*>([A-Z]-\d{3})<', out)
+    assert nums[:5] == ['G-001', 'G-002', 'G-003', 'A-100', 'A-101'], nums

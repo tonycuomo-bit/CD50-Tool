@@ -383,6 +383,18 @@ SHEETS = [("G-001","COVER SHEET"),("G-002","GENERAL NOTES"),("A-101","SITE PLAN 
           ("E-301","LOAD CALCULATIONS & SCHEDULES"),("S-501","PAD, FOUNDATION & BOLLARD DETAILS")]
 PLANTS = ((LAYOUT or {}).get('landscape') or {}).get('plants', [])     # generic trees / shrubs from the layout tool, species TBD
 if PLANTS: SHEETS.insert(3, ("L-101", "LANDSCAPE PLAN"))
+# site images from the layout tool (data URIs): vicinity map on G-001; boxed lot image and Aerial Site Sketch result
+# get their own sheets right before the site plan
+SIMG = (LAYOUT or {}).get('site_images') or {}
+for k in ('sketch', 'lot'):
+    if (SIMG.get(k) or {}).get('src'): SHEETS.insert(2, {'lot': ("G-003", "SITE LOCATION & PROPOSED INSTALL AREA"), 'sketch': ("A-100", "AERIAL SITE SKETCH")}[k])
+def img_fit(src, x, y, w, h):
+    """<image> for a data URI fitted inside the box, aspect kept; returns (svg, (ix, iy, iw, ih))."""
+    from PIL import Image; import io
+    iw, ih = Image.open(io.BytesIO(base64.b64decode(src.split(',', 1)[1]))).size
+    k = min(w/iw, h/ih); iw, ih = iw*k, ih*k; ix, iy = x+(w-iw)/2, y+(h-ih)/2
+    return (f'<image x="{ix:.1f}" y="{iy:.1f}" width="{iw:.1f}" height="{ih:.1f}" href="{html.escape(src)}" preserveAspectRatio="none"/>'
+            + R(ix, iy, iw, ih, sw=1.2)), (ix, iy, iw, ih)
 def titleblock(num, title):
     x0, x1 = 2352, 2556; w = x1-x0; o = [R(x0, 36, w, H-72, sw=2)]
     y = 36
@@ -433,11 +445,15 @@ o.append(T(70, 150, PJ['subtitle'], 19))
 o.append(T(70, 176, PJ['location_line'], 15, fill="#444"))
 o.append(L(70, 194, 2300, 194, sw=2))
 # aerial
-img = base64.b64encode(open(site_path(FILES['aerial']), 'rb').read()).decode()
 ax, ay, aw, ah = 70, 240, 840, 630
-o.append(T(ax, ay-14, FILES['aerial_caption'], 13, w="bold"))
-o.append(f'<image x="{ax}" y="{ay}" width="{aw}" height="{ah}" href="data:image/jpeg;base64,{img}" preserveAspectRatio="none"/>')
-o.append(R(ax, ay, aw, ah, sw=1.2))
+if (SIMG.get('vicinity') or {}).get('src'):          # vicinity map from the layout tool in place of the site aerial
+    o.append(T(ax, ay-14, "VICINITY MAP (NOT TO SCALE)", 13, w="bold"))
+    o.append(img_fit(SIMG['vicinity']['src'], ax, ay, aw, ah)[0])
+else:
+    img = base64.b64encode(open(site_path(FILES['aerial']), 'rb').read()).decode()
+    o.append(T(ax, ay-14, FILES['aerial_caption'], 13, w="bold"))
+    o.append(f'<image x="{ax}" y="{ay}" width="{aw}" height="{ah}" href="data:image/jpeg;base64,{img}" preserveAspectRatio="none"/>')
+    o.append(R(ax, ay, aw, ah, sw=1.2))
 # project data
 s, yb = table(960, 240, [("PROJECT DATA", 230), ("", 420)], txt_rows('project_data'), rh=24, sz=11.5); o.append(s)
 # design summary
@@ -468,6 +484,30 @@ s, y = notes(cols[2], 90, "BOLLARD & EQUIPMENT PROTECTION NOTES", txt('bollard_n
 s, y = notes(cols[2], y+30, "ACCESSIBILITY NOTES (CBC 11B)", txt('accessibility_notes'), n=62); o.append(s)
 s, y = notes(cols[3], 90, "OPEN ITEMS FOR CD90", txt('open_items'), n=40); o.append(s)
 pages.append(sheet("G-002", "GENERAL NOTES", "".join(o)))
+
+# ================================================================ G-003 / A-100 (only when the layout tool export has the images)
+if (SIMG.get('lot') or {}).get('src'):
+    o = []
+    svg, (ix, iy, iw, ih) = img_fit(SIMG['lot']['src'], 70, 90, 1720, 1500); o.append(svg)
+    b = SIMG['lot'].get('install_box')
+    if b:
+        x0, y0, x1, y1 = ix+min(b[0], b[2])*iw, iy+min(b[1], b[3])*ih, ix+max(b[0], b[2])*iw, iy+max(b[1], b[3])*ih
+        o.append(R(x0, y0, x1-x0, y1-y0, fill="#dc2626", st="#dc2626", sw=4, extra=' fill-opacity="0.12" stroke-dasharray="14 6"'))
+        ty = y0-12 if y0-12 > iy+20 else y1+26
+        o.append(T(x0, ty, "PROPOSED EV CHARGING INSTALL AREA", 16, w="bold", fill="#b91c1c", extra=' stroke="#fff" stroke-width="4" paint-order="stroke"'))
+    o.append(view_title(70, 1620, "1", "SITE LOCATION & PROPOSED INSTALL AREA", "SCALE: NOT TO SCALE"))
+    s, y = notes(1840, 90, "NOTES", [
+        "Aerial image of the lot supplied with the layout; the boxed area is the proposed EV charging install area.",
+        "Image is for location only and is not to scale. See A-101 and E-101 for the scaled site and electrical plans.",
+        "Install area limits are preliminary (CD50) and subject to owner, utility and AHJ review."], n=36, sz=11.5); o.append(s)
+    o.append(T(1840, y+40, "LEGEND", 14, w="bold"))
+    o.append(R(1840, y+56, 40, 22, fill="#dc2626", st="#dc2626", sw=3, extra=' fill-opacity="0.12" stroke-dasharray="8 4"'))
+    o.append(T(1892, y+72, "Proposed install area", 11.5))
+    pages.append(sheet("G-003", "SITE LOCATION & PROPOSED INSTALL AREA", "".join(o)))
+if (SIMG.get('sketch') or {}).get('src'):
+    o = [img_fit(SIMG['sketch']['src'], 70, 90, 2240, 1500)[0]]
+    o.append(view_title(70, 1620, "1", "AERIAL SITE SKETCH (EXISTING CONDITIONS)", "SCALE: NOT TO SCALE"))
+    pages.append(sheet("A-100", "AERIAL SITE SKETCH", "".join(o)))
 
 # ================================================================ A-101
 def centered(pts, w, h):
