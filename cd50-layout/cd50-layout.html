@@ -109,21 +109,19 @@ dialog.boxdlg::backdrop{background:rgba(10,14,18,.6)}
 
     <section class="block" aria-labelledby="h-addr" id="addrblock">
       <h2 id="h-addr">0 · Project address</h2>
-      <form id="addrform" class="row2" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
-        <label class="f">Site address (required)<input id="addr" type="text" autocomplete="street-address" placeholder="Street, city, state ZIP" required></label>
+      <form id="addrform" class="row2" style="grid-template-columns:auto auto;justify-content:start;align-items:end">
+        <label class="f" style="grid-column:1/-1">Site address (required)<input id="addr" type="text" autocomplete="street-address" placeholder="Street, city, state ZIP" required></label>
         <button class="btn primary" id="b-addr" type="submit">Find aerial</button>
+        <a class="btn primary" id="b-sketchapp" href="https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin" target="_blank" rel="noopener">Open Aerial Site Sketch ↗</a>
       </form>
       <label class="chk"><input id="addr-esri" type="checkbox"> Include reference-only sources (Esri, vendor-licensed county imagery)</label>
+      <label class="chk"><input id="sk-auto" type="checkbox" checked> Open Aerial Site Sketch in a new window when I enter an address (the address goes with it)</label>
       <div class="note" id="addrstatus" role="status" aria-live="polite">Enter the address to start. Every free source that covers the site is checked and the sharpest, newest image loads at an exact scale, north up, pinned on the address.</div>
       <div class="tablewrap" id="aerialcands" hidden></div>
     </section>
 
     <section class="block" aria-labelledby="h-photos" id="photoblock">
       <h2 id="h-photos">Site images and sketch</h2>
-      <div class="btns">
-        <a class="btn primary" id="b-sketchapp" href="https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin" target="_blank" rel="noopener">Open Aerial Site Sketch ↗</a>
-      </div>
-      <label class="chk"><input id="sk-auto" type="checkbox" checked> Open it in a new window when I enter an address (the address is copied, ready to paste)</label>
       <div class="photos">
         <div class="photo" data-slot="vicinity"><b>Vicinity (wide overhead)</b><div class="pv" tabindex="0" role="button" aria-label="Upload the wide overhead image">Upload or drop</div><div class="acts"></div></div>
         <div class="photo" data-slot="lot"><b>Lot, install area boxed</b><div class="pv" tabindex="0" role="button" aria-label="Upload the zoomed lot image">Upload or drop</div><div class="acts"></div></div>
