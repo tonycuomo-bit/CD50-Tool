@@ -112,7 +112,7 @@ dialog.boxdlg::backdrop{background:rgba(10,14,18,.6)}
       <form id="addrform" class="row2" style="grid-template-columns:auto auto;justify-content:start;align-items:end">
         <label class="f" style="grid-column:1/-1">Site address (required)<input id="addr" type="text" autocomplete="street-address" placeholder="Street, city, state ZIP" required></label>
         <button class="btn primary" id="b-addr" type="submit">Find aerial</button>
-        <a class="btn primary" id="b-sketchapp" href="https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin" target="_blank" rel="noopener">Open Aerial Site Sketch ↗</a>
+        <a class="btn primary" id="b-sketchapp" href="https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin" target="_blank" rel="opener">Open Aerial Site Sketch ↗</a>
       </form>
       <label class="chk"><input id="addr-esri" type="checkbox"> Include reference-only sources (Esri, vendor-licensed county imagery)</label>
       <label class="chk"><input id="sk-auto" type="checkbox" checked> Open Aerial Site Sketch in a new window when I enter an address (the address goes with it)</label>
@@ -1037,8 +1037,14 @@ document.getElementById("inspector").onchange = e => {
 
 document.getElementById("file").onchange = e => loadImageFile(e.target.files[0]);
 document.addEventListener("paste", e => {
-  const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
-  if (it) { e.preventDefault(); loadImageFile(it.getAsFile()); }
+  const items = [...(e.clipboardData?.items || [])], it = items.find(i => i.type.startsWith("image/")), tx = items.find(i => i.type === "text/plain");
+  if (!it) return;
+  e.preventDefault(); const f = it.getAsFile();
+  // Aerial Site Sketch copies its PNG with a small JSON note (scale, north) beside it when it cannot message this page
+  if (tx) tx.getAsString(t => { let m = null; try { m = JSON.parse(t); } catch(x){}
+    if (m && m.type === "cd50-sketch-meta"){ const rd = new FileReader(); rd.onload = () => loadSketchResult({...m, png:rd.result}, "pasted"); rd.readAsDataURL(f); }
+    else loadImageFile(f); });
+  else loadImageFile(f);
 });
 function loadImageFile(f) {
   if (!f) return; const rd = new FileReader();
@@ -1051,10 +1057,33 @@ function loadImageFile(f) {
   }; im.src = rd.result; }; rd.readAsDataURL(f);
 }
 
+// ---------- Aerial Site Sketch result back in the layout area: sent by the sketch window (postMessage to the window that
+// opened it) or pasted with its scale note. Loads as the plan background at the sketch's scale, and fills the sketch slot.
+function loadSketchResult(d, how){
+  if (!d || typeof d.png !== "string" || !/^data:image\/png;base64,/.test(d.png)) return false;
+  const im = new Image(); im.onload = () => {
+    const k = Math.min(1, 1800 / Math.max(im.width, im.height)), w = Math.round(im.width * k), h = Math.round(im.height * k);
+    const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d");
+    x.fillStyle = "#fff"; x.fillRect(0, 0, w, h); x.drawImage(im, 0, 0, w, h);
+    const src = c.toDataURL("image/png"), scaled = +d.ppf > 0, ppf = scaled ? +d.ppf * k : w / 140;
+    const ax = 60, ay = 50;
+    S.img = {src, sketchSrc:src, w, h, ppf, x:ax - w / 2 / ppf, y:ay - h / 2 / ppf, sample:false, site:null, linework:true, north:+d.north || 0, fromSketch:true};
+    S.sketch = false; syncInputs(); fit(); render(); setMode(scaled ? "select" : "scale");
+    PH.sketch = {name:d.name || "aerial-sketch.png", src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src}; savePhotos(); drawPhotos();
+    document.getElementById("photonote").textContent = `Aerial Site Sketch ${how} into the layout area${scaled ? `, at its scale (${(1 / ppf).toFixed(2)} ft per pixel)` : "; it had no scale, so set one with Set scale"}. Place equipment on it.`;
+    try { document.getElementById("plan").scrollIntoView({block:"center"}); } catch(e){}
+  }; im.src = d.png;
+  return true;
+}
+window.addEventListener("message", e => {
+  const d = e.data; if (!d || d.type !== "cd50-sketch") return;
+  if (loadSketchResult(d, "came back")) try { e.source && e.source.postMessage({type:"cd50-sketch-ack"}, "*"); } catch(x){}
+});
+
 // ---------- site images: vicinity (wide), lot (with the install area boxed), and the Aerial Site Sketch result
 const SKETCH_URL = "https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin";
 // the address rides along in the link (query and hash, whichever the viewer passes on); Aerial Site Sketch fills it in on load
-const sketchHref = a => a ? `${SKETCH_URL}?address=${encodeURIComponent(a)}#address=${encodeURIComponent(a)}` : SKETCH_URL;
+const sketchHref = a => a ? `${SKETCH_URL}?from=cd50layout&address=${encodeURIComponent(a)}#from=cd50layout&address=${encodeURIComponent(a)}` : `${SKETCH_URL}?from=cd50layout#from=cd50layout`;
 // kept under their own localStorage key so a full store never stops the layout itself from saving
 let PH = {}; try { PH = JSON.parse(localStorage.getItem("cd50photos") || "{}") || {}; } catch(e){}
 function savePhotos(){ try { localStorage.setItem("cd50photos", JSON.stringify(PH)); return true; }

@@ -76,6 +76,8 @@ def test_layout_tool_site_images_and_sketch():
     for slot in ('vicinity', 'lot', 'sketch'):
         assert f'data-slot="{slot}"' in TOOL_HTML
     assert 'id="b-sketchapp"' in TOOL_HTML and 'install_box' in TOOL_HTML and 'site_images:photosExport()' in TOOL_HTML
+    # the sketch comes back by message (or paste with its scale note) into the layout area and the sketch slot
+    assert '"cd50-sketch"' in TOOL_HTML and 'cd50-sketch-ack' in TOOL_HTML and 'cd50-sketch-meta' in TOOL_HTML and 'from=cd50layout' in TOOL_HTML
 
 
 def test_blocked_better_names_sharper_sources_and_their_hosts():
