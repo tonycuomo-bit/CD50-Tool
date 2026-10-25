@@ -77,6 +77,20 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
 @media (max-width:860px){.app{grid-template-columns:1fr;height:auto}.canvaswrap{min-height:480px}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 .sketch-dark{}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.photo{display:grid;gap:4px;align-content:start;min-width:0}
+.photo .pv{position:relative;aspect-ratio:4/3;border:1px dashed var(--rule);border-radius:4px;background:var(--canvas);display:grid;place-items:center;overflow:hidden;cursor:pointer;font-size:11.5px;color:var(--muted);text-align:center;padding:4px}
+.photo .pv img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.photo .pv .hl{position:absolute;border:2px solid var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent);pointer-events:none}
+.photo b{font-size:11.5px;font-weight:600}
+.photo .acts{display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px}
+.photo .acts button{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+dialog.boxdlg{width:min(96vw,1400px);max-width:none;padding:0;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);color:var(--ink)}
+dialog.boxdlg::backdrop{background:rgba(10,14,18,.6)}
+.boxdlg .bh{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.boxdlg .bw{position:relative;max-height:78vh;overflow:auto;background:var(--canvas)}
+.boxdlg canvas{display:block;width:100%;height:auto;cursor:crosshair;touch-action:none}
 .chk{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)}
 .app.locked .side>section:not(#addrblock){opacity:.45}
 .gate{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;background:color-mix(in srgb,var(--canvas) 82%,transparent);
@@ -102,6 +116,21 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
       <label class="chk"><input id="addr-esri" type="checkbox"> Include reference-only sources (Esri, vendor-licensed county imagery)</label>
       <div class="note" id="addrstatus" role="status" aria-live="polite">Enter the address to start. Every free source that covers the site is checked and the sharpest, newest image loads at an exact scale, north up, pinned on the address.</div>
       <div class="tablewrap" id="aerialcands" hidden></div>
+    </section>
+
+    <section class="block" aria-labelledby="h-photos" id="photoblock">
+      <h2 id="h-photos">Site images and sketch</h2>
+      <div class="btns">
+        <a class="btn primary" id="b-sketchapp" href="https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin" target="_blank" rel="noopener">Open Aerial Site Sketch ↗</a>
+      </div>
+      <label class="chk"><input id="sk-auto" type="checkbox" checked> Open it in a new window when I enter an address (the address is copied, ready to paste)</label>
+      <div class="photos">
+        <div class="photo" data-slot="vicinity"><b>Vicinity (wide overhead)</b><div class="pv" tabindex="0" role="button" aria-label="Upload the wide overhead image">Upload or drop</div><div class="acts"></div></div>
+        <div class="photo" data-slot="lot"><b>Lot, install area boxed</b><div class="pv" tabindex="0" role="button" aria-label="Upload the zoomed lot image">Upload or drop</div><div class="acts"></div></div>
+        <div class="photo" data-slot="sketch"><b>Aerial sketch result</b><div class="pv" tabindex="0" role="button" aria-label="Upload the sketch PNG from Aerial Site Sketch">Upload the sketch PNG</div><div class="acts"></div></div>
+      </div>
+      <input id="photofile" type="file" accept="image/*" hidden>
+      <div class="note" id="photonote">Wide overhead of the general area, a closer view of the lot with the proposed install area boxed, and the PNG from Aerial Site Sketch. They go out with Download layout.json.</div>
     </section>
 
     <section class="block" aria-labelledby="h-size">
@@ -224,7 +253,12 @@ svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
       <button class="btn" id="z-in" type="button" aria-label="Zoom in">+</button>
       <button class="btn" id="z-fit" type="button">Fit</button>
     </div>
-    <div class="hint" id="hint">Drag empty space to pan, scroll to zoom.</div>
+    <dialog class="boxdlg" id="boxdlg" aria-labelledby="boxdlg-t">
+  <div class="bh"><b id="boxdlg-t">Drag a box around the proposed install area</b>
+    <div class="btns" style="margin:0"><button class="btn" id="box-clear" type="button">Clear box</button><button class="btn primary" id="box-done" type="button">Done</button></div></div>
+  <div class="bw"><canvas id="boxcv"></canvas></div>
+</dialog>
+<div class="hint" id="hint">Drag empty space to pan, scroll to zoom.</div>
     <div class="canvaswrap">
       <svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="gate" id="gate" hidden>Enter the project address in step 0 to start.</div>
@@ -942,7 +976,8 @@ function siteLayout(){
     routes:R.map(r => { const P = pathPts(r); return {id:r.id, from:r.from, to:r.to, kind:r.kind, n:r.n, size:r.size, cond:r.cond, fn:r.fn,
       path:P.map(p => p.map(r3)), length_ft:+plen(P).toFixed(1)}; })};
 }
-const layoutText = () => JSON.stringify(siteLayout(), null, 1);
+// the site images ride along with the downloaded/copied layout.json (not the Build PDF request, which has a size limit)
+const layoutText = () => JSON.stringify({...siteLayout(), site_images:photosExport()}, null, 1);
 document.getElementById("b-copy").onclick = async (e) => {
   try { await navigator.clipboard.writeText(layoutText()); e.target.textContent = "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
   setTimeout(() => e.target.textContent = "Copy layout.json", 1600);
@@ -1017,6 +1052,77 @@ function loadImageFile(f) {
     S.sketch = true; syncInputs(); fit(); render(); setMode("crop");
   }; im.src = rd.result; }; rd.readAsDataURL(f);
 }
+
+// ---------- site images: vicinity (wide), lot (with the install area boxed), and the Aerial Site Sketch result
+const SKETCH_URL = "https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin";
+// kept under their own localStorage key so a full store never stops the layout itself from saving
+let PH = {}; try { PH = JSON.parse(localStorage.getItem("cd50photos") || "{}") || {}; } catch(e){}
+function savePhotos(){ try { localStorage.setItem("cd50photos", JSON.stringify(PH)); return true; }
+  catch(e){ document.getElementById("photonote").textContent = "This browser's storage is full, so the images will not be kept after a reload. Download layout.json to keep them."; return false; } }
+const photoIn = document.getElementById("photofile"), boxDlg = document.getElementById("boxdlg"), boxCv = document.getElementById("boxcv");
+let photoSlot = null;
+function photosExport(){ const o = {}; for (const [k, v] of Object.entries(PH)) if (v && v.src) o[k] = {name:v.name || null, src:v.src, ...(v.box ? {install_box:v.box.map(n => +n.toFixed(4)), box_units:"fraction of image width/height, [x0,y0,x1,y1] from top left"} : {})}; return o; }
+function drawPhotos(){
+  document.querySelectorAll(".photo").forEach(el => {
+    const k = el.dataset.slot, v = PH[k], pv = el.querySelector(".pv"), acts = el.querySelector(".acts");
+    pv.replaceChildren(); acts.replaceChildren();
+    if (!v){ pv.textContent = k === "sketch" ? "Upload the sketch PNG" : "Upload or drop"; return; }
+    const im = new Image(); im.src = v.src; im.alt = ""; pv.appendChild(im);
+    if (v.box) im.onload = () => { // place the box over the contained image
+      const r = pv.getBoundingClientRect(), s = Math.min(r.width / im.naturalWidth, r.height / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
+      const d = document.createElement("div"); d.className = "hl"; const [x0, y0, x1, y1] = v.box;
+      Object.assign(d.style, {left:`${ox + x0 * w}px`, top:`${oy + y0 * h}px`, width:`${(x1 - x0) * w}px`, height:`${(y1 - y0) * h}px`}); pv.appendChild(d); };
+    const btn = (t, f) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = f; acts.appendChild(b); };
+    if (k === "lot") btn(v.box ? "Edit box" : "Box the install area", () => openBox());
+    btn("Replace", () => pickPhoto(k));
+    btn("Remove", () => { delete PH[k]; savePhotos(); drawPhotos(); });
+  });
+}
+function pickPhoto(k){ photoSlot = k; photoIn.value = ""; photoIn.click(); }
+function takePhoto(k, f){
+  if (!f || !f.type.startsWith("image/")) return;
+  const rd = new FileReader(); rd.onload = () => { const im = new Image(); im.onload = () => {
+    const sc = Math.min(1, 1800 / Math.max(im.width, im.height)), c = document.createElement("canvas"); c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc);
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+    let src = c.toDataURL(k === "sketch" ? "image/png" : "image/jpeg", 0.86);
+    if (src.length > 1500000) src = c.toDataURL("image/jpeg", 0.86);   // a photo-like sketch PNG is too big to keep
+    PH[k] = {name:f.name, src}; savePhotos(); drawPhotos();
+    if (k === "lot") openBox();
+  }; im.src = rd.result; }; rd.readAsDataURL(f);
+}
+photoIn.onchange = e => photoSlot && takePhoto(photoSlot, e.target.files[0]);
+document.querySelectorAll(".photo").forEach(el => {
+  const k = el.dataset.slot, pv = el.querySelector(".pv");
+  pv.onclick = () => (k === "lot" && PH.lot) ? openBox() : pickPhoto(k);
+  pv.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); pv.onclick(); } };
+  pv.ondragover = e => e.preventDefault();
+  pv.ondrop = e => { e.preventDefault(); takePhoto(k, e.dataTransfer.files[0]); };
+});
+// the install-area box is drawn in a large dialog on the lot image
+let boxImg = null, boxDraft = null, boxDrag = null;
+function openBox(){ const v = PH.lot; if (!v) return; boxImg = new Image(); boxImg.onload = () => { boxCv.width = boxImg.naturalWidth; boxCv.height = boxImg.naturalHeight; boxDraft = v.box ? v.box.slice() : null; drawBox(); boxDlg.showModal(); }; boxImg.src = v.src; }
+function drawBox(){ const x = boxCv.getContext("2d"), W = boxCv.width, H = boxCv.height; x.drawImage(boxImg, 0, 0);
+  if (boxDraft){ const [x0, y0, x1, y1] = boxDraft; x.fillStyle = "rgba(179,38,30,.14)"; x.fillRect(x0*W, y0*H, (x1-x0)*W, (y1-y0)*H);
+    x.lineWidth = Math.max(3, W / 300); x.strokeStyle = "#b3261e"; x.strokeRect(x0*W, y0*H, (x1-x0)*W, (y1-y0)*H); } }
+const boxPt = e => { const r = boxCv.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; };
+boxCv.onpointerdown = e => { boxCv.setPointerCapture(e.pointerId); boxDrag = boxPt(e); };
+boxCv.onpointermove = e => { if (!boxDrag) return; const p = boxPt(e); boxDraft = [Math.min(boxDrag[0], p[0]), Math.min(boxDrag[1], p[1]), Math.max(boxDrag[0], p[0]), Math.max(boxDrag[1], p[1])]; drawBox(); };
+boxCv.onpointerup = () => { boxDrag = null; if (boxDraft && (boxDraft[2] - boxDraft[0] < 0.01 || boxDraft[3] - boxDraft[1] < 0.01)) boxDraft = null; drawBox(); };
+document.getElementById("box-clear").onclick = () => { boxDraft = null; drawBox(); };
+document.getElementById("box-done").onclick = () => { PH.lot.box = boxDraft; savePhotos(); boxDlg.close(); drawPhotos(); };
+drawPhotos();
+// Aerial Site Sketch opens in its own window once the address is in; the address goes on the clipboard to paste there
+const skAuto = document.getElementById("sk-auto");
+skAuto.checked = S.sketchAuto !== false; skAuto.onchange = () => { S.sketchAuto = skAuto.checked; save(); };
+function openSketch(a){
+  if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
+  let w = null; try { w = window.open(SKETCH_URL, "cd50-aerial-sketch"); } catch(e){}
+  document.getElementById("photonote").textContent = w ? `Aerial Site Sketch opened in a new window${a ? "; the address is copied, paste it there" : ""}. Bring its PNG back into "Aerial sketch result".`
+    : `Your browser blocked the new window: use Open Aerial Site Sketch above${a ? " (the address is copied, paste it there)" : ""}.`;
+}
+// the button is a plain link (opens even where scripted windows are blocked); it only copies the address on the way
+document.getElementById("b-sketchapp").onclick = () => { const a = S.address || addrIn.value.trim(); if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
+  document.getElementById("photonote").textContent = `Aerial Site Sketch opens in a new window${a ? "; the address is copied, paste it there" : ""}. Bring its PNG back into "Aerial sketch result".`; };
 
 // ---------- Google Earth Pro import: a saved image plus a KML/KMZ placemark (and ideally a path) from the same view.
 // The placemark is the pin. A path gives the exact scale from two clicks; without one, the scale is estimated from the
@@ -1300,7 +1406,9 @@ aerialDb().then(async db => { if (!db) return;
         if (doc.id === mine && !(S.img && S.img.site === site.id)){ S.aerialSite = {...site, src:null}; loadSite(site); addrStatus.textContent = `Loaded from Claude: ${d.msg || d.credit || ""}`; } }
       else if (doc.id === mine && d.status !== "failed") watchAerial(doc.id); });
   } catch(e){} });
-document.getElementById("addrform").onsubmit = e => { e.preventDefault(); const a = addrIn.value.trim(); if (a) findAerial(a); };
+document.getElementById("addrform").onsubmit = e => { e.preventDefault(); const a = addrIn.value.trim(); if (!a) return;
+  if (skAuto.checked && normAddr(a) !== normAddr(S.sketchFor || "")){ S.sketchFor = a; openSketch(a); }   // once per new address
+  findAerial(a); };
 candBox.onchange = e => { const i = e.target.name === "aerial" && +e.target.value; if (lastCands && i !== false) useCand(lastCands.c[i], lastCands.g).catch(err => { addrStatus.textContent = `Could not load that source (${err.message}).`; }); };
 if (S.aerialSite && S.img && S.img.site === S.aerialSite.id && !SITES.some(s => s.id === S.aerialSite.id)){ SITES.push({...S.aerialSite, src:S.img.src}); addSiteOption(S.aerialSite); }
 

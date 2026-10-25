@@ -72,6 +72,12 @@ def test_layout_tool_imports_google_earth():
     assert 'function geCalibrate(' in TOOL_HTML
 
 
+def test_layout_tool_site_images_and_sketch():
+    for slot in ('vicinity', 'lot', 'sketch'):
+        assert f'data-slot="{slot}"' in TOOL_HTML
+    assert 'id="b-sketchapp"' in TOOL_HTML and 'install_box' in TOOL_HTML and 'site_images:photosExport()' in TOOL_HTML
+
+
 def test_blocked_better_names_sharper_sources_and_their_hosts():
     cands = [{'id': 'usgs-naip-plus', 'name': 'NAIP', 'status': 'ok', 'gsd_ft': 1.97},
              {'id': 'cook-2025', 'name': 'Cook', 'status': 'host not reachable (blocked by network policy or offline)'},
