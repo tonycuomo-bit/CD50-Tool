@@ -1055,6 +1055,8 @@ function loadImageFile(f) {
 
 // ---------- site images: vicinity (wide), lot (with the install area boxed), and the Aerial Site Sketch result
 const SKETCH_URL = "https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin";
+// the address rides along in the link (query and hash, whichever the viewer passes on); Aerial Site Sketch fills it in on load
+const sketchHref = a => a ? `${SKETCH_URL}?address=${encodeURIComponent(a)}#address=${encodeURIComponent(a)}` : SKETCH_URL;
 // kept under their own localStorage key so a full store never stops the layout itself from saving
 let PH = {}; try { PH = JSON.parse(localStorage.getItem("cd50photos") || "{}") || {}; } catch(e){}
 function savePhotos(){ try { localStorage.setItem("cd50photos", JSON.stringify(PH)); return true; }
@@ -1116,13 +1118,14 @@ const skAuto = document.getElementById("sk-auto");
 skAuto.checked = S.sketchAuto !== false; skAuto.onchange = () => { S.sketchAuto = skAuto.checked; save(); };
 function openSketch(a){
   if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
-  let w = null; try { w = window.open(SKETCH_URL, "cd50-aerial-sketch"); } catch(e){}
-  document.getElementById("photonote").textContent = w ? `Aerial Site Sketch opened in a new window${a ? "; the address is copied, paste it there" : ""}. Bring its PNG back into "Aerial sketch result".`
-    : `Your browser blocked the new window: use Open Aerial Site Sketch above${a ? " (the address is copied, paste it there)" : ""}.`;
+  document.getElementById("b-sketchapp").href = sketchHref(a);
+  let w = null; try { w = window.open(sketchHref(a), "cd50-aerial-sketch"); } catch(e){}
+  document.getElementById("photonote").textContent = w ? `Aerial Site Sketch opened in a new window${a ? " with the address filled in (it is also copied, in case you need to paste it)" : ""}. Bring its PNG back into "Aerial sketch result".`
+    : `Your browser blocked the new window: use Open Aerial Site Sketch above${a ? " (it carries the address)" : ""}.`;
 }
 // the button is a plain link (opens even where scripted windows are blocked); it only copies the address on the way
-document.getElementById("b-sketchapp").onclick = () => { const a = S.address || addrIn.value.trim(); if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
-  document.getElementById("photonote").textContent = `Aerial Site Sketch opens in a new window${a ? "; the address is copied, paste it there" : ""}. Bring its PNG back into "Aerial sketch result".`; };
+document.getElementById("b-sketchapp").onclick = function(){ const a = S.address || addrIn.value.trim(); this.href = sketchHref(a); if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
+  document.getElementById("photonote").textContent = `Aerial Site Sketch opens in a new window${a ? " with the address filled in (it is also copied, in case you need to paste it)" : ""}. Bring its PNG back into "Aerial sketch result".`; };
 
 // ---------- Google Earth Pro import: a saved image plus a KML/KMZ placemark (and ideally a path) from the same view.
 // The placemark is the pin. A path gives the exact scale from two clicks; without one, the scale is estimated from the
