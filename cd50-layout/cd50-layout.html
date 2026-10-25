@@ -1143,10 +1143,21 @@ drawPhotos();
 // Aerial Site Sketch opens in its own window once the address is in; the address goes on the clipboard to paste there
 const skAuto = document.getElementById("sk-auto");
 skAuto.checked = S.sketchAuto !== false; skAuto.onchange = () => { S.sketchAuto = skAuto.checked; save(); };
+// The address also goes by message: to the sketch window's frames (the page sits in an iframe there) until it answers,
+// and in reply to a request from a sketch page opened from here. Links lose it when the viewer drops the query.
+function postAll(win, msg, depth){ if (!win || depth > 3) return; try { win.postMessage(msg, "*"); } catch(e){}
+  try { for (let i = 0; i < win.frames.length; i++) postAll(win.frames[i], msg, depth + 1); } catch(e){} }
+let addrAcked = false;
+function pushAddress(w, a){ if (!w || !a) return; addrAcked = false; let n = 0;
+  const t = setInterval(() => { if (addrAcked || ++n > 40 || w.closed){ clearInterval(t); return; } postAll(w, {type:"cd50-address", address:a}, 0); }, 500); }
+window.addEventListener("message", e => { const d = e.data; if (!d) return;
+  if (d.type === "cd50-address-ack") addrAcked = true;
+  else if (d.type === "cd50-address-request"){ const a = S.address || addrIn.value.trim(); if (a) try { e.source.postMessage({type:"cd50-address", address:a}, "*"); } catch(x){} } });
 function openSketch(a){
   if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
   document.getElementById("b-sketchapp").href = sketchHref(a);
   let w = null; try { w = window.open(sketchHref(a), "cd50-aerial-sketch"); } catch(e){}
+  pushAddress(w, a);
   document.getElementById("photonote").textContent = w ? `Aerial Site Sketch opened in a new window${a ? " with the address filled in (it is also copied, in case you need to paste it)" : ""}. Bring its PNG back into "Aerial sketch result".`
     : `Your browser blocked the new window: use Open Aerial Site Sketch above${a ? " (it carries the address)" : ""}.`;
 }
