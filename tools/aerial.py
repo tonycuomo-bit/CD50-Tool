@@ -221,16 +221,6 @@ def sites_entry(slug, label, meta, jpg_bytes):
     return e
 
 
-def db_doc(label, meta, ok):
-    """The aerials/<site> document the live layout tool watches (asset_id is filled in after the jpg is uploaded)."""
-    f, g = meta['frame'], meta['geocode']
-    best = next(c for c in ok if c['id'] == meta['chosen'])
-    return {'status': 'ready', 'asset_id': None, 'wFt': f['w_ft'], 'hFt': f['h_ft'], 'pin': [f['w_ft'] / 2, f['h_ft'] / 2],
-            'address': meta['address'], 'label': label, 'geo': {'lon': g['lon'], 'lat': g['lat'], 'source': g['source']},
-            'credit': meta['credit'], 'image': meta['image'],
-            'msg': f"{best['name']}, {best.get('date') or 'date unknown'}, {best['gsd_ft']:.2f} ft native at {f['ft_per_px']:g} ft/px. Scale is set; the pin marks the address."}
-
-
 def add_to_tool(entry, slug, path=TOOL):
     html = open(path, encoding='utf-8').read()
     a = html.index('const SITES = [')
@@ -313,7 +303,6 @@ def main(argv=None):
             'image': stem + '.jpg', 'chosen': best['id'], 'blocked_better': bb, 'credit': credit, 'enhanced': not a.no_enhance,
             'candidates': [{k: v for k, v in c.items() if not k.startswith('_')} for c in cands]}
     json.dump(meta, open(os.path.join(outdir, 'aerial.json'), 'w', encoding='utf-8'), indent=1)
-    json.dump(db_doc(g['matched'], meta, ok), open(os.path.join(outdir, 'tool_doc.json'), 'w', encoding='utf-8'), indent=1)
     print(f"Saved {os.path.relpath(os.path.join(outdir, stem + '.jpg'), ROOT)}  {im.size[0]}x{im.size[1]} px at {ftpx:g} ft/px")
     if best['license'] != 'public': print('WARNING: restricted license; reference and tracing only, do not issue drawings with this image.')
     if a.add_to_tool:
