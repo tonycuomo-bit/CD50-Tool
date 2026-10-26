@@ -12,6 +12,10 @@ PJ, FILES, GEO = SITE['project'], SITE['files'], SITE.get('geometry', {})
 # a site exported from the Site Layout tool carries layout.json: equipment, pads, bollards, conduit paths and chargers
 LAYOUT = json.load(open(site_path(FILES['layout']), encoding='utf-8')) if FILES.get('layout') else None
 NORTH = LAYOUT['frame']['north'] if LAYOUT else GEO['north_deg']
+# how the layout tool knew the background's scale (frame.scale.how): anything but measured is flagged on the plan views
+_SC = ((LAYOUT or {}).get('frame') or {}).get('scale') or {}
+SCALE_FLAG = {'estimated': ' (BACKGROUND SCALE ESTIMATED, VERIFY)', 'unscaled': ' (BACKGROUND NOT TO SCALE, VERIFY)'}.get(_SC.get('how'), '')
+if SCALE_FLAG: print(f"WARNING: background scale is {_SC.get('how')} ({_SC.get('by') or 'no source'}); plan views are flagged to verify")
 UT = PJ['utility']
 
 F = 3.6                       # plan pts per ft (1"=20' at 72 pt/in)
@@ -515,7 +519,7 @@ def centered(pts, w, h):
     return ((min(xs)+max(xs))/2 - w/2, (min(ys)+max(ys))/2 - h/2, w, h)
 VB = centered([i['c'] for i in ITEMS.values()], 1720, 1460) if LAYOUT else tuple(GEO['views']['site_plan']); TX, TY = 590, 80
 o = [plan(TX, TY, VB, 1.0, [site_lines, truck_plain, equipment(tags=True, clear=False)])]
-o.append(view_title(TX, 1620, "1", "SITE PLAN & TRUCK CIRCULATION", 'SCALE: 1" = 20\'-0"'))
+o.append(view_title(TX, 1620, "1", "SITE PLAN & TRUCK CIRCULATION", 'SCALE: 1" = 20\'-0"' + SCALE_FLAG))
 o.append(scalebar(TX+520, 1622)); o.append(north(TX+1640, 1610))
 kn = txt('a101_keynotes')
 s, y = notes(70, 90, "KEYNOTES", kn, n=40, sz=11.5); o.append(s)
@@ -541,7 +545,7 @@ def landscape_layout():
     return "".join(o)
 if PLANTS:
     o = [plan(TX, TY, VB, 1.0, [f'<g opacity="0.42">{site_lines}{truck_plain}</g>', equipment(tags=True, clear=True), landscape_layout()])]
-    o.append(view_title(TX, 1620, "1", "LANDSCAPE PLAN", 'SCALE: 1" = 20\'-0"'))
+    o.append(view_title(TX, 1620, "1", "LANDSCAPE PLAN", 'SCALE: 1" = 20\'-0"' + SCALE_FLAG))
     o.append(scalebar(TX+520, 1622)); o.append(north(TX+1640, 1610))
     sched = {}
     for pl in PLANTS: sched.setdefault(pl['code'], [pl, 0])[1] += 1
@@ -565,7 +569,7 @@ if PLANTS:
 # ================================================================ E-101
 faded = f'<g opacity="0.42">{site_lines}{truck_plain}</g>'
 o = [plan(TX, TY, VB, 1.0, [faded, conduits(), equipment(tags=True, clear=True)])]
-o.append(view_title(TX, 1620, "1", "ELECTRICAL SITE PLAN", 'SCALE: 1" = 20\'-0"'))
+o.append(view_title(TX, 1620, "1", "ELECTRICAL SITE PLAN", 'SCALE: 1" = 20\'-0"' + SCALE_FLAG))
 o.append(scalebar(TX+520, 1622)); o.append(north(TX+1640, 1610))
 s, y = notes(70, 90, "SHEET NOTES", txt('e101_notes'), n=40, sz=11.5); o.append(s)
 o.append(T(70, y+30, "LEGEND", 14, w="bold")); y += 52

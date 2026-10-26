@@ -1,0 +1,305 @@
+<!-- BEGIN AERIAL SITE SKETCH (markup and styles; its script follows the layout script) -->
+<template id="sketch-tpl"><style>
+:host { display: block; color-scheme: light; }
+[hidden]:not([hidden=until-found i]) { display: none !important; }
+img { max-width: 100%; }
+.skbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px max(16px, env(safe-area-inset-left, 0px)); background: var(--ink); color: var(--paper); }
+.skbar button { background: var(--surface); color: var(--ink); border-color: var(--surface); }
+.skbar span { font: 500 .9rem/1.3 var(--font-body); }
+/* Layout: one working column of numbered steps; the two sheet options sit side by side and stack on phones. */
+:host {
+  --paper: #F1F3F2;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #5B6672;
+  --line: #D3D9D7;
+  --accent: #D99A00;      /* parking-stripe yellow */
+  --accent-ink: #1C1600;
+  --warn: #A9471A;
+  --ok: #2E7A4C;
+  --focus: #1E6FD9;
+  --font-display: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+  --font-body: "Barlow", "Segoe UI", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :host(:not([data-theme="light"])) {
+    --paper: #10161B; --surface: #172029; --ink: #E5EAEC; --muted: #9BA7B1; --line: #2A3641;
+    --accent: #F0B21C; --accent-ink: #1C1600; --warn: #EE8F55; --ok: #62BE88; --focus: #6FA8F5;
+    color-scheme: dark;
+  }
+}
+:host([data-theme="dark"]) {
+  --paper: #10161B; --surface: #172029; --ink: #E5EAEC; --muted: #9BA7B1; --line: #2A3641;
+  --accent: #F0B21C; --accent-ink: #1C1600; --warn: #EE8F55; --ok: #62BE88; --focus: #6FA8F5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+.skbody {
+  background: var(--paper); color: var(--ink); font: 16px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 20px; }
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: 3px solid var(--ink); padding-bottom: 10px; }
+h1 { font: 700 2.2rem/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+h1 .stripe { display: inline-block; width: .5em; height: .9em; background: repeating-linear-gradient(90deg, var(--accent) 0 4px, transparent 4px 9px); margin-right: .35em; vertical-align: -.05em; }
+.sub { color: var(--muted); margin: 4px 0 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 .78rem/1 var(--font-mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); background: var(--surface); }
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.chip.no { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+section.step { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.step-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.step-no { font: 700 1rem/1 var(--font-mono); color: var(--accent-ink); background: var(--accent); padding: 4px 7px; border-radius: 2px; }
+h2 { font: 700 1.35rem/1.1 var(--font-display); text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+.hint { color: var(--muted); font-size: .92rem; margin: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+label.f { display: grid; gap: 4px; font-weight: 500; font-size: .92rem; }
+label.f span { font: 600 .74rem/1 var(--font-display); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+input[type=text], input[type=number], textarea, select {
+  font: 16px/1.3 var(--font-body); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 3px; padding: 9px 10px; width: 100%; min-width: 0;
+}
+textarea { min-height: 70px; resize: vertical; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.drop { border: 2px dashed var(--line); border-radius: 4px; padding: 14px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; cursor: pointer; background: var(--paper); }
+.drop.over { border-color: var(--accent); }
+.drop img { max-height: 110px; max-width: 100%; border-radius: 2px; }
+.toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 6px 14px; }
+.toggles label { display: flex; gap: 8px; align-items: center; font-size: .95rem; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button {
+  font: 600 .95rem/1 var(--font-body); padding: 10px 14px; border-radius: 3px; cursor: pointer;
+  border: 1px solid var(--ink); background: var(--surface); color: var(--ink);
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.msg { margin: 0; padding: 10px 12px; border-left: 4px solid var(--line); background: var(--paper); border-radius: 0 3px 3px 0; }
+.msg.warn { border-color: var(--warn); }
+.msg.ok { border-color: var(--ok); }
+.progress { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: .95rem; }
+.progress li { display: flex; gap: 10px; align-items: baseline; }
+.progress .st { font: 500 .75rem/1 var(--font-mono); min-width: 74px; color: var(--muted); }
+.progress .st.run { color: var(--accent); }
+.progress .st.done { color: var(--ok); }
+.progress .st.need { color: var(--warn); }
+.cands { display: grid; gap: 8px; }
+.cand { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--line); border-radius: 3px; }
+.cand .num { font: 500 .95rem var(--font-mono); }
+.cand small { color: var(--muted); display: block; }
+.canvasbox { position: relative; max-width: 100%; max-height: 70vh; overflow: auto; border: 1px solid var(--line); border-radius: 3px; background: var(--paper); }
+.canvasbox canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: pan-x pan-y; }
+.zoombar button { padding: 7px 10px; font-size: .85rem; }
+a.btnlink { font: 600 .9rem/1 var(--font-body); padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); text-decoration: none; background: var(--paper); }
+a.btnlink:hover { border-color: var(--ink); }
+dialog#viewer { width: min(96vw, 1700px); max-width: none; height: 92vh; max-height: none; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
+dialog#viewer::backdrop { background: rgba(10, 14, 18, .62); }
+.viewer-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.viewbox { height: calc(100% - 58px); overflow: auto; background: #FFFFFF; }
+.viewbox > div svg { display: block; width: 100%; height: auto; }
+.sheet { cursor: zoom-in; }
+.sheet-wait { aspect-ratio: 3 / 2; display: grid; place-items: center; text-align: center; padding: 16px; background: var(--paper); color: var(--muted); font-size: .95rem; cursor: default; }
+.sheet-wait b { display: block; font: 700 1.1rem var(--font-display); text-transform: uppercase; letter-spacing: .05em; color: var(--ink); margin-bottom: 4px; }
+@media (prefers-reduced-motion: no-preference) { .sheet svg { animation: sheetin .35s ease-out; } @keyframes sheetin { from { opacity: .35; } to { opacity: 1; } } }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+.opt { display: grid; gap: 10px; min-width: 0; }
+.opt-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.opt-head b { font: 700 1.15rem var(--font-display); text-transform: uppercase; letter-spacing: .05em; }
+.sheet { background: #FFFFFF; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
+.sheet svg { display: block; width: 100%; height: auto; }
+.opt.chosen .sheet { outline: 4px solid var(--accent); outline-offset: 2px; }
+.badge { font: 600 .72rem/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; padding: 4px 6px; border-radius: 2px; background: var(--paper); color: var(--muted); border: 1px solid var(--line); }
+.badge.ex { color: var(--warn); border-color: var(--warn); }
+ul.diff { margin: 0; padding-left: 18px; font-size: .93rem; }
+.rounds { display: flex; flex-wrap: wrap; gap: 6px; }
+.rounds button { font: 500 .8rem var(--font-mono); padding: 6px 9px; }
+.rounds button[aria-pressed=true] { background: var(--ink); color: var(--surface); }
+.mono { font-family: var(--font-mono); font-size: .9rem; }
+@media (prefers-reduced-motion: no-preference) { button { transition: transform .08s ease; } button:active:not(:disabled) { transform: translateY(1px); } }
+</style>
+<div class="skbar"><button type="button" id="sk-back">&larr; Back to the layout</button><span>Aerial Site Sketch, part of the CD50 Site Layout tool. Your layout is kept while you sketch.</span></div>
+<div class="skbody">
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="stripe" aria-hidden="true"></span>Aerial Site Sketch</h1>
+      <p class="sub">Aerial photo in, existing-conditions sketch out. Two options every round. Send the one you pick to the layout, or download it.</p>
+    </div>
+    <div class="chips" id="status" aria-live="polite">
+      <span class="chip" id="st-sample">Claude tracing: checking</span>
+      <span class="chip" id="st-mcp">monday + Drive: checking</span>
+      <span class="chip" id="st-dl">Downloads: checking</span>
+    </div>
+  </header>
+
+  <!-- 1 SITE -->
+  <section class="step" id="s-site">
+    <div class="step-head"><span class="step-no">1</span><h2>Site</h2><p class="hint">Upload the aerial image and tell it which site this is.</p></div>
+    <label class="drop" id="drop" for="file">
+      <img id="thumb" alt="Uploaded aerial image" hidden>
+      <span id="drop-text"><b>Choose or drop the aerial image</b><br><span class="hint">JPEG, PNG or WebP. A straight-down view works best.</span></span>
+      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" hidden>
+    </label>
+    <div class="fields">
+      <label class="f"><span>Site address</span><span class="row" style="gap:6px;flex-wrap:nowrap"><input type="text" id="address" autocomplete="off" placeholder="1201 Main St, Golden, CO" style="flex:1"><button type="button" id="addr-paste" style="padding:9px 10px">Paste</button></span><span class="hint" id="addr-hint" hidden></span></label>
+      <label class="f"><span>Site name</span><input type="text" id="site" autocomplete="off" placeholder="Golden CO"></label>
+      <label class="f"><span>Customer</span><input type="text" id="customer" autocomplete="off" placeholder="Natural Grocers"></label>
+      <label class="f"><span>Revision</span><input type="number" id="rev" min="0" step="1" value="0"></label>
+    </div>
+    <div>
+      <p class="hint" style="margin-bottom:8px">Mark on the sketch:</p>
+      <div class="toggles" id="toggles"></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:.95rem"><input type="checkbox" id="tg-review" checked style="margin-top:4px">
+      <span><b>Internal review (4 runs):</b> before showing options, Claude overlays the sketch on the photo and corrects it: 1) existing stall lines on an enhanced photo, 2) spacing and the whole lot, 3) ADA and irregularities, 4) a final check of everything, including the first three runs' changes. Adds several minutes; turn off for a quick draft.</span></label>
+    <div class="row">
+      <button class="primary" id="start">Start</button>
+      <button id="stop" hidden>Stop</button>
+      <p class="hint" id="start-msg" aria-live="polite"></p>
+    </div>
+    <p class="msg ok" id="addr-from" hidden></p>
+  </section>
+
+  <!-- 2 CHECKS -->
+  <section class="step" id="s-checks" hidden>
+    <div class="step-head"><span class="step-no">2</span><h2>Checks</h2><p class="hint">Project number, scale and anything Claude could not see clearly.</p></div>
+    <p class="msg warn" id="err" hidden role="alert"></p>
+    <ul class="progress" id="progress"></ul>
+
+    <div id="p-project" class="grid2" hidden>
+      <div style="display:grid;gap:10px;min-width:0">
+        <h3 style="margin:0;font:700 1.05rem var(--font-display);text-transform:uppercase;letter-spacing:.05em">Project number</h3>
+        <div id="cands" class="cands"></div>
+        <div class="row">
+          <label class="f" style="flex:1;min-width:180px"><span>Or type it</span><input type="text" id="proj-manual" autocomplete="off" placeholder="HP-00064 or P-00101.001"></label>
+          <button id="proj-use">Use this number</button>
+          <button id="proj-retry">Look up again</button>
+        </div>
+      </div>
+      <div style="display:grid;gap:8px;min-width:0" id="drive-box"></div>
+    </div>
+
+    <div id="p-scale" hidden style="display:grid;gap:10px">
+      <h3 style="margin:0;font:700 1.05rem var(--font-display);text-transform:uppercase;letter-spacing:.05em">Scale</h3>
+      <p class="msg warn" id="scale-msg"></p>
+      <div class="row zoombar" data-for="scale"><button type="button" data-z="in">Zoom in</button><button type="button" data-z="out">Zoom out</button><button type="button" data-z="fit">Fit</button><span class="hint">Ctrl + scroll also zooms. Scroll to move around.</span></div>
+      <div class="canvasbox" id="scale-box"><canvas id="scale-canvas"></canvas></div>
+      <div class="row" id="scale-bar-row">
+        <button class="primary" id="scale-bar-use">Use the scale bar</button>
+        <button id="scale-bar-own">Mark my own length</button>
+      </div>
+      <div class="row" id="scale-mark">
+        <label class="f" style="width:180px"><span>Distance (feet)</span><input type="number" id="scale-ft" min="0.1" step="0.1"></label>
+        <button class="primary" id="scale-use" disabled>Use this length</button>
+        <button id="scale-clear">Clear points</button>
+        <button id="scale-skip">No known length: estimate from 9 ft stalls</button>
+      </div>
+    </div>
+
+    <div id="p-border" hidden style="display:grid;gap:10px">
+      <h3 style="margin:0;font:700 1.05rem var(--font-display);text-transform:uppercase;letter-spacing:.05em">Sketch border</h3>
+      <p class="msg">Click the 4 corners of the area you want sketched. Claude traces only inside them, and the sheet zooms to that area. Zoom in to place the corners exactly, or use the whole image.</p>
+      <div class="row zoombar" data-for="border"><button type="button" data-z="in">Zoom in</button><button type="button" data-z="out">Zoom out</button><button type="button" data-z="fit">Fit</button><span class="hint">Ctrl + scroll also zooms.</span></div>
+      <div class="canvasbox" id="border-box"><canvas id="border-canvas"></canvas></div>
+      <div class="row">
+        <button class="primary" id="border-use" disabled>Use these 4 corners</button>
+        <button id="border-undo">Undo corner</button>
+        <button id="border-whole">Use the whole image</button>
+        <span class="hint" id="border-count">0 of 4 corners</span>
+      </div>
+    </div>
+
+    <div id="p-tracing" hidden style="display:grid;gap:10px">
+      <h3 id="tracing-title" style="margin:0;font:700 1.05rem var(--font-display);text-transform:uppercase;letter-spacing:.05em">Area being traced</h3>
+      <p class="hint" id="tracing-hint" style="margin:0">Claude is tracing the area inside the yellow outline. Your two options appear in step 3 when it finishes.</p>
+      <div class="canvasbox" style="max-height:50vh"><canvas id="trace-canvas" style="cursor:default"></canvas></div>
+    </div>
+
+    <div id="p-question" hidden style="display:grid;gap:10px">
+      <h3 style="margin:0;font:700 1.05rem var(--font-display);text-transform:uppercase;letter-spacing:.05em" id="q-title">Unclear area</h3>
+      <p class="msg" id="q-text"></p>
+      <div class="row zoombar" data-for="q"><button type="button" data-z="in">Zoom in</button><button type="button" data-z="out">Zoom out</button><button type="button" data-z="fit">Fit</button><button type="button" data-z="area">Back to the area</button><span class="hint">Ctrl + scroll also zooms.</span></div>
+      <div class="canvasbox" id="q-box"><canvas id="q-canvas"></canvas></div>
+      <div class="choices" id="q-choices"></div>
+      <div id="q-trace" hidden style="display:grid;gap:10px">
+        <p class="hint">Click around the shape on the image to outline it. Then say what it is.</p>
+        <div class="fields">
+          <label class="f"><span>Type</span>
+            <select id="q-type">
+              <option value="island">Island</option><option value="curb">Curb</option><option value="building">Building</option>
+              <option value="equipment">Equipment</option><option value="aisle">Drive aisle</option><option value="lot_edge">Pavement edge</option>
+            </select></label>
+          <label class="f"><span>What is it?</span><input type="text" id="q-label" autocomplete="off" placeholder="Landscape island with light pole"></label>
+        </div>
+        <div class="row">
+          <button class="primary" id="q-trace-done" disabled>Use my outline</button>
+          <button id="q-trace-undo">Undo point</button>
+          <button id="q-trace-cancel">Back to choices</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 OPTIONS -->
+  <section class="step" id="s-options">
+    <div class="step-head"><span class="step-no">3</span><h2>Options</h2><p class="hint" id="opt-hint">Option A is Basic and Option B is Full. Pick one, or add detail and regenerate.</p></div>
+    <p class="msg" id="opt-status" hidden aria-live="polite"></p>
+    <div class="row" id="pass-retry" hidden>
+      <p class="msg warn" id="pass-retry-msg" style="flex:1;min-width:220px;margin:0"></p>
+      <button class="primary" id="pass-retry-btn">Run it again</button>
+    </div>
+    <div class="row" id="rounds-row" hidden><span class="hint">Rounds:</span><div class="rounds" id="rounds"></div></div>
+    <div class="options">
+      <div class="opt" id="optA">
+        <div class="opt-head"><b>Option A · Basic</b><span class="badge ex" id="exA">Example, not a real site</span></div>
+        <div class="sheet" id="sheetA"></div>
+        <button id="pickA" disabled>Pick A</button>
+      </div>
+      <div class="opt" id="optB">
+        <div class="opt-head"><b>Option B · Full</b><span class="badge ex" id="exB">Example, not a real site</span></div>
+        <div class="sheet" id="sheetB"></div>
+        <button id="pickB" disabled>Pick B</button>
+      </div>
+    </div>
+    <div class="grid2">
+      <div style="min-width:0"><p class="hint" style="margin:0 0 4px">What differs</p><ul class="diff" id="diff"></ul></div>
+      <div style="min-width:0"><p class="hint" style="margin:0 0 4px">Check these</p><ul class="diff" id="checklist"></ul></div>
+    </div>
+    <div style="display:grid;gap:8px">
+      <label class="f"><span>More detail for the next two options</span>
+        <textarea id="detail" placeholder="The south row has 14 stalls, not 12. The island by the entrance has a light pole."></textarea></label>
+      <div class="row"><button id="regen" disabled>Regenerate two new options</button><button id="reborder" disabled>Change the sketch border</button><p class="hint" id="regen-msg" aria-live="polite"></p></div>
+    </div>
+  </section>
+
+  <!-- 4 DOWNLOAD -->
+  <section class="step" id="s-download" hidden>
+    <div class="step-head"><span class="step-no">4</span><h2>Download</h2><p class="hint" id="dl-name"></p></div>
+    <div class="row" id="send-row">
+      <button class="primary" id="send-layout">Send to the layout</button>
+      <p class="hint" style="margin:0">Puts the sketch in the layout area (at its scale) and in the "Aerial sketch result" slot, and switches back to the layout to place equipment.</p>
+    </div>
+    <div class="row">
+      <button id="dl-png">Sketch PNG for the CD50 Site Layout tool</button>
+      <button id="dl-pdf">PDF sheet</button><button id="dl-svg">SVG sheet</button><button id="dl-zip">All four files (ZIP)</button>
+    </div>
+    <p class="hint">The PNG is just the sketch (no title block), ready for the layout tool's "Aerial sketch result" slot. The PDF and SVG are the full 36 x 24 sheet with the title block; the ZIP holds the PDF, the sketch PNG, the SVG and the CAD file (DXF).</p>
+    <p class="msg" id="dl-msg" data-first="1">Save the files into <span class="mono">Reference Data and Files\CD50 Design and Data\Projects\{site}\</span>. The CAD file (DXF) comes only in the ZIP, because the page can only hand over certain file types directly.</p>
+  </section>
+</div>
+
+<dialog id="viewer" aria-labelledby="viewer-title">
+  <div class="viewer-head">
+    <b id="viewer-title" style="font:700 1.1rem var(--font-display);text-transform:uppercase;letter-spacing:.05em">Option</b>
+    <div class="row zoombar" data-for="viewer"><button type="button" data-z="in">Zoom in</button><button type="button" data-z="out">Zoom out</button><button type="button" data-z="fit">Fit</button><button type="button" id="viewer-close">Close</button></div>
+  </div>
+  <div class="viewbox" id="viewer-box"><div id="viewer-inner"></div></div>
+</dialog>
+
+</div></template>
+<!-- END AERIAL SITE SKETCH markup -->

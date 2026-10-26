@@ -7,7 +7,7 @@ Tools HiON EV uses to semi-automate CD50 (preliminary construction design) plan 
 | Folder | Contents |
 | --- | --- |
 | `sites/` | One folder per site: `site.json` (project info, chargers, geometry, sheet text) plus its linework, truck path and aerial. |
-| `cd50-layout/` | Site Layout tool, a single self-contained HTML file. Open it in a browser. |
+| `cd50-layout/` | Site Layout tool, a single self-contained HTML file built from `cd50-layout/src/` by `python3 tools/build_layout.py`. Open it in a browser; edit `src/`, never the built file. |
 | `cd50-plansets/` | `cd50.py` plan set generator, `sizing.py`, and `pdf.cjs` PDF printer. `source/` has the WB-67 truck path scripts that regenerate the MW inputs. |
 | `cd50-intake/` | Draft intake workbook (question set, derived values, checks). |
 
@@ -29,7 +29,7 @@ pip install -r requirements-dev.txt
 python3 -m pytest
 ```
 
-Sizing rules live in `rules/sizing_rules.json`. After changing them, run `python3 tools/sync_rules.py` to update the layout tool.
+Sizing rules live in `rules/sizing_rules.json`. After changing them, run `python3 tools/sync_rules.py` to update the layout tool (it rebuilds it).
 
 ## Truck path inputs
 

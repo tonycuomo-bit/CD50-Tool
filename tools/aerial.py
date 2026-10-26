@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageStat
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCES = os.path.join(ROOT, 'rules', 'aerial_sources.json')
-TOOL = os.path.join(ROOT, 'cd50-layout', 'cd50-layout.html')
+TOOL = os.path.join(ROOT, 'cd50-layout', 'src', 'sites.js')   # the layout tool's SITES; build_layout.py makes the HTML
 FTUS = 1200 / 3937  # m per US survey ft
 SD_BBOX = (-117.61, 32.53, -116.08, 33.51)
 UA = {'User-Agent': 'CD50-Tool aerial finder (HiON EV)'}
@@ -318,6 +318,7 @@ def main(argv=None):
     if best['license'] != 'public': print('WARNING: restricted license; reference and tracing only, do not issue drawings with this image.')
     if a.add_to_tool:
         add_to_tool(sites_entry(slug, g['matched'], meta, buf.getvalue()), slug)
+        import build_layout; build_layout.main([])
         print(f'Added SITES entry "{slug}" to cd50-layout/cd50-layout.html')
     return 0
 
