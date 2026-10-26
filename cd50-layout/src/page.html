@@ -241,6 +241,8 @@ body.sk .app{display:none}
       <h2 id="h-pdf">6 · Plan set PDF</h2>
       <label class="f">Site folder<input id="pdf-site" type="text" placeholder="from the project address" spellcheck="false"></label>
       <div class="note" id="pdf-where"></div>
+      <div class="btns"><button class="btn" id="b-savedir" type="button">Choose save folder…</button></div>
+      <div class="note" id="savedir-note">Download layout saves to your Downloads folder. Choose a folder (for example sites\&lt;site&gt; in your CD50-Tool copy) and it saves layout.json and its images there instead.</div>
       <label class="f">Notes for Claude (optional)<textarea id="pdf-notes" rows="2" placeholder="e.g. move the issue date to Monday"></textarea></label>
       <div class="btns"><button class="btn primary" id="b-pdf" type="button">Build PDF with Claude</button></div>
       <div class="note" id="pdf-status">Sends this layout to Claude, who builds the CD50 plan set and posts the PDF in your CD50 project.</div>
@@ -254,6 +256,7 @@ body.sk .app{display:none}
       <button class="btn" id="m-scale" type="button" aria-pressed="false">Set scale</button>
       <button class="btn" id="m-rotate" type="button" aria-pressed="false" title="Drag an item (or the selected group) around to rotate it. Shift snaps to 15°.">⟳ Rotate</button>
       <button class="btn" id="m-multi" type="button" aria-pressed="false" title="Click items to add or drop them from the selection, or drag a box around them. Shift-click does the same.">Multi-select</button>
+      <button class="btn" id="b-undo" type="button" disabled title="Undo the last change (Ctrl+Z). Keeps the last 4 changes.">↶ Undo</button>
       <span class="sp"></span>
       <button class="btn" id="z-out" type="button" aria-label="Zoom out">−</button>
       <button class="btn" id="z-in" type="button" aria-label="Zoom in">+</button>

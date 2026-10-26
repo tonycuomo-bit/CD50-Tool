@@ -111,3 +111,16 @@ def test_site_folder_follows_the_address(run):
     assert f['auto'] == '1201-main-st' and 'sites/1201-main-st/' in f['where']
     assert f['other'] == '555-center-drive-northwest'                         # a new address starts from its own slug
     assert f['back'] == 'golden-main-r2' and f['reload'] == 'golden-main-r2'  # a typed folder is kept for its address
+
+
+def test_undo_keeps_the_last_four_changes(run):
+    u = run['undo']
+    assert u['start'][1] and u['at6'][0] > u['at0'][0]                     # nothing to undo at first; six nudges moved the item
+    assert u['after6'] == ['↶ Undo (4)', False] and u['afterKey'][0] == '↶ Undo (3)'
+    assert u['end'] == ['↶ Undo', True] and u['at6'][0] > u['at2'][0] > u['at0'][0]   # four steps back, not six
+
+
+def test_download_into_a_chosen_folder(run):
+    d = run['saveDir']
+    assert d['folder'] == 'golden-main' and 'golden-main' in d['note']
+    assert 'layout.json' in d['files'] and d['format'] == 'cd50-layout/2' and 'Saved' in d['button']
