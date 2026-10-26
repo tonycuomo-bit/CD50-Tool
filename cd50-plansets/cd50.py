@@ -9,12 +9,18 @@ SITE_DIR = os.path.abspath(sys.argv[1]); OUT = os.path.join(SITE_DIR, 'out'); os
 site_path = lambda f: os.path.join(SITE_DIR, f)
 SITE = json.load(open(site_path('site.json'), encoding='utf-8'))
 PJ, FILES, GEO = SITE['project'], SITE['files'], SITE.get('geometry', {})
-# a site exported from the Site Layout tool carries layout.json: equipment, pads, bollards, conduit paths and chargers
-LAYOUT = json.load(open(site_path(FILES['layout']), encoding='utf-8')) if FILES.get('layout') else None
+# a site exported from the Site Layout tool carries layout.json: equipment, pads, bollards, conduit paths and chargers.
+# layout_io checks it and resolves its site images (files beside it, sha256, address stamp)
+from layout_io import load_layout, LayoutError, SCALE_FLAGS
+LAYOUT = None
+if FILES.get('layout'):
+    try: LAYOUT, _lw = load_layout(site_path(FILES['layout']))
+    except LayoutError as e: sys.exit(f"ERROR: {e}")
+    for w in _lw: print(f"WARNING: {w}")
 NORTH = LAYOUT['frame']['north'] if LAYOUT else GEO['north_deg']
 # how the layout tool knew the background's scale (frame.scale.how): anything but measured is flagged on the plan views
 _SC = ((LAYOUT or {}).get('frame') or {}).get('scale') or {}
-SCALE_FLAG = {'estimated': ' (BACKGROUND SCALE ESTIMATED, VERIFY)', 'unscaled': ' (BACKGROUND NOT TO SCALE, VERIFY)'}.get(_SC.get('how'), '')
+SCALE_FLAG = SCALE_FLAGS.get(_SC.get('how'), '')
 if SCALE_FLAG: print(f"WARNING: background scale is {_SC.get('how')} ({_SC.get('by') or 'no source'}); plan views are flagged to verify")
 UT = PJ['utility']
 

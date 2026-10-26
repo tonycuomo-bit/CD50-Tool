@@ -113,8 +113,9 @@ function fail(where, e) {
   const tr = $("#p-tracing"); if (tr) tr.hidden = true;
   showWaiting("Stopped. See the red message in step 2.");
 }
-window.addEventListener("unhandledrejection", ev => { if (S.busy) fail("working", ev.reason); });   // the layout tool shares this window
-window.addEventListener("error", ev => { if (S.busy && ev && ev.error) fail("working", ev.error); });
+/* Every async entry point of this page goes through guard(), so its own errors stop it cleanly. There is deliberately no
+   window-wide error listener: the layout tool shares this window, and its errors must not stop a trace in progress. */
+const guard = (where, fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch(e => fail(where, e));
 $("#stop").addEventListener("click", () => S.ctl && S.ctl.abort());
 
 function readInputs() {
@@ -261,6 +262,9 @@ async function runRound(detail) {
   normalizeTrace(trace);
   traceToFull(trace);
   let tidy = finalizeTrace(trace);
+  // no known length: standard 9 ft stalls set the scale, from the trace as drawn and before the reviews, which then cannot
+  // move it (aisleFix); it is not re-estimated from the reviewed rows
+  if (!S.pxPerFt || S.scaleEstimated) stallScale(trace.features);
   if (trace.missing && trace.missing.length) prog("trace", "need", `${trace.features.length} items traced, but ${trace.missing.map(f => PASS_LABEL[f].replace(/^The /, "the ")).join(" and ")} did not finish. Use "Run it again" in step 3.`);
   else prog("trace", "done", `${trace.features.length} items traced`);
   // internal review: overlay the sketch on the photo, 4 runs, before Tony sees options
@@ -277,7 +281,6 @@ async function runRound(detail) {
   if (trace.unclear.length) { prog("q", "need", `${trace.unclear.length} to answer`); await askUnclear(round); prog("q", "done"); }
   else prog("q", "done", "none");
 
-  if (!S.pxPerFt || S.scaleEstimated) stallScale(trace.features);   // no known length: standard 9 ft stalls set the scale
   S.rounds.push(round); S.view = S.rounds.length - 1; S.picked = null;
   prog("opts", "done", "Round " + round.n);
   renderOptions();
@@ -342,21 +345,41 @@ const SHAPES = {
   equipment: `- {"type":"equipment","at":[x,y],"label":"transformer"}  (add "points" for a large pad outline)`,
   dimension: `- {"type":"dimension","p1":[x,y],"p2":[x,y],"what":"aisle width"}  key distances worth dimensioning. Do not convert to feet.`
 };
+const SITE_A = new Set(["lot_edge", "curb", "island", "sidewalk", "building", "aisle"]);
+const PAINT_ROWS = new Set(["stall_row", "stall_line", "ada_space"]);
+const PAINT_FOCUS = new Set(["paint", "paintRows", "paintMarks"]);
+const HALVES = { site: ["siteA", "siteB"], paint: ["paintRows", "paintMarks"] };
+/* Tony's answers from every round, newest first, one per area: an older answer whose box mostly overlaps a newer one is
+   dropped (it would contradict it), and at most 20 are kept, so the prompt does not grow round after round. Skips count
+   too: a skipped area is not asked about again. */
+function earlierAnswers() {
+  const all = [];
+  S.rounds.forEach(r => r.trace.unclear.forEach(u => { const a = r.answers[u.id]; if (a && Array.isArray(u.bbox)) all.push({ u, a }); }));
+  const area = b => Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
+  const overlap = (p, q) => { const w = Math.min(p[2], q[2]) - Math.max(p[0], q[0]), h = Math.min(p[3], q[3]) - Math.max(p[1], q[1]);
+    return w > 0 && h > 0 ? w * h / Math.max(1e-9, Math.min(area(p), area(q))) : 0; };
+  const kept = [];
+  for (const x of all.reverse()) {
+    if (kept.some(k => overlap(k.u.bbox, x.u.bbox) > 0.5)) continue;
+    kept.push(x); if (kept.length >= 20) break;
+  }
+  return kept;
+}
 function buildPrompt(detail, focus) {
   focus = focus || "site";
-  const prev = [];
-  S.rounds.forEach(r => r.trace.unclear.forEach(u => {
-    const a = r.answers[u.id]; if (!a || a.kind === "skip") return;
-    const said = a.kind === "choice" ? u.choices[a.idx].label : `${a.type}: ${a.label || "outlined by Tony"}`;
+  const prev = earlierAnswers().map(({ u, a }) => {
     const cb = [...toCropPt([u.bbox[0], u.bbox[1]]), ...toCropPt([u.bbox[2], u.bbox[3]])].map(Math.round);
-    prev.push(`- Area box ${JSON.stringify(cb)} ("${u.question}"): Tony answered "${said}". Draw it that way and do not ask again.`);
-  }));
+    if (a.kind === "skip") return `- Area box ${JSON.stringify(cb)} ("${u.question}"): Tony skipped this. Draw what you see there and do not ask about it again.`;
+    const said = a.kind === "choice" ? u.choices[a.idx].label : `${a.type}: ${a.label || "outlined by Tony"}`;
+    return `- Area box ${JSON.stringify(cb)} ("${u.question}"): Tony answered "${said}". Draw it that way and do not ask again.`;
+  });
   const last = S.rounds.length ? S.rounds[S.rounds.length - 1].trace : null;
-  // "siteA" and "siteB" split the site pass in two smaller requests, used when it has to be re-run
-  const SITE_A = new Set(["lot_edge", "curb", "island", "sidewalk", "building", "aisle"]);
-  const types = wantedTypes().filter(t => focus === "paint" ? PAINT_TYPES.has(t)
+  // "siteA"/"siteB" and "paintRows"/"paintMarks" split a pass in two smaller requests, used when it has to be re-run
+  const isPaint = PAINT_FOCUS.has(focus);
+  const types = wantedTypes().filter(t => isPaint
+    ? PAINT_TYPES.has(t) && (focus === "paintRows" ? PAINT_ROWS.has(t) : focus === "paintMarks" ? !PAINT_ROWS.has(t) : true)
     : !PAINT_TYPES.has(t) && (focus === "siteA" ? SITE_A.has(t) : focus === "siteB" ? !SITE_A.has(t) : true));
-  const rules = (focus === "paint" ? PAINT_RULES : SITE_RULES).map((r, i) => `${i + 5}. ${r}`).join("\n");
+  const rules = (isPaint ? PAINT_RULES : SITE_RULES).map((r, i) => `${i + 5}. ${r}`).join("\n");
   const shapes = types.map(t => SHAPES[t]).filter(Boolean).join("\n");
   return [
 `You are tracing an aerial (overhead) photograph for an engineering sketch of EXISTING site conditions at an EV charging site.
@@ -435,19 +458,22 @@ async function settlePass(first, detail, focus) {
   const fallback = err => rec ? { value: rec, note: `${PASS_LABEL[focus]} was cut short; ${rec.features.length} items were recovered from it, but some may be missing. Click "Run it again" to fill in the rest.`, partial: true } : { error: err };
   if (e1 && NO_RETRY.has(e1.code)) return fallback(e1);
   S.stageNote = `${PASS_LABEL[focus].replace(/^The /, "the ")} did not finish, re-running it automatically`;
-  const subs = focus === "site" ? ["siteA", "siteB"] : [focus];
+  const subs = HALVES[focus] || [focus];
   const res = await Promise.allSettled(subs.map(p => passCall(detail, p)));
   S.stageNote = "";
   const got = { features: [], unclear: [], declined: [], notes: "" };
-  let n = 0, lastErr = e1;
+  let n = 0, lastErr = e1; const lost = [];   // halves that did not come back whole: offered by "Run it again"
   for (let i = 0; i < res.length; i++) {
     const r = res[i];
     if (r.status === "rejected" && r.reason && r.reason.code === "cancelled") throw r.reason;
-    const v = (r.status === "fulfilled" && okVal(r.value)) ? r.value : salvaged(r.reason);
-    if (v) { n++; mergePass(got, v, subs[i]); } else lastErr = r.status === "rejected" ? r.reason : { code: "invalid_json" };
+    const whole = r.status === "fulfilled" && okVal(r.value), v = whole ? r.value : salvaged(r.reason);
+    if (!whole) lost.push(subs[i]);
+    if (v) { n++; if (!whole) v.features.forEach(f => { if (f && typeof f === "object") f._salv = subs[i]; }); mergePass(got, v, subs[i]); }
+    else lastErr = r.status === "rejected" ? r.reason : { code: "invalid_json" };
   }
   if (!n) return fallback(lastErr);
-  return { value: got, note: `${PASS_LABEL[focus]} did not finish the first time and was re-run automatically${n < res.length ? " (part of it came back)" : ""}.` };
+  return { value: got, partial: lost.length > 0, missing: lost,
+    note: `${PASS_LABEL[focus]} did not finish the first time and was re-run automatically${lost.length ? `; ${lost.map(s => PASS_LABEL[s].replace(/^The /, "the ")).join(" and ")} did not come back whole, so "Run it again" is offered for it` : ""}.` };
 }
 async function callTrace(detail) {
   S.ctl = new AbortController();
@@ -456,21 +482,28 @@ async function callTrace(detail) {
   if (sp.error && pp.error) throw sp.error;
   const base = sp.value ? sp.value : { quality: { ok: true }, features: [], unclear: [], declined: [], notes: "" };
   base.unclear = base.unclear || []; base.declined = base.declined || [];
+  if (!sp.note) base.unclear.forEach(u => { if (u) u.id = unclearId("site"); });   // a first answer keeps Claude's u1, u2: make them unique
   base.missing = []; base.passNotes = [];
   if (sp.note) base.passNotes.push(sp.note);
-  if (sp.partial) base.missing.push("site");
-  if (pp.value) { mergePass(base, pp.value, "paint"); if (pp.note) base.passNotes.push(pp.note); if (pp.partial) base.missing.push("paint"); }
+  if (sp.partial) base.missing.push(...(sp.missing && sp.missing.length ? sp.missing : ["site"]));
+  if (pp.value) { mergePass(base, pp.value, "paint"); if (pp.note) base.passNotes.push(pp.note); if (pp.partial) base.missing.push(...(pp.missing && pp.missing.length ? pp.missing : ["paint"])); }
   else { base.missing.push("paint"); base.passNotes.push(passFailNote("paint", pp.error)); }
   if (sp.error) { base.missing.push("site"); base.passNotes.push(passFailNote("site", sp.error)); }
   return base;
 }
-const PASS_LABEL = { paint: "The parking markings pass", site: "The curbs, islands and lanes pass" };
+const PASS_LABEL = { paint: "The parking markings pass", site: "The curbs, islands and lanes pass",
+  siteA: "The lot border, curbs, islands and buildings pass", siteB: "The lanes, landscaping, poles and equipment pass",
+  paintRows: "The stall rows pass", paintMarks: "The painted lines, striped areas and arrows pass" };
+/* Every unclear-area id is unique for the life of the page (a counter), so answers stored by id never overwrite each other,
+   however many passes and retries add questions to one round. */
+let unclearSeq = 0;
+const unclearId = focus => `${focus}-q${++unclearSeq}`;
 function passFailNote(focus, e) {
   return `${PASS_LABEL[focus]} did not finish, even after an automatic re-run (${sampleMsg(e)}). Click "Run it again" in step 3 to add it.`;
 }
 function mergePass(base, pv, focus) {
   base.features = base.features.concat(pv.features || []);
-  (pv.unclear || []).forEach((u, i) => { if (u) { u.id = focus + "-" + (u.id || "u" + (i + 1)); base.unclear.push(u); } });
+  (pv.unclear || []).forEach(u => { if (u) { u.id = unclearId(focus); base.unclear.push(u); } });
   base.declined = base.declined.concat(pv.declined || []);
   if (pv.notes) base.notes = [base.notes, pv.notes].filter(Boolean).join(" ");
 }
@@ -551,6 +584,7 @@ function serialFeat(f) {
     ["closed", "label", "flow", "color", "surface", "rounded", "what", "angleDeg"].forEach(k => { if (f[k] !== undefined && f[k] !== "") o[k] = f[k]; });
     if (f.r) o.r = Math.round(f.r * (S.crop ? S.W / S.crop.w : 1));
   }
+  if (f._rv) o.changedBy = "review " + f._rv;   // the final review must give a why to undo it (applyReview)
   return JSON.stringify(o);
 }
 const REVIEW_FOCUS = [
@@ -572,7 +606,7 @@ Drive aisles must leave a reasonable space for vehicles to drive. Typical clear 
 {SCALE}
 Measured from the current sketch:
 {AISLES}
-Where an aisle comes out narrower than typical, the rows beside it are probably drawn too deep or pushed into the aisle: check the photo and move or shorten those rows so their stall ends sit on the paint. Do not invent width the photo does not show; local codes vary, so these are sanity checks.
+{AISLE_FIX}
 Then verify the rest of the overlay against the photo, area by area:
 - island, curb, lot border, sidewalk and building outlines follow the photo
 - drive lanes point the right way; painted lines and striped areas are all there
@@ -587,6 +621,7 @@ Check their work and the whole sketch against the photo, area by area:
 - stall rows: on the paint, right count, angle and lean; stripes end at the curb or shared center line; none on medians or islands
 - drive aisles leave a reasonable space to drive (typical with 9 ft stalls: 90° 22–26 ft two-way, 75° 20–22 ft, 60° 16–18 ft, 45° 12–15 ft one-way). Measured now:
 {AISLES}
+{AISLE_FIX}
 - ADA stalls, van stalls and access aisles: all present and on the right stalls
 - islands, curbs, lot border, sidewalks and buildings follow the photo
 - drive lanes and their direction, painted lines, striped areas, arrows
@@ -594,13 +629,21 @@ Check their work and the whole sketch against the photo, area by area:
 - anything missing, doubled, or drawn where nothing exists
 Make only corrections you are sure of. In the summary, say what you corrected and anything Tony should still check by eye.`
 ];
+/* With a measured scale, a narrow aisle points at rows drawn too deep, so the review may move them. With no scale, or one
+   estimated from these same stalls, the aisle widths are measured with a ruler made from the rows under review: "fixing" the
+   rows to typical widths would only make the sketch agree with itself, so then the widths are a report, never a reason to move rows. */
+function aisleFix() {
+  if (S.pxPerFt && !S.scaleEstimated) return "Where an aisle comes out narrower than typical, the rows beside it are probably drawn too deep or pushed into the aisle: check the photo and move or shorten those rows so their stall ends sit on the paint. Do not invent width the photo does not show; local codes vary, so these are sanity checks.";
+  return "The scale here is not measured: it comes from the traced stalls themselves, so these aisle widths are not evidence. Do not move, shorten or recount any row to make an aisle width look typical. Move a row only where the photo shows its stall ends off the paint. If an aisle still looks wrong, say so in the summary for Tony.";
+}
 function reviewPrompt(t, k, two, prior) {
   const cfg = REVIEWS[k - 1], total = REVIEWS.length;
   const gridPerFt = S.pxPerFt ? S.pxPerFt / (S.crop ? S.crop.w : S.W) * 1000 : 0;
   const focus = REVIEW_FOCUS[k - 1]
     .replace("{PRIOR}", (prior && prior.length ? prior : ["(no notes from the earlier reviews)"]).map(n => "- " + n).join("\n"))
-    .replace("{SCALE}", gridPerFt ? `Scale: 1 ft is about ${gridPerFt.toFixed(2)} units on the x grid (24 ft is about ${Math.round(24 * gridPerFt)} units).` : "No scale was set; use the stall width (about 9 ft) as the ruler.")
-    .split("{AISLES}").join(aisleLines(t.features));
+    .replace("{SCALE}", gridPerFt ? `Scale: 1 ft is about ${gridPerFt.toFixed(2)} units on the x grid (24 ft is about ${Math.round(24 * gridPerFt)} units)${S.scaleEstimated ? ", estimated from the traced stalls themselves" : ""}.` : "No scale was set; use the stall width (about 9 ft) as the ruler.")
+    .split("{AISLES}").join(aisleLines(t.features))
+    .split("{AISLE_FIX}").join(aisleFix());
   return `You are checking a traced engineering sketch of a parking lot against the aerial photo it was traced from. This is review ${k} of ${total}.
 ${two ? `Image 1 is the ${cfg.enhance ? "enhanced " : ""}photo. Image 2 is the same ${cfg.enhance ? "enhanced " : ""}photo with the current sketch drawn on top.` : `The image is the ${cfg.enhance ? "enhanced " : ""}photo with the current sketch drawn on top.`}
 ${!cfg.see()
@@ -618,31 +661,48 @@ ${LOT_KNOWLEDGE}
 Stall rows use: {"type":"stall_row","p1":[x,y],"p2":[x,y],"q1":[x,y],"count":N,"angle":60,"leanToward":"p2"} (p1, p2: aisle-side ends of the first and last stripe; q1: far end of the first stripe; leanToward: the end the stripes' far ends point to). ADA stalls: {"type":"ada_space","points":[[x,y],...],"closed":true,"label":"VAN" or ""}. Striped areas: {"type":"hatch_area","points":[[x,y],...],"closed":true,"label":"ADA aisle"}. Other features use the same shapes as above.
 Trace only existing conditions.
 
+Make at most ${REVIEW_CAP(t.features.length)} changes; the most important first.${k === total ? `
+A feature marked "changedBy" was corrected by an earlier review. Remove or replace it only when the photo clearly shows that correction was wrong, and say why in "why"; a change to it without a "why" is ignored.` : ""}
 Reply with only one JSON object:
-{"remove":[indices],"replace":[{"i":index,"feature":{...}}],"add":[{...}],"summary":"one short sentence on what you changed"}
+{"remove":[{"i":index,"why":""}],"replace":[{"i":index,"feature":{...},"why":""}],"add":[{...}],"summary":"one short sentence on what you changed"}
 If everything lines up: {"remove":[],"replace":[],"add":[],"summary":"No changes needed."}`;
 }
-/* Applies a review's corrections. With "only", changes to any other feature type are ignored. */
-function applyReview(t, ed, only) {
-  const conv = f => { const g = cleanFeature(f); if (g && S.crop) featToFull(g); return g; };
+/* Applies a review's corrections. With "only", changes to any other feature type are ignored. Indices refer to the list the
+   review was shown (a snapshot), so removes and adds cannot shift each other. So that later reviews converge instead of
+   undoing each other: each changed feature remembers which review changed it (_rv), the final review may only remove or
+   replace such a feature when it gives a "why", and one review may make at most REVIEW_CAP(n) changes; the rest are held
+   back and reported to Tony. */
+const REVIEW_CAP = n => Math.max(6, Math.ceil(n * 0.3));
+function applyReview(t, ed, only, k) {
+  const conv = f => { const g = cleanFeature(f); if (g && S.crop) featToFull(g); if (g) g._rv = k; return g; };
   const okType = ty => !only || only.has(ty);
-  const list = t.features.slice();
-  const rem = new Set((ed.remove || []).map(Number).filter(i => Number.isInteger(i) && list[i] && okType(list[i].type)));
-  let changed = 0;
+  const list = t.features.slice(), cap = REVIEW_CAP(list.length), last = k === REVIEWS.length;
+  const idx = v => Number(v && typeof v === "object" ? v.i : v), why = v => v && typeof v === "object" && String(v.why || "").trim();
+  // the final review undoing an earlier review's change needs a reason
+  const guarded = (i, v) => last && list[i]._rv && list[i]._rv !== k && !why(v);
+  let changed = 0, held = 0;
+  const take = () => changed < cap ? (changed++, true) : (held++, false);
+  const rem = new Set();
+  (ed.remove || []).forEach(v => { const i = idx(v);
+    if (!Number.isInteger(i) || !list[i] || !okType(list[i].type) || rem.has(i)) return;
+    if (guarded(i, v)) { held++; return; }
+    if (take()) rem.add(i); });
   (ed.replace || []).forEach(r => {
-    const i = Number(r && r.i), g = r && conv(r.feature);
-    if (g && Number.isInteger(i) && list[i] && okType(list[i].type) && okType(g.type)) { list[i] = g; changed++; }
-  });
+    const i = idx(r), g = r && conv(r.feature);
+    if (!(g && Number.isInteger(i) && list[i] && !rem.has(i) && okType(list[i].type) && okType(g.type))) return;
+    if (guarded(i, r)) { held++; return; }
+    if (take()) list[i] = g; });
   const kept = list.filter((f, i) => !rem.has(i));
-  (ed.add || []).forEach(a => { const g = conv(a); if (g && okType(g.type)) { kept.push(g); changed++; } });
+  (ed.add || []).forEach(a => { const g = conv(a); if (g && okType(g.type) && take()) kept.push(g); });
   t.features = kept;
-  return changed + rem.size;
+  return { n: changed, held };
 }
 /* Overlay the sketch on the photo and let Claude correct it, four times (see REVIEWS); run 4 also sees the first three runs' notes.
    Never blocks the options: a review that fails is noted and skipped. */
-async function reviewTrace(t) {
+async function reviewTrace(t, only) {
   const notes = [];
   for (let k = 1; k <= REVIEWS.length; k++) {
+    if (only && !only.includes(k)) continue;
     const cfg = REVIEWS[k - 1];
     const t0 = Date.now(), mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
     const tick = setInterval(() => prog("review", "run", `review ${k} of ${REVIEWS.length} (${cfg.what}) · ${mmss(Date.now() - t0)}`), 1000);
@@ -658,10 +718,11 @@ async function reviewTrace(t) {
       const ed = await caps.sample.json(reviewPrompt(t, k, two, notes), { images: two ? [ob.photo, ob.overlay] : [ob.overlay], modelTier: "complex", cache: false, signal: S.ctl.signal });
       clearInterval(tick);
       if (!ed || typeof ed !== "object") throw { code: "invalid_json" };
-      const n = applyReview(t, ed, cfg.edit());
+      const { n, held } = applyReview(t, ed, cfg.edit(), k);
       if (cfg.enhance && !ob.enhanced) notes.push(`Review ${k}: the photo could not be enhanced in this browser, so the plain photo was used.`);
       finalizeTrace(t);
       notes.push(`Review ${k}: ${n ? (ed.summary || `${n} changes`) : "no changes needed"}.`.replace(/\.\.$/, "."));
+      if (held) notes.push(`Review ${k}: ${held} more change${held > 1 ? "s were" : " was"} held back (over the limit for one review, or undoing an earlier review without a reason); check those areas by eye.`);
     } catch (e) {
       clearInterval(tick);
       if (e && e.code === "cancelled") throw e;
@@ -671,35 +732,44 @@ async function reviewTrace(t) {
   prog("review", "done", notes.map(n => n.replace(/^Review \d+: /, "")).join(" "));
   return notes;
 }
-/* Re-runs only the pass that did not finish and adds its items to the round on screen. */
+/* Re-runs only the pass that did not finish and adds its items to the round on screen. A pass that has already been run
+   again here once is asked for in two smaller halves (HALVES), since the usual cause is an answer cut off for length, so
+   pressing "Run it again" does not repeat the same failing request. Only the final review runs over the result. */
 async function retryMissing() {
   const r = S.rounds[S.view];
   if (!r || !r.trace.missing || !r.trace.missing.length || S.busy) return;
   const focus = r.trace.missing[0];
+  const tries = r.trace.tries = r.trace.tries || {}; tries[focus] = (tries[focus] || 0) + 1;
+  const parts = tries[focus] > 1 && HALVES[focus] ? HALVES[focus] : [focus];
   S.busy = true; setBusy(true); $("#pass-retry-btn").disabled = true;
   const t0 = Date.now(), mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
-  const tick = setInterval(() => prog("trace", "run", `running ${PASS_LABEL[focus].replace(/^The /, "the ")} again · ${mmss(Date.now() - t0)}`), 1000);
+  const tick = setInterval(() => prog("trace", "run", `running ${PASS_LABEL[focus].replace(/^The /, "the ")} again${parts.length > 1 ? " in two halves" : ""} · ${mmss(Date.now() - t0)}`), 1000);
   try {
     S.ctl = new AbortController(); S.stageNote = "";
-    const first = (await Promise.allSettled([passCall(r.detail, focus)]))[0];
-    const got = await settlePass(first, r.detail, focus);
-    if (got.error) throw got.error;
-    const v = got.value;
-    const part = { features: v.features, unclear: v.unclear || [], declined: v.declined || [] };
+    const firsts = await Promise.allSettled(parts.map(p => passCall(r.detail, p)));
+    const gots = await Promise.all(firsts.map((f, i) => settlePass(f, r.detail, parts[i])));
+    if (gots.every(g => g.error)) throw gots[0].error;
+    const part = { features: [], unclear: [], declined: [] }, still = [], notes = [];
+    gots.forEach((g, i) => {
+      if (g.error) { still.push(parts[i]); notes.push(passFailNote(parts[i], g.error)); return; }
+      part.features.push(...g.value.features); part.unclear.push(...(g.value.unclear || [])); part.declined.push(...(g.value.declined || []));
+      if (g.partial) { still.push(...(g.missing && g.missing.length ? g.missing : [parts[i]])); if (g.note) notes.push(g.note); }
+    });
     normalizeTrace(part); traceToFull(part);
-    part.unclear.forEach((u, i) => { u.id = focus[0] + "r" + (i + 1); });
+    part.unclear.forEach(u => { u.id = unclearId(focus); });
     clearInterval(tick);
-    // a full answer replaces any items recovered from an earlier cut-off answer
-    r.trace.features = r.trace.features.filter(f => f._salv !== focus).concat(part.features);
+    // a full answer replaces any items recovered from an earlier cut-off answer of this pass or its halves
+    const covers = new Set([focus, ...(HALVES[focus] || [])]);
+    r.trace.features = r.trace.features.filter(f => !covers.has(f._salv)).concat(part.features);
     r.trace.declined = (r.trace.declined || []).concat(part.declined);
-    if (!got.partial) r.trace.missing = r.trace.missing.filter(x => x !== focus);
-    r.trace.passNotes = (r.trace.passNotes || []).filter(n => !n.startsWith(PASS_LABEL[focus]));
-    if (got.note && got.partial) r.trace.passNotes.push(got.note);
+    r.trace.missing = r.trace.missing.filter(x => x !== focus).concat(still.filter(x => x !== focus || parts.length === 1));
+    r.trace.missing = [...new Set(r.trace.missing)];
+    r.trace.passNotes = (r.trace.passNotes || []).filter(n => ![...covers].some(c => n.startsWith(PASS_LABEL[c]))).concat(notes);
     finalizeTrace(r.trace);
-    prog("trace", "done", `${part.features.length} more items added`);
+    prog("trace", r.trace.missing.length ? "need" : "done", `${part.features.length} more items added` + (r.trace.missing.length ? `; ${r.trace.missing.map(m => PASS_LABEL[m].replace(/^The /, "the ")).join(" and ")} still did not finish` : ""));
     if (S.review) {
       $("#p-tracing").hidden = false;
-      try { r.trace.reviewNotes = await reviewTrace(r.trace); } finally { $("#p-tracing").hidden = true; }
+      try { r.trace.reviewNotes = (r.trace.reviewNotes || []).concat(await reviewTrace(r.trace, [REVIEWS.length])); } finally { $("#p-tracing").hidden = true; }
     }
     r.trace.laneNotes = r.trace.passNotes.concat(finalizeTrace(r.trace), aisleNotes(r.trace.features), r.trace.reviewNotes || []);
     if (part.unclear.length) {
@@ -1439,15 +1509,15 @@ function pick(L) {
   $("#dl-msg").className = "msg";
   $("#s-download").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
-$("#regen").addEventListener("click", async () => {
+$("#regen").addEventListener("click", guard("regenerating", async () => {
   if (S.busy || !S.rounds.length) return;
   $("#regen-msg").textContent = ""; $("#s-download").hidden = true;
   const detail = $("#detail").value.trim();
   if (!detail) { $("#regen-msg").textContent = "Add some detail first, so the new options can differ."; return; }
   await runRound(detail);
-});
-$("#pass-retry-btn").addEventListener("click", () => retryMissing());
-$("#reborder").addEventListener("click", async () => {
+}));
+$("#pass-retry-btn").addEventListener("click", guard("running the pass again", () => retryMissing()));
+$("#reborder").addEventListener("click", guard("redrawing the border", async () => {
   if (S.busy || !S.rounds.length) return;
   $("#regen-msg").textContent = ""; $("#s-download").hidden = true;
   S.busy = true; setBusy(true);
@@ -1455,7 +1525,7 @@ $("#reborder").addEventListener("click", async () => {
   await settleBorder();
   S.busy = false;
   await runRound($("#detail").value.trim());
-});
+}));
 
 /* ---------- scale ---------- */
 function boxAround(a, b, pad) { return [Math.min(a[0], b[0]) - pad, Math.min(a[1], b[1]) - pad, Math.max(a[0], b[0]) + pad, Math.max(a[1], b[1]) + pad]; }
@@ -1899,7 +1969,7 @@ $("#addr-paste").addEventListener("click", async () => {
 /* ---------- back to the layout ---------- */
 function sketchPayload() {
   const r = S.rounds[S.view], ctx = Object.assign(sheetCtx(r), { bare: true }), svg = renderSheet(r, S.picked, ctx);
-  return { svg, meta: { type: "cd50-sketch-meta", v: 1, ppf: ctx.meta.ppf, north: ctx.meta.north, address: S.inputs.address, name: baseName() + ".png",
+  return { svg, meta: { type: "cd50-sketch-meta", v: 1, ppf: ctx.meta.ppf, north: ctx.meta.north, address: S.example ? "" : S.inputs.address, name: baseName() + ".png",
     scale: S.scaleEstimated ? "estimated" : S.pxPerFt ? "measured" : "unscaled", scaleSource: S.scaleSource || "" } };
 }
 // the layout tool listens for CD50.SKETCH (bridge.js), loads the PNG at its scale into the layout area and the sketch slot, and switches back

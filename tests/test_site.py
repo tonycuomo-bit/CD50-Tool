@@ -60,7 +60,9 @@ def test_generator_matches_golden(site_id, tmp_path):
 def test_layout_export_format(site_id):
     lay = json.load(open(os.path.join(SITES, site_id, load(site_id)['files']['layout']), encoding='utf-8'))
     tool = open(os.path.join(ROOT, 'cd50-layout', 'cd50-layout.html'), encoding='utf-8').read()
-    assert lay['format'] == 'cd50-layout/1' and 'format:"cd50-layout/1"' in tool
+    sys.path.insert(0, os.path.join(ROOT, 'cd50-plansets')); import layout_io
+    assert layout_io.check(lay) == []                                # current format, nothing to warn about
+    assert f'LAYOUT_FORMAT = "{layout_io.CURRENT}"' in tool and lay['format'] == layout_io.CURRENT
     ids = {i['id'] for i in lay['items']}
     assert all(b['item'] in ids for b in lay['bollards']) and all(r['from'] in ids and r['to'] in ids for r in lay['routes'])
     assert {g['kind'] for g in lay['chargers']} == {'MW', 'V4'}       # drawings need one MW and one V4 group for now

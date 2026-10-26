@@ -131,7 +131,7 @@ body.sk .app{display:none}
         <div class="photo" data-slot="sketch"><b>Aerial sketch result</b><div class="pv" tabindex="0" role="button" aria-label="Upload the sketch PNG from Aerial Site Sketch">Upload the sketch PNG</div><div class="acts"></div></div>
       </div>
       <input id="photofile" type="file" accept="image/*" hidden>
-      <div class="note" id="photonote">Wide overhead of the general area, a closer view of the lot with the proposed install area boxed, and the PNG from Aerial Site Sketch. They go out with Download layout.json.</div>
+      <div class="note" id="photonote">Wide overhead of the general area, a closer view of the lot with the proposed install area boxed, and the PNG from Aerial Site Sketch. They belong to this project address and go out with Download layout (a zip with layout.json and the images).</div>
     </section>
 
     <section class="block" aria-labelledby="h-size">
@@ -191,7 +191,7 @@ body.sk .app{display:none}
         <button class="btn" id="b-arrange" type="button">Re-arrange all</button>
         <button class="btn" id="b-reroute" type="button">Reset conduit paths</button>
         <button class="btn" id="b-copy" type="button">Copy layout.json</button>
-        <button class="btn" id="b-dl" type="button">Download layout.json</button>
+        <button class="btn" id="b-dl" type="button">Download layout</button>
       </div>
       <div class="note">Drag equipment to move it. Select it to rotate. Pads are hatched; dashed outlines are working clearances.</div>
     </section>
@@ -663,17 +663,29 @@ const SITES = [
 
 ];
 
+// ---------- export contract with cd50-plansets/cd50.py (checked there by layout_io.py, described in cd50-layout/layout-format.md).
+// TOOL_BUILD is filled in by tools/build_layout.py with a hash of src/, so a build can be traced to the tool that made its layout.
+const LAYOUT_FORMAT = "cd50-layout/2", TOOL_BUILD = "fb1a16e548c4";
+
 // ---------- state
 const DEFAULT = {product:"V4", posts:4, inputKva:499, mwPosts:2, mwInputKva:1247, items:{}, routes:{}, img:null, view:null, sketch:true, opacity:0.8, bollards:true,
   park:{jur:"CA", stripe:"w4", w:9, l:18, stencil:true, sign:"tesla", aisleCol:"white"}, pk:{}};
 let S = {...structuredClone(DEFAULT), ...(load() || {})};
 S.park = {...DEFAULT.park, ...(S.park || {})}; S.pk = S.pk || {};
 const O = id => S.items[id] || S.pk[id];
+// one address, written different ways ("299 E. San Ysidro Blvd" / "299 east san ysidro boulevard"), compares equal
+const normAddr = a => String(a || "").toLowerCase().replace(/[.,#]/g, " ").replace(/\b(east)\b/g, "e").replace(/\b(west)\b/g, "w")
+  .replace(/\b(north)\b/g, "n").replace(/\b(south)\b/g, "s").replace(/\b(boulevard)\b/g, "blvd").replace(/\b(drive)\b/g, "dr")
+  .replace(/\b(street)\b/g, "st").replace(/\b(avenue)\b/g, "ave").replace(/\b(northwest)\b/g, "nw").replace(/\b(northeast)\b/g, "ne")
+  .replace(/\b(southwest)\b/g, "sw").replace(/\b(southeast)\b/g, "se").replace(/\s+/g, " ").trim();
+const addrKey = a => normAddr(a).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "none";
+const sameAddr = (a, b) => !a || !b || normAddr(a) === normAddr(b);   // an unknown address matches anything
 // Every background is placed so the site point (the address pin, or the centre of a sketch sent at its scale) lands here, in
 // tool feet, near the default equipment row. Load site, the sketch result, Google Earth import and Sketch view all use it.
 const SITE_PT = [60, 50];
 // How the background's scale is known, exported with layout.json (frame.scale) so the plan set can flag an estimate:
-// measured (preset, a marked length, stalls, an Earth path), estimated (Earth saved view, sketch from 9 ft stalls), unscaled.
+// measured (preset, a marked length, an Earth path), assumed (a count of standard 9 ft stalls), estimated (Earth saved view,
+// sketch from 9 ft stalls), unscaled. Anything but measured is flagged on the plan views.
 const setScale = (I, how, by) => { I.scale = {how, by}; return I; };
 const scaleHow = I => (I && I.scale && I.scale.how) || (I && I.guess ? "unscaled" : "measured");
 // ---------- browser storage. The layout goes to localStorage; its images (data URIs, often over 1 MB each) go to IndexedDB,
@@ -694,7 +706,7 @@ function keepImage(key, src){
   return "idb:" + key;
 }
 function storeWarn(what, e){ const w = document.getElementById("storewarn"); if (!w) return; w.hidden = false;
-  w.textContent = `This browser did not keep the ${what} (${(e && (e.name || e.message)) || "storage error"}), so they will be gone after a reload. Download layout.json to keep your work.`; }
+  w.textContent = `This browser did not keep the ${what} (${(e && (e.name || e.message)) || "storage error"}), so they will be gone after a reload. Download layout to keep your work.`; }
 function save(){
   let o = S;
   if (S.img){ const I = S.img; o = {...S, img:{...I, src:keepImage("bg", I.src), sketchSrc:I.sketchSrc === I.src ? "same" : keepImage("bgsketch", I.sketchSrc)}}; }
@@ -708,8 +720,7 @@ async function restoreImages(){
     const src = await get(I.src, "bg"), sk = I.sketchSrc === "same" ? src : await get(I.sketchSrc, "bgsketch");
     if (S.img === I){ if (src){ I.src = src; I.sketchSrc = sk || src; } else { lost = true; S.img = sampleLot(); } }
   }
-  for (const [k, v] of Object.entries(PH)){ if (typeof v?.src !== "string" || !v.src.startsWith("idb:")) continue;
-    const d = await IDB.get("ph-" + k).catch(() => null); if (d){ kept["ph-" + k] = d; v.src = d; } else { delete PH[k]; lost = true; } }
+  if (await restorePhotos()) lost = true;
   if (lost) storeWarn("saved images", {name:"not found"});
   drawPhotos(); syncInputs(); render();
 }
@@ -1295,6 +1306,7 @@ function syncInputs(){
   const how = scaleHow(S.img), st = document.getElementById("scalestat");
   st.hidden = !S.img || S.img.sample; st.className = "note" + (how === "measured" ? "" : " warn");
   st.textContent = !S.img ? "" : how === "measured" ? `Scale: ${(1 / S.img.ppf).toFixed(2)} ft per pixel, from ${(S.img.scale && S.img.scale.by) || "a set length"}.`
+    : how === "assumed" ? `Scale: ${(1 / S.img.ppf).toFixed(2)} ft per pixel, from ${(S.img.scale && S.img.scale.by) || "standard stalls"}. Stall widths vary (8.5 to 10 ft), so the plan set marks this scale to verify; set it from a known length (a survey dimension or measured curb) to clear that.`
     : how === "estimated" ? `Scale estimated (${(S.img.scale && S.img.scale.by) || "no measurement"}). Check it: Set scale, then click stripe centres a few stalls apart (standard stalls are 9 ft).`
     : "No scale yet. Set scale, then click stripe centres a few stalls apart (standard stalls are 9 ft), or both ends of a known length.";
   const site = S.img && SITES.find(s => s.id === S.img.site); const sn = document.getElementById("sitenote");
@@ -1331,6 +1343,9 @@ document.getElementById("pk-ins").onchange = e => { const f = e.target.dataset.p
 const siteSel = document.getElementById("site");
 siteSel.innerHTML = SITES.map(s => `<option value="${s.id}">${s.label}</option>`).join("");
 function loadSite(site){
+  if (!site) return;
+  // a saved site with its own address is that project: switch to it (which sets the last address's site images aside)
+  if (site.address && !sameAddr(site.address, S.address)) setAddress(site.address);
   const im = new Image(); im.onload = () => {
     const w = im.width, h = im.height, ppf = w / site.wFt;
     let sk = site.sketchSrc; if (!sk) try { sk = makeSketch(im, w, h); } catch(e){ sk = site.src; }
@@ -1382,7 +1397,7 @@ function siteLayout(){
     for (const b of bollards(it, s)) boll.push({item:it.id, kind:b.k, xy:tr([b.x, b.y])});
   }
   const im = S.img;
-  return {format:"cd50-layout/1", exported:new Date().toISOString().slice(0, 10), project:{address:S.address || null, geo:S.geo || null},
+  return {format:LAYOUT_FORMAT, exported:new Date().toISOString().slice(0, 10), tool:{build:TOOL_BUILD}, project:{address:S.address || null, geo:S.geo || null},
     frame:im ? {site:im.site || null, origin_ft:[r3(im.x), r3(im.y)], size_ft:[r3(im.w / im.ppf), r3(im.h / im.ppf)], north:im.north || 0,
       scale:{how:scaleHow(im), by:(im.scale && im.scale.by) || null}} : null,
     sizing:{total_kva:z.totalKva, xfmr_kva:z.xfmr, service_amps:z.svcAmps, service_tag:z.svcTag},
@@ -1392,38 +1407,101 @@ function siteLayout(){
     routes:R.map(r => { const P = pathPts(r); return {id:r.id, from:r.from, to:r.to, kind:r.kind, n:r.n, size:r.size, cond:r.cond, fn:r.fn,
       path:P.map(p => p.map(r3)), length_ft:+plen(P).toFixed(1)}; })};
 }
-// the site images ride along with the downloaded/copied layout.json as data URIs. The Build PDF request has a size limit,
-// so there they go up to the page's asset store first and travel as asset ids (Claude fetches them before the build).
+// layout.json carries the design only (a few KB). The site images never ride inside it as data URIs, which made it 99%
+// image bytes: Download puts them beside it in a zip (images/<slot>.<ext>, each with its sha256 and address stamp), Build PDF
+// sends asset ids from the page's asset store (Claude fetches them before the build), and Copy leaves them out.
 function dataUrlBlob(u){ const [h, b64] = u.split(","), bin = atob(b64), a = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], {type:(h.match(/^data:([^;]+)/) || [])[1] || "image/png"}); }
+async function sha256(blob){ try { const h = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join(""); } catch(e){ return null; } }
+const imgExt = t => ({"image/png":"png", "image/jpeg":"jpg", "image/webp":"webp", "image/gif":"gif"})[t] || "img";
 async function siteImageAssets(){
   const assets = window.claude?.use ? await window.claude.use("assets").catch(() => null) : null, out = {}, ex = photosExport();
   if (!assets || !Object.keys(ex).length) return {out, missing:Object.keys(ex)};
   for (const [k, v] of Object.entries(ex)){
-    const p = PH[k]; if (!(p.asset && p.asset.n === p.src.length)){ const r = await assets.upload(dataUrlBlob(p.src)); p.asset = {id:r.id, n:p.src.length}; }
-    const {src, ...rest} = v; out[k] = {...rest, asset_id:p.asset.id};
+    const p = PH[k], blob = dataUrlBlob(p.src);
+    if (!(p.asset && p.asset.n === p.src.length)){ const r = await assets.upload(blob); p.asset = {id:r.id, n:p.src.length}; }
+    const {src, ...rest} = v; out[k] = {...rest, asset_id:p.asset.id, sha256:await sha256(blob)};
   }
   savePhotos(); return {out, missing:[]};
 }
-const layoutText = () => JSON.stringify({...siteLayout(), site_images:photosExport()}, null, 1);
+// the zip: layout.json plus images/; unzip it into sites/<site>/ and cd50.py reads the images from there
+async function layoutZip(){
+  const ex = photosExport(), imgs = {}, z = new JSZip();
+  for (const [k, v] of Object.entries(ex)){ const blob = dataUrlBlob(v.src), file = `images/${k}.${imgExt(blob.type)}`, {src, ...rest} = v;
+    z.file(file, blob); imgs[k] = {...rest, file, sha256:await sha256(blob)}; }
+  z.file("layout.json", JSON.stringify({...siteLayout(), site_images:imgs}, null, 1));
+  return {blob:await z.generateAsync({type:"blob"}), n:Object.keys(imgs).length};
+}
+const copyText = () => { const ex = photosExport(), imgs = {};
+  for (const [k, v] of Object.entries(ex)){ const {src, ...rest} = v; imgs[k] = {...rest, omitted:"use Download layout for the image files"}; }
+  return JSON.stringify({...siteLayout(), site_images:imgs}, null, 1); };
 document.getElementById("b-copy").onclick = async (e) => {
-  try { await navigator.clipboard.writeText(layoutText()); e.target.textContent = "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
+  try { await navigator.clipboard.writeText(copyText()); e.target.textContent = Object.keys(photosExport()).length ? "Copied (without images)" : "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
   setTimeout(() => e.target.textContent = "Copy layout.json", 1600);
 };
 // In the claude.ai viewer, saves go through the downloads capability; opened as a local file, a plain link works.
+// With site images it saves <site>-layout.zip (layout.json + images/), without them a plain layout.json.
 document.getElementById("b-dl").onclick = async (e) => {
+  const label = e.target.textContent, ex = Object.keys(photosExport()).length;
+  let file;
+  try { file = ex ? {filename:`${pdfFolder() || "site"}-layout.zip`, data:(await layoutZip()).blob} : {filename:"layout.json", data:copyText()}; }
+  catch(err){ e.target.textContent = "Could not pack the images"; setTimeout(() => e.target.textContent = label, 2400); return; }
   const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
   if (dl) {
-    try { await dl.save({filename: "layout.json", data: layoutText()}); }
-    catch(err){ if (err?.code !== "declined") { e.target.textContent = "Download blocked, use Copy"; setTimeout(() => e.target.textContent = "Download layout.json", 2400); } }
+    try { await dl.save(file); }
+    catch(err){ if (err?.code !== "declined") { e.target.textContent = "Download blocked, use Copy"; setTimeout(() => e.target.textContent = label, 2400); } }
     return;
   }
-  const a =document.createElement("a"); a.href = URL.createObjectURL(new Blob([layoutText()], {type:"application/json"})); a.download = "layout.json";
+  const blob = typeof file.data === "string" ? new Blob([file.data], {type:"application/json"}) : file.data;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file.filename;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 // Build PDF: in the claude.ai viewer, fire Tony's "Build PDF" scheduled task through the Claude Code Remote connector,
 // which wakes the CD50 Claude session with this layout. Opened as a local file, save layout.json and copy a Claude Code prompt.
 const BUILD_TRIGGER = "trig_01SUGXsC5acu3krHpFg7uN6A";
+// Each build gets an id and a status doc builds/<id> in the page's db: {status: requested|working|ready|failed, site, address,
+// msg, pdf, at}. Claude moves it along and the page shows it, so a failed build is not mistaken for a slow one. While a build
+// of a site is open the button does not send that site again (no duplicate _rN), unless it has had no answer for BUILD_STALE_MIN.
+const BUILD_STALE_MIN = 30, OPEN_BUILD = new Set(["requested", "working"]);
+const hhmm = t => new Date(t || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+let buildDbP = null, buildWatch = null;
+const buildDb = () => buildDbP || (buildDbP = window.claude?.use ? window.claude.use("db").catch(() => null) : Promise.resolve(null));
+const buildStale = d => Date.now() - (+d.at || 0) > BUILD_STALE_MIN * 60000;
+async function openBuild(db, site){
+  try { const q = await db.collection("builds").where("site", "==", site).get();
+    for (const doc of q.docs){ const d = doc.data() || {};
+      if (!OPEN_BUILD.has(d.status)) continue;
+      if (buildStale(d)){ db.doc("builds/" + doc.id).update({status:"failed", msg:`no answer from Claude after ${BUILD_STALE_MIN} minutes`}).catch(() => {}); continue; }
+      return {id:doc.id, d}; } }
+  catch(e){}
+  return null;
+}
+function watchBuild(db, id){
+  if (buildWatch) buildWatch();
+  const stop = () => { if (buildWatch) buildWatch(); buildWatch = null; if (S.build && S.build.id === id){ delete S.build; save(); } };
+  buildWatch = db.doc("builds/" + id).onSnapshot(snap => {
+    const d = snap.exists ? snap.data() : null; if (!d) return;
+    if (d.status === "ready"){ stop(); pdfStatus.textContent = `PDF ready for ${d.site}: ${d.pdf || "posted in your CD50 project"}.` + (d.msg ? ` ${d.msg}` : ""); }
+    else if (d.status === "failed"){ stop(); pdfStatus.textContent = `Claude could not build ${d.site}: ${d.msg || "no reason given"}. Fix that and press Build PDF again, or use Download layout.`; }
+    else if (buildStale(d)){ stop(); pdfStatus.textContent = `No answer from Claude on ${d.site} since ${hhmm(d.at)}. Press Build PDF to send it again, or use Download layout.`; }
+    else pdfStatus.textContent = `Claude is building ${d.site} (sent ${hhmm(d.at)}): ${d.msg || d.status}…`;
+  }, () => {});
+}
+// pick up a build that was still open when the page was closed
+if (S.build) buildDb().then(db => { if (db && S.build) watchBuild(db, S.build.id); });
+// Aerials Claude fetched for the removed Find aerial step are in the page db as aerials/<site>; ready ones are listed under
+// Saved site imagery (Load site switches to their address). Read only: nothing waits on a request any more, so a doc left
+// in requested or working by a session that died is simply not listed.
+buildDb().then(async db => { if (!db) return;
+  try { const q = await db.collection("aerials").get();
+    q.docs.forEach(doc => { const d = doc.data() || {};
+      if (d.status !== "ready" || !d.asset_id || !(d.wFt > 0) || !Array.isArray(d.pin)) return;
+      const site = {id:"addr-" + doc.id, folder:doc.id, label:d.label || d.address || doc.id, wFt:d.wFt, hFt:d.hFt, pin:d.pin, address:d.address || null,
+        credit:d.credit || "", src:"/_blob/" + d.asset_id};
+      if (SITES.some(s => s.id === site.id)) return;
+      SITES.push(site); siteSel.add(new Option(site.label, site.id)); });
+  } catch(e){} });
 const SITE_FOLDER = {"san-ysidro-299e":"san-ysidro-r6", "san-ysidro-299e-sketch":"san-ysidro-r6"};
 const pdfSite = document.getElementById("pdf-site"), pdfStatus = document.getElementById("pdf-status");
 const pdfFolder = () => pdfSite.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || SITE_FOLDER[S.img?.site] || (SITES.find(s => s.id === S.img?.site) || {}).folder || "";
@@ -1435,25 +1513,34 @@ document.getElementById("b-pdf").onclick = async (e) => {
   e.target.disabled = true;
   if (mcp){
     pdfStatus.textContent = "Sending to Claude…";
+    const db = await buildDb();
+    const open = db ? await openBuild(db, site) : null;
+    if (open){
+      pdfStatus.textContent = `A build of ${site} is already with Claude (sent ${hhmm(open.d.at)}, ${open.d.msg || open.d.status}). This button sends again once it finishes, or after ${BUILD_STALE_MIN} minutes without an answer.`;
+      watchBuild(db, open.id); e.target.disabled = false; return;
+    }
+    const id = `${site}-${Date.now().toString(36)}`.slice(0, 120);
     try {
       let imgs = {out:{}, missing:[]};
       try { imgs = await siteImageAssets(); } catch(err){ imgs.missing = Object.keys(photosExport()); }
-      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({site, notes, layout: {...siteLayout(), site_images:imgs.out}})}, {cache:false});
-      const t = new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
-      pdfStatus.textContent = `Sent ${site} to Claude at ${t}. The PDF is usually posted in your CD50 project within 10 minutes.`
-        + (imgs.missing.length ? ` The site images (${imgs.missing.join(", ")}) could not be attached, so their sheets will be left out; use Download layout.json for those.` : "")
-        + " If nothing arrives, the Claude session behind this button may have ended: use Download layout.json and send it to Claude.";
+      if (db) try { await db.doc("builds/" + id).set({status:"requested", site, address:S.address || null, msg:"Waiting for Claude", at:Date.now()}); } catch(err){}
+      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({build_id: db ? id : null, site, notes, layout: {...siteLayout(), site_images:imgs.out}})}, {cache:false});
+      pdfStatus.textContent = `Sent ${site} to Claude at ${hhmm(Date.now())}.` + (db ? " Its progress shows here; the PDF is usually ready within 10 minutes." : " The PDF is usually posted in your CD50 project within 10 minutes.")
+        + (imgs.missing.length ? ` The site images (${imgs.missing.join(", ")}) could not be attached, so their sheets will be left out; use Download layout for those.` : "");
+      if (db){ S.build = {id, site, at:Date.now()}; save(); watchBuild(db, id); }
     } catch(err){
+      if (db) db.doc("builds/" + id).update({status:"failed", msg:"not sent"}).catch(() => {});
       pdfStatus.textContent = err?.code === "server_not_connected" ? "Connect Claude Code in claude.ai Settings → Connectors, then try again."
         : err?.code === "declined" || err?.code === "not_granted" ? "Not sent. Allow the Claude Code Remote connector for this page to use the button."
-        : `Not sent (${err?.message || err?.code || "error"}). Use Download layout.json and send it to Claude instead.`;
+        : `Not sent (${err?.message || err?.code || "error"}). Use Download layout and send it to Claude instead.`;
     }
     e.target.disabled = false; return;
   }
   document.getElementById("b-dl").click();
-  const prompt = `Build the CD50 PDF for sites/${site} from the layout.json in my Downloads folder: copy it to sites/${site}/layout.json, then run cd50.py and pdf.cjs.` + (notes ? ` Notes: ${notes}` : "");
-  try { await navigator.clipboard.writeText(prompt); pdfStatus.textContent = "Saved layout.json and copied a prompt. Paste it into Claude Code in your CD50-Tool folder."; }
-  catch(err){ pdfStatus.textContent = "Saved layout.json. In Claude Code, ask: " + prompt; }
+  const zip = Object.keys(photosExport()).length, what = zip ? `${site}-layout.zip` : "layout.json";
+  const prompt = `Build the CD50 PDF for sites/${site} from the ${what} in my Downloads folder: ${zip ? `unzip it into sites/${site}/ (layout.json and images/)` : `copy it to sites/${site}/layout.json`}, then run cd50.py and pdf.cjs.` + (notes ? ` Notes: ${notes}` : "");
+  try { await navigator.clipboard.writeText(prompt); pdfStatus.textContent = `Saved ${what} and copied a prompt. Paste it into Claude Code in your CD50-Tool folder.`; }
+  catch(err){ pdfStatus.textContent = `Saved ${what}. In Claude Code, ask: ` + prompt; }
   e.target.disabled = false;
 };
 document.getElementById("inspector").onclick = e => {
@@ -1514,8 +1601,17 @@ function sketchLayer(){
 
 // ---------- Aerial Site Sketch result back in the layout area: sent by the sketch window (postMessage to the window that
 // opened it) or pasted with its scale note. Loads as the plan background at the sketch's scale, and fills the sketch slot.
-function loadSketchResult(raw, how){
-  let d; try { d = CD50.sketchResult(raw); } catch(e){ document.getElementById("photonote").textContent = e.message; return false; }
+// A sketch traced for another address (the address changed while it was tracing, or it came from another site) is held
+// back with a "Load it anyway" button, so another site's linework never becomes this site's background by accident.
+function loadSketchResult(raw, how, force){
+  const note = document.getElementById("photonote");
+  let d; try { d = CD50.sketchResult(raw); } catch(e){ note.textContent = e.message; return false; }
+  if (!force && !sameAddr(d.address, S.address)){
+    note.replaceChildren(`This sketch was traced for ${d.address}, but the project address is ${S.address}, so it was not loaded. `);
+    const b = document.createElement("button"); b.type = "button"; b.textContent = "Load it anyway";
+    b.onclick = () => loadSketchResult(raw, how, true); note.appendChild(b);
+    return false;
+  }
   const im = new Image(); im.onload = () => {
     const k = Math.min(1, 1800 / Math.max(im.width, im.height)), w = Math.round(im.width * k), h = Math.round(im.height * k);
     const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d");
@@ -1524,7 +1620,7 @@ function loadSketchResult(raw, how){
     S.img = {src, sketchSrc:src, w, h, ppf, x:ax - w / 2 / ppf, y:ay - h / 2 / ppf, sample:false, site:null, linework:true, north:d.north, fromSketch:true,
       scale:{how:d.scale, by:d.scale === "unscaled" ? "Aerial Site Sketch, not to scale" : `Aerial Site Sketch: ${d.scaleSource || "its scale"}`}};
     S.sketch = false; syncInputs(); fit(); render(); setMode(d.ppf ? "select" : "scale");
-    PH.sketch = {name:d.name, src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src, w, h, ...(d.ppf ? {ppf} : {}), north:d.north, bg:true,
+    PH.sketch = {name:d.name, src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src, w, h, ...(d.ppf ? {ppf} : {}), north:d.north, bg:true, addr:S.address || null,
       placement:d.ppf ? "sent at its scale" : "sent without a scale"}; savePhotos(); drawPhotos();
     document.getElementById("photonote").textContent = `Aerial Site Sketch ${how} into the layout area${d.ppf ? `, at its scale (${(1 / ppf).toFixed(2)} ft per pixel${d.scale === "estimated" ? ", estimated from 9 ft stalls" : ""})` : "; it had no scale, so set one with Set scale"}. Place equipment on it.`;
     try { document.getElementById("plan").scrollIntoView({block:"center"}); } catch(e){}
@@ -1535,22 +1631,55 @@ function loadSketchResult(raw, how){
 // page opened as a local file), and only a valid sketch result (CD50.sketchResult) is loaded
 window.addEventListener("message", e => {
   const d = e.data; if (!d || d.type !== "cd50-sketch" || e.source === window) return;
-  if (!/^https:\/\/([a-z0-9-]+\.)*(claude\.ai|claudeusercontent\.com)$/.test(e.origin) && e.origin !== "null") return;
+  // "null" is a page opened as a local file; accepted only when this page is a local file too
+  if (!/^https:\/\/([a-z0-9-]+\.)*(claude\.ai|claudeusercontent\.com)$/.test(e.origin) && !(e.origin === "null" && location.protocol === "file:")) return;
   if (loadSketchResult(d, "came back")) try { e.source && e.source.postMessage({type:"cd50-sketch-ack"}, "*"); } catch(x){}
 });
 
 
 // ---------- site images: vicinity (wide), lot (with the install area boxed), and the Aerial Site Sketch result
-// kept under their own localStorage key so a full store never stops the layout itself from saving
-let PH = {}; try { PH = JSON.parse(localStorage.getItem("cd50photos") || "{}") || {}; } catch(e){}
-// the image data goes to IndexedDB (keepImage); localStorage keeps the names, boxes and scale notes
-function savePhotos(){ const o = {}; for (const [k, v] of Object.entries(PH)) if (v) o[k] = {...v, src:keepImage("ph-" + k, v.src)};
-  for (const k of ["vicinity", "lot", "sketch"]) if (!PH[k] && kept["ph-" + k]){ delete kept["ph-" + k]; IDB.del("ph-" + k).catch(() => {}); }
-  try { localStorage.setItem("cd50photos", JSON.stringify(o)); return true; }
+// They belong to one project address: PH holds the current address's images (each stamped with addr), PHS keeps other
+// addresses' images aside (names and IndexedDB keys only) until that address is entered again. So a lot photo from the last
+// site never goes out with the next site's layout. Kept under their own localStorage key so a full store never stops the
+// layout itself from saving; the image data goes to IndexedDB (keepImage), localStorage keeps the names, boxes and scale notes.
+let PH = {}, PHS = {};
+(() => { let raw = null; try { raw = JSON.parse(localStorage.getItem("cd50photos") || "null"); } catch(e){}
+  if (raw && raw.v === 2){ PHS = raw.sites || {}; const k = addrKey(S.address); PH = PHS[k] || {}; delete PHS[k]; }
+  else if (raw && typeof raw === "object"){ PH = raw; for (const v of Object.values(PH)) if (v && !v.addr) v.addr = S.address || null; }   // saved before v2
+})();
+const phKey = (k, v) => `ph-${addrKey(v && v.addr)}-${k}`;
+const idbOf = src => typeof src === "string" && src.startsWith("idb:") ? src.slice(4) : null;
+const phStore = set => { const o = {}; for (const [k, v] of Object.entries(set || {})) if (v) o[k] = {...v, src:keepImage(phKey(k, v), v.src)}; return o; };
+function savePhotos(){
+  const sites = {}; for (const [a, set] of Object.entries(PHS)) sites[a] = phStore(set);
+  sites[addrKey(S.address)] = phStore(PH);
+  try { localStorage.setItem("cd50photos", JSON.stringify({v:2, sites})); return true; }
   catch(e){ storeWarn("site images", e); return false; } }
+function dropPhoto(k){ const v = PH[k]; delete PH[k]; if (!v) return;
+  for (const key of [phKey(k, v), idbOf(v.src)]) if (key){ delete kept[key]; IDB.del(key).catch(() => {}); } }
+// put the current address's images back from IndexedDB; true when one was missing
+async function restorePhotos(){ const P = PH; let lost = false;
+  for (const [k, v] of Object.entries(P)){ const key = idbOf(v?.src); if (!key) continue;
+    const d = await IDB.get(key).catch(() => null); if (d){ kept[key] = d; v.src = d; } else { delete P[k]; lost = true; } }
+  return lost; }
+function switchPhotos(old, a){
+  if (!old){ for (const v of Object.values(PH)) if (v && !v.addr) v.addr = a; savePhotos(); return; }
+  const n = Object.keys(PH).length;
+  if (n) PHS[addrKey(old)] = phStore(PH);
+  const k = addrKey(a); PH = PHS[k] || {}; delete PHS[k];
+  savePhotos(); drawPhotos();
+  restorePhotos().then(lost => { if (lost) storeWarn("saved images", {name:"not found"}); drawPhotos(); render(); });
+  const back = Object.keys(PH).length;
+  document.getElementById("photonote").textContent = (n ? `The ${n} site image${n > 1 ? "s" : ""} for ${old} were set aside; they come back if you enter that address again. ` : "")
+    + (back ? `Loaded the ${back} site image${back > 1 ? "s" : ""} saved for this address.` : "");
+}
 const photoIn = document.getElementById("photofile"), boxDlg = document.getElementById("boxdlg"), boxCv = document.getElementById("boxcv");
 let photoSlot = null;
-function photosExport(){ const o = {}; for (const [k, v] of Object.entries(PH)) if (v && v.src) o[k] = {name:v.name || null, src:v.src, ...(v.box ? {install_box:v.box.map(n => +n.toFixed(4)), box_units:"fraction of image width/height, [x0,y0,x1,y1] from top left"} : {})}; return o; }
+// only images stamped with this project's address go out; each carries that stamp so the plan set generator can check it
+function photosExport(){ const o = {};
+  for (const [k, v] of Object.entries(PH)) if (v && v.src && sameAddr(v.addr, S.address)) o[k] = {name:v.name || null, address:v.addr || S.address || null, src:v.src,
+    ...(v.box ? {install_box:v.box.map(n => +n.toFixed(4)), box_units:"fraction of image width/height, [x0,y0,x1,y1] from top left"} : {})};
+  return o; }
 function drawPhotos(){
   document.querySelectorAll(".photo").forEach(el => {
     const k = el.dataset.slot, v = PH[k], pv = el.querySelector(".pv"), acts = el.querySelector(".acts");
@@ -1564,7 +1693,7 @@ function drawPhotos(){
     const btn = (t, f) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = f; acts.appendChild(b); };
     if (k === "lot") btn(v.box ? "Edit box" : "Box the install area", () => openBox());
     btn("Replace", () => pickPhoto(k));
-    btn("Remove", () => { delete PH[k]; savePhotos(); drawPhotos(); if (k === "sketch") render(); });
+    btn("Remove", () => { dropPhoto(k); savePhotos(); drawPhotos(); if (k === "sketch") render(); });
   });
 }
 function pickPhoto(k){ photoSlot = k; photoIn.value = ""; photoIn.click(); }
@@ -1575,7 +1704,7 @@ function takePhoto(k, f){
     c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
     let src = c.toDataURL(k === "sketch" ? "image/png" : "image/jpeg", 0.86);
     if (src.length > 1500000) src = c.toDataURL("image/jpeg", 0.86);   // a photo-like sketch PNG is too big to keep
-    PH[k] = {name:f.name, src, w:c.width, h:c.height}; savePhotos(); drawPhotos();
+    PH[k] = {name:f.name, src, w:c.width, h:c.height, addr:S.address || null}; savePhotos(); drawPhotos();
     if (k === "sketch"){ S.sketch = true; syncInputs(); render(); }   // Sketch view shows it
     if (k === "lot") openBox();
   }; im.src = rd.result; }; rd.readAsDataURL(f);
@@ -1727,8 +1856,9 @@ function geCalibrate(cl){
 // ---------- address first: the project address unlocks the other steps and goes out with layout.json
 const FTUS = 1200 / 3937;
 const addrIn = document.getElementById("addr"), addrStatus = document.getElementById("addrstatus");
-const normAddr = a => a.toLowerCase().replace(/[.,#]/g, " ").replace(/\b(east)\b/g, "e").replace(/\b(west)\b/g, "w").replace(/\b(boulevard)\b/g, "blvd").replace(/\s+/g, " ").trim();
-function setAddress(a, geo){ S.address = a; S.geo = geo || S.geo || null; addrIn.value = a; save(); gate(); }
+// a new address sets the last one's site images aside (switchPhotos), so they never go out with another site's layout
+function setAddress(a, geo){ const old = S.address || ""; S.address = a; S.geo = geo || S.geo || null; addrIn.value = a;
+  if (normAddr(old) !== normAddr(a)) switchPhotos(old, a); save(); gate(); }
 function gate(){ const on = !S.address; document.querySelector(".app").classList.toggle("locked", on); document.getElementById("gate").hidden = !on;
   document.querySelectorAll(".side>section:not(#addrblock)").forEach(el => { el.inert = on; }); if (!on && !addrIn.value) addrIn.value = S.address; }
 // the address unlocks the other steps: set on Enter, when the box loses focus, or with Open Aerial Site Sketch
@@ -1845,7 +1975,8 @@ document.getElementById("scaleok").onclick = () => {
   const truth = parseFloat(scaleFt.value); if (!(truth > 0) || scalePts.length < 2 || !S.img) return;
   const L = Math.hypot(scalePts[1][0]-scalePts[0][0], scalePts[1][1]-scalePts[0][1]); const f = truth / L, n = parseInt(scaleStalls.value);
   const [ox, oy] = scalePts[0]; S.img.ppf = S.img.ppf / f; S.img.x = ox + (S.img.x - ox) * f; S.img.y = oy + (S.img.y - oy) * f; delete S.img.guess;
-  setScale(S.img, "measured", n > 0 ? `${n} standard stall${n > 1 ? "s" : ""} at ${CD50.STALL_FT} ft` : `a ${truth} ft length`);
+  // a stall count rests on the 9 ft assumption, not on a measurement, so it is "assumed" and the plan set flags it
+  setScale(S.img, n > 0 ? "assumed" : "measured", n > 0 ? `${n} standard stall${n > 1 ? "s" : ""} at ${CD50.STALL_FT} ft` : `a ${truth} ft length`);
   if (S.img.ge) S.img.ge.how = S.img.scale.by;
   fit(); setMode("select"); syncInputs();
 };
@@ -2405,8 +2536,9 @@ function fail(where, e) {
   const tr = $("#p-tracing"); if (tr) tr.hidden = true;
   showWaiting("Stopped. See the red message in step 2.");
 }
-window.addEventListener("unhandledrejection", ev => { if (S.busy) fail("working", ev.reason); });   // the layout tool shares this window
-window.addEventListener("error", ev => { if (S.busy && ev && ev.error) fail("working", ev.error); });
+/* Every async entry point of this page goes through guard(), so its own errors stop it cleanly. There is deliberately no
+   window-wide error listener: the layout tool shares this window, and its errors must not stop a trace in progress. */
+const guard = (where, fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch(e => fail(where, e));
 $("#stop").addEventListener("click", () => S.ctl && S.ctl.abort());
 
 function readInputs() {
@@ -2553,6 +2685,9 @@ async function runRound(detail) {
   normalizeTrace(trace);
   traceToFull(trace);
   let tidy = finalizeTrace(trace);
+  // no known length: standard 9 ft stalls set the scale, from the trace as drawn and before the reviews, which then cannot
+  // move it (aisleFix); it is not re-estimated from the reviewed rows
+  if (!S.pxPerFt || S.scaleEstimated) stallScale(trace.features);
   if (trace.missing && trace.missing.length) prog("trace", "need", `${trace.features.length} items traced, but ${trace.missing.map(f => PASS_LABEL[f].replace(/^The /, "the ")).join(" and ")} did not finish. Use "Run it again" in step 3.`);
   else prog("trace", "done", `${trace.features.length} items traced`);
   // internal review: overlay the sketch on the photo, 4 runs, before Tony sees options
@@ -2569,7 +2704,6 @@ async function runRound(detail) {
   if (trace.unclear.length) { prog("q", "need", `${trace.unclear.length} to answer`); await askUnclear(round); prog("q", "done"); }
   else prog("q", "done", "none");
 
-  if (!S.pxPerFt || S.scaleEstimated) stallScale(trace.features);   // no known length: standard 9 ft stalls set the scale
   S.rounds.push(round); S.view = S.rounds.length - 1; S.picked = null;
   prog("opts", "done", "Round " + round.n);
   renderOptions();
@@ -2634,21 +2768,41 @@ const SHAPES = {
   equipment: `- {"type":"equipment","at":[x,y],"label":"transformer"}  (add "points" for a large pad outline)`,
   dimension: `- {"type":"dimension","p1":[x,y],"p2":[x,y],"what":"aisle width"}  key distances worth dimensioning. Do not convert to feet.`
 };
+const SITE_A = new Set(["lot_edge", "curb", "island", "sidewalk", "building", "aisle"]);
+const PAINT_ROWS = new Set(["stall_row", "stall_line", "ada_space"]);
+const PAINT_FOCUS = new Set(["paint", "paintRows", "paintMarks"]);
+const HALVES = { site: ["siteA", "siteB"], paint: ["paintRows", "paintMarks"] };
+/* Tony's answers from every round, newest first, one per area: an older answer whose box mostly overlaps a newer one is
+   dropped (it would contradict it), and at most 20 are kept, so the prompt does not grow round after round. Skips count
+   too: a skipped area is not asked about again. */
+function earlierAnswers() {
+  const all = [];
+  S.rounds.forEach(r => r.trace.unclear.forEach(u => { const a = r.answers[u.id]; if (a && Array.isArray(u.bbox)) all.push({ u, a }); }));
+  const area = b => Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
+  const overlap = (p, q) => { const w = Math.min(p[2], q[2]) - Math.max(p[0], q[0]), h = Math.min(p[3], q[3]) - Math.max(p[1], q[1]);
+    return w > 0 && h > 0 ? w * h / Math.max(1e-9, Math.min(area(p), area(q))) : 0; };
+  const kept = [];
+  for (const x of all.reverse()) {
+    if (kept.some(k => overlap(k.u.bbox, x.u.bbox) > 0.5)) continue;
+    kept.push(x); if (kept.length >= 20) break;
+  }
+  return kept;
+}
 function buildPrompt(detail, focus) {
   focus = focus || "site";
-  const prev = [];
-  S.rounds.forEach(r => r.trace.unclear.forEach(u => {
-    const a = r.answers[u.id]; if (!a || a.kind === "skip") return;
-    const said = a.kind === "choice" ? u.choices[a.idx].label : `${a.type}: ${a.label || "outlined by Tony"}`;
+  const prev = earlierAnswers().map(({ u, a }) => {
     const cb = [...toCropPt([u.bbox[0], u.bbox[1]]), ...toCropPt([u.bbox[2], u.bbox[3]])].map(Math.round);
-    prev.push(`- Area box ${JSON.stringify(cb)} ("${u.question}"): Tony answered "${said}". Draw it that way and do not ask again.`);
-  }));
+    if (a.kind === "skip") return `- Area box ${JSON.stringify(cb)} ("${u.question}"): Tony skipped this. Draw what you see there and do not ask about it again.`;
+    const said = a.kind === "choice" ? u.choices[a.idx].label : `${a.type}: ${a.label || "outlined by Tony"}`;
+    return `- Area box ${JSON.stringify(cb)} ("${u.question}"): Tony answered "${said}". Draw it that way and do not ask again.`;
+  });
   const last = S.rounds.length ? S.rounds[S.rounds.length - 1].trace : null;
-  // "siteA" and "siteB" split the site pass in two smaller requests, used when it has to be re-run
-  const SITE_A = new Set(["lot_edge", "curb", "island", "sidewalk", "building", "aisle"]);
-  const types = wantedTypes().filter(t => focus === "paint" ? PAINT_TYPES.has(t)
+  // "siteA"/"siteB" and "paintRows"/"paintMarks" split a pass in two smaller requests, used when it has to be re-run
+  const isPaint = PAINT_FOCUS.has(focus);
+  const types = wantedTypes().filter(t => isPaint
+    ? PAINT_TYPES.has(t) && (focus === "paintRows" ? PAINT_ROWS.has(t) : focus === "paintMarks" ? !PAINT_ROWS.has(t) : true)
     : !PAINT_TYPES.has(t) && (focus === "siteA" ? SITE_A.has(t) : focus === "siteB" ? !SITE_A.has(t) : true));
-  const rules = (focus === "paint" ? PAINT_RULES : SITE_RULES).map((r, i) => `${i + 5}. ${r}`).join("\n");
+  const rules = (isPaint ? PAINT_RULES : SITE_RULES).map((r, i) => `${i + 5}. ${r}`).join("\n");
   const shapes = types.map(t => SHAPES[t]).filter(Boolean).join("\n");
   return [
 `You are tracing an aerial (overhead) photograph for an engineering sketch of EXISTING site conditions at an EV charging site.
@@ -2727,19 +2881,22 @@ async function settlePass(first, detail, focus) {
   const fallback = err => rec ? { value: rec, note: `${PASS_LABEL[focus]} was cut short; ${rec.features.length} items were recovered from it, but some may be missing. Click "Run it again" to fill in the rest.`, partial: true } : { error: err };
   if (e1 && NO_RETRY.has(e1.code)) return fallback(e1);
   S.stageNote = `${PASS_LABEL[focus].replace(/^The /, "the ")} did not finish, re-running it automatically`;
-  const subs = focus === "site" ? ["siteA", "siteB"] : [focus];
+  const subs = HALVES[focus] || [focus];
   const res = await Promise.allSettled(subs.map(p => passCall(detail, p)));
   S.stageNote = "";
   const got = { features: [], unclear: [], declined: [], notes: "" };
-  let n = 0, lastErr = e1;
+  let n = 0, lastErr = e1; const lost = [];   // halves that did not come back whole: offered by "Run it again"
   for (let i = 0; i < res.length; i++) {
     const r = res[i];
     if (r.status === "rejected" && r.reason && r.reason.code === "cancelled") throw r.reason;
-    const v = (r.status === "fulfilled" && okVal(r.value)) ? r.value : salvaged(r.reason);
-    if (v) { n++; mergePass(got, v, subs[i]); } else lastErr = r.status === "rejected" ? r.reason : { code: "invalid_json" };
+    const whole = r.status === "fulfilled" && okVal(r.value), v = whole ? r.value : salvaged(r.reason);
+    if (!whole) lost.push(subs[i]);
+    if (v) { n++; if (!whole) v.features.forEach(f => { if (f && typeof f === "object") f._salv = subs[i]; }); mergePass(got, v, subs[i]); }
+    else lastErr = r.status === "rejected" ? r.reason : { code: "invalid_json" };
   }
   if (!n) return fallback(lastErr);
-  return { value: got, note: `${PASS_LABEL[focus]} did not finish the first time and was re-run automatically${n < res.length ? " (part of it came back)" : ""}.` };
+  return { value: got, partial: lost.length > 0, missing: lost,
+    note: `${PASS_LABEL[focus]} did not finish the first time and was re-run automatically${lost.length ? `; ${lost.map(s => PASS_LABEL[s].replace(/^The /, "the ")).join(" and ")} did not come back whole, so "Run it again" is offered for it` : ""}.` };
 }
 async function callTrace(detail) {
   S.ctl = new AbortController();
@@ -2748,21 +2905,28 @@ async function callTrace(detail) {
   if (sp.error && pp.error) throw sp.error;
   const base = sp.value ? sp.value : { quality: { ok: true }, features: [], unclear: [], declined: [], notes: "" };
   base.unclear = base.unclear || []; base.declined = base.declined || [];
+  if (!sp.note) base.unclear.forEach(u => { if (u) u.id = unclearId("site"); });   // a first answer keeps Claude's u1, u2: make them unique
   base.missing = []; base.passNotes = [];
   if (sp.note) base.passNotes.push(sp.note);
-  if (sp.partial) base.missing.push("site");
-  if (pp.value) { mergePass(base, pp.value, "paint"); if (pp.note) base.passNotes.push(pp.note); if (pp.partial) base.missing.push("paint"); }
+  if (sp.partial) base.missing.push(...(sp.missing && sp.missing.length ? sp.missing : ["site"]));
+  if (pp.value) { mergePass(base, pp.value, "paint"); if (pp.note) base.passNotes.push(pp.note); if (pp.partial) base.missing.push(...(pp.missing && pp.missing.length ? pp.missing : ["paint"])); }
   else { base.missing.push("paint"); base.passNotes.push(passFailNote("paint", pp.error)); }
   if (sp.error) { base.missing.push("site"); base.passNotes.push(passFailNote("site", sp.error)); }
   return base;
 }
-const PASS_LABEL = { paint: "The parking markings pass", site: "The curbs, islands and lanes pass" };
+const PASS_LABEL = { paint: "The parking markings pass", site: "The curbs, islands and lanes pass",
+  siteA: "The lot border, curbs, islands and buildings pass", siteB: "The lanes, landscaping, poles and equipment pass",
+  paintRows: "The stall rows pass", paintMarks: "The painted lines, striped areas and arrows pass" };
+/* Every unclear-area id is unique for the life of the page (a counter), so answers stored by id never overwrite each other,
+   however many passes and retries add questions to one round. */
+let unclearSeq = 0;
+const unclearId = focus => `${focus}-q${++unclearSeq}`;
 function passFailNote(focus, e) {
   return `${PASS_LABEL[focus]} did not finish, even after an automatic re-run (${sampleMsg(e)}). Click "Run it again" in step 3 to add it.`;
 }
 function mergePass(base, pv, focus) {
   base.features = base.features.concat(pv.features || []);
-  (pv.unclear || []).forEach((u, i) => { if (u) { u.id = focus + "-" + (u.id || "u" + (i + 1)); base.unclear.push(u); } });
+  (pv.unclear || []).forEach(u => { if (u) { u.id = unclearId(focus); base.unclear.push(u); } });
   base.declined = base.declined.concat(pv.declined || []);
   if (pv.notes) base.notes = [base.notes, pv.notes].filter(Boolean).join(" ");
 }
@@ -2843,6 +3007,7 @@ function serialFeat(f) {
     ["closed", "label", "flow", "color", "surface", "rounded", "what", "angleDeg"].forEach(k => { if (f[k] !== undefined && f[k] !== "") o[k] = f[k]; });
     if (f.r) o.r = Math.round(f.r * (S.crop ? S.W / S.crop.w : 1));
   }
+  if (f._rv) o.changedBy = "review " + f._rv;   // the final review must give a why to undo it (applyReview)
   return JSON.stringify(o);
 }
 const REVIEW_FOCUS = [
@@ -2864,7 +3029,7 @@ Drive aisles must leave a reasonable space for vehicles to drive. Typical clear 
 {SCALE}
 Measured from the current sketch:
 {AISLES}
-Where an aisle comes out narrower than typical, the rows beside it are probably drawn too deep or pushed into the aisle: check the photo and move or shorten those rows so their stall ends sit on the paint. Do not invent width the photo does not show; local codes vary, so these are sanity checks.
+{AISLE_FIX}
 Then verify the rest of the overlay against the photo, area by area:
 - island, curb, lot border, sidewalk and building outlines follow the photo
 - drive lanes point the right way; painted lines and striped areas are all there
@@ -2879,6 +3044,7 @@ Check their work and the whole sketch against the photo, area by area:
 - stall rows: on the paint, right count, angle and lean; stripes end at the curb or shared center line; none on medians or islands
 - drive aisles leave a reasonable space to drive (typical with 9 ft stalls: 90° 22–26 ft two-way, 75° 20–22 ft, 60° 16–18 ft, 45° 12–15 ft one-way). Measured now:
 {AISLES}
+{AISLE_FIX}
 - ADA stalls, van stalls and access aisles: all present and on the right stalls
 - islands, curbs, lot border, sidewalks and buildings follow the photo
 - drive lanes and their direction, painted lines, striped areas, arrows
@@ -2886,13 +3052,21 @@ Check their work and the whole sketch against the photo, area by area:
 - anything missing, doubled, or drawn where nothing exists
 Make only corrections you are sure of. In the summary, say what you corrected and anything Tony should still check by eye.`
 ];
+/* With a measured scale, a narrow aisle points at rows drawn too deep, so the review may move them. With no scale, or one
+   estimated from these same stalls, the aisle widths are measured with a ruler made from the rows under review: "fixing" the
+   rows to typical widths would only make the sketch agree with itself, so then the widths are a report, never a reason to move rows. */
+function aisleFix() {
+  if (S.pxPerFt && !S.scaleEstimated) return "Where an aisle comes out narrower than typical, the rows beside it are probably drawn too deep or pushed into the aisle: check the photo and move or shorten those rows so their stall ends sit on the paint. Do not invent width the photo does not show; local codes vary, so these are sanity checks.";
+  return "The scale here is not measured: it comes from the traced stalls themselves, so these aisle widths are not evidence. Do not move, shorten or recount any row to make an aisle width look typical. Move a row only where the photo shows its stall ends off the paint. If an aisle still looks wrong, say so in the summary for Tony.";
+}
 function reviewPrompt(t, k, two, prior) {
   const cfg = REVIEWS[k - 1], total = REVIEWS.length;
   const gridPerFt = S.pxPerFt ? S.pxPerFt / (S.crop ? S.crop.w : S.W) * 1000 : 0;
   const focus = REVIEW_FOCUS[k - 1]
     .replace("{PRIOR}", (prior && prior.length ? prior : ["(no notes from the earlier reviews)"]).map(n => "- " + n).join("\n"))
-    .replace("{SCALE}", gridPerFt ? `Scale: 1 ft is about ${gridPerFt.toFixed(2)} units on the x grid (24 ft is about ${Math.round(24 * gridPerFt)} units).` : "No scale was set; use the stall width (about 9 ft) as the ruler.")
-    .split("{AISLES}").join(aisleLines(t.features));
+    .replace("{SCALE}", gridPerFt ? `Scale: 1 ft is about ${gridPerFt.toFixed(2)} units on the x grid (24 ft is about ${Math.round(24 * gridPerFt)} units)${S.scaleEstimated ? ", estimated from the traced stalls themselves" : ""}.` : "No scale was set; use the stall width (about 9 ft) as the ruler.")
+    .split("{AISLES}").join(aisleLines(t.features))
+    .split("{AISLE_FIX}").join(aisleFix());
   return `You are checking a traced engineering sketch of a parking lot against the aerial photo it was traced from. This is review ${k} of ${total}.
 ${two ? `Image 1 is the ${cfg.enhance ? "enhanced " : ""}photo. Image 2 is the same ${cfg.enhance ? "enhanced " : ""}photo with the current sketch drawn on top.` : `The image is the ${cfg.enhance ? "enhanced " : ""}photo with the current sketch drawn on top.`}
 ${!cfg.see()
@@ -2910,31 +3084,48 @@ ${LOT_KNOWLEDGE}
 Stall rows use: {"type":"stall_row","p1":[x,y],"p2":[x,y],"q1":[x,y],"count":N,"angle":60,"leanToward":"p2"} (p1, p2: aisle-side ends of the first and last stripe; q1: far end of the first stripe; leanToward: the end the stripes' far ends point to). ADA stalls: {"type":"ada_space","points":[[x,y],...],"closed":true,"label":"VAN" or ""}. Striped areas: {"type":"hatch_area","points":[[x,y],...],"closed":true,"label":"ADA aisle"}. Other features use the same shapes as above.
 Trace only existing conditions.
 
+Make at most ${REVIEW_CAP(t.features.length)} changes; the most important first.${k === total ? `
+A feature marked "changedBy" was corrected by an earlier review. Remove or replace it only when the photo clearly shows that correction was wrong, and say why in "why"; a change to it without a "why" is ignored.` : ""}
 Reply with only one JSON object:
-{"remove":[indices],"replace":[{"i":index,"feature":{...}}],"add":[{...}],"summary":"one short sentence on what you changed"}
+{"remove":[{"i":index,"why":""}],"replace":[{"i":index,"feature":{...},"why":""}],"add":[{...}],"summary":"one short sentence on what you changed"}
 If everything lines up: {"remove":[],"replace":[],"add":[],"summary":"No changes needed."}`;
 }
-/* Applies a review's corrections. With "only", changes to any other feature type are ignored. */
-function applyReview(t, ed, only) {
-  const conv = f => { const g = cleanFeature(f); if (g && S.crop) featToFull(g); return g; };
+/* Applies a review's corrections. With "only", changes to any other feature type are ignored. Indices refer to the list the
+   review was shown (a snapshot), so removes and adds cannot shift each other. So that later reviews converge instead of
+   undoing each other: each changed feature remembers which review changed it (_rv), the final review may only remove or
+   replace such a feature when it gives a "why", and one review may make at most REVIEW_CAP(n) changes; the rest are held
+   back and reported to Tony. */
+const REVIEW_CAP = n => Math.max(6, Math.ceil(n * 0.3));
+function applyReview(t, ed, only, k) {
+  const conv = f => { const g = cleanFeature(f); if (g && S.crop) featToFull(g); if (g) g._rv = k; return g; };
   const okType = ty => !only || only.has(ty);
-  const list = t.features.slice();
-  const rem = new Set((ed.remove || []).map(Number).filter(i => Number.isInteger(i) && list[i] && okType(list[i].type)));
-  let changed = 0;
+  const list = t.features.slice(), cap = REVIEW_CAP(list.length), last = k === REVIEWS.length;
+  const idx = v => Number(v && typeof v === "object" ? v.i : v), why = v => v && typeof v === "object" && String(v.why || "").trim();
+  // the final review undoing an earlier review's change needs a reason
+  const guarded = (i, v) => last && list[i]._rv && list[i]._rv !== k && !why(v);
+  let changed = 0, held = 0;
+  const take = () => changed < cap ? (changed++, true) : (held++, false);
+  const rem = new Set();
+  (ed.remove || []).forEach(v => { const i = idx(v);
+    if (!Number.isInteger(i) || !list[i] || !okType(list[i].type) || rem.has(i)) return;
+    if (guarded(i, v)) { held++; return; }
+    if (take()) rem.add(i); });
   (ed.replace || []).forEach(r => {
-    const i = Number(r && r.i), g = r && conv(r.feature);
-    if (g && Number.isInteger(i) && list[i] && okType(list[i].type) && okType(g.type)) { list[i] = g; changed++; }
-  });
+    const i = idx(r), g = r && conv(r.feature);
+    if (!(g && Number.isInteger(i) && list[i] && !rem.has(i) && okType(list[i].type) && okType(g.type))) return;
+    if (guarded(i, r)) { held++; return; }
+    if (take()) list[i] = g; });
   const kept = list.filter((f, i) => !rem.has(i));
-  (ed.add || []).forEach(a => { const g = conv(a); if (g && okType(g.type)) { kept.push(g); changed++; } });
+  (ed.add || []).forEach(a => { const g = conv(a); if (g && okType(g.type) && take()) kept.push(g); });
   t.features = kept;
-  return changed + rem.size;
+  return { n: changed, held };
 }
 /* Overlay the sketch on the photo and let Claude correct it, four times (see REVIEWS); run 4 also sees the first three runs' notes.
    Never blocks the options: a review that fails is noted and skipped. */
-async function reviewTrace(t) {
+async function reviewTrace(t, only) {
   const notes = [];
   for (let k = 1; k <= REVIEWS.length; k++) {
+    if (only && !only.includes(k)) continue;
     const cfg = REVIEWS[k - 1];
     const t0 = Date.now(), mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
     const tick = setInterval(() => prog("review", "run", `review ${k} of ${REVIEWS.length} (${cfg.what}) · ${mmss(Date.now() - t0)}`), 1000);
@@ -2950,10 +3141,11 @@ async function reviewTrace(t) {
       const ed = await caps.sample.json(reviewPrompt(t, k, two, notes), { images: two ? [ob.photo, ob.overlay] : [ob.overlay], modelTier: "complex", cache: false, signal: S.ctl.signal });
       clearInterval(tick);
       if (!ed || typeof ed !== "object") throw { code: "invalid_json" };
-      const n = applyReview(t, ed, cfg.edit());
+      const { n, held } = applyReview(t, ed, cfg.edit(), k);
       if (cfg.enhance && !ob.enhanced) notes.push(`Review ${k}: the photo could not be enhanced in this browser, so the plain photo was used.`);
       finalizeTrace(t);
       notes.push(`Review ${k}: ${n ? (ed.summary || `${n} changes`) : "no changes needed"}.`.replace(/\.\.$/, "."));
+      if (held) notes.push(`Review ${k}: ${held} more change${held > 1 ? "s were" : " was"} held back (over the limit for one review, or undoing an earlier review without a reason); check those areas by eye.`);
     } catch (e) {
       clearInterval(tick);
       if (e && e.code === "cancelled") throw e;
@@ -2963,35 +3155,44 @@ async function reviewTrace(t) {
   prog("review", "done", notes.map(n => n.replace(/^Review \d+: /, "")).join(" "));
   return notes;
 }
-/* Re-runs only the pass that did not finish and adds its items to the round on screen. */
+/* Re-runs only the pass that did not finish and adds its items to the round on screen. A pass that has already been run
+   again here once is asked for in two smaller halves (HALVES), since the usual cause is an answer cut off for length, so
+   pressing "Run it again" does not repeat the same failing request. Only the final review runs over the result. */
 async function retryMissing() {
   const r = S.rounds[S.view];
   if (!r || !r.trace.missing || !r.trace.missing.length || S.busy) return;
   const focus = r.trace.missing[0];
+  const tries = r.trace.tries = r.trace.tries || {}; tries[focus] = (tries[focus] || 0) + 1;
+  const parts = tries[focus] > 1 && HALVES[focus] ? HALVES[focus] : [focus];
   S.busy = true; setBusy(true); $("#pass-retry-btn").disabled = true;
   const t0 = Date.now(), mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
-  const tick = setInterval(() => prog("trace", "run", `running ${PASS_LABEL[focus].replace(/^The /, "the ")} again · ${mmss(Date.now() - t0)}`), 1000);
+  const tick = setInterval(() => prog("trace", "run", `running ${PASS_LABEL[focus].replace(/^The /, "the ")} again${parts.length > 1 ? " in two halves" : ""} · ${mmss(Date.now() - t0)}`), 1000);
   try {
     S.ctl = new AbortController(); S.stageNote = "";
-    const first = (await Promise.allSettled([passCall(r.detail, focus)]))[0];
-    const got = await settlePass(first, r.detail, focus);
-    if (got.error) throw got.error;
-    const v = got.value;
-    const part = { features: v.features, unclear: v.unclear || [], declined: v.declined || [] };
+    const firsts = await Promise.allSettled(parts.map(p => passCall(r.detail, p)));
+    const gots = await Promise.all(firsts.map((f, i) => settlePass(f, r.detail, parts[i])));
+    if (gots.every(g => g.error)) throw gots[0].error;
+    const part = { features: [], unclear: [], declined: [] }, still = [], notes = [];
+    gots.forEach((g, i) => {
+      if (g.error) { still.push(parts[i]); notes.push(passFailNote(parts[i], g.error)); return; }
+      part.features.push(...g.value.features); part.unclear.push(...(g.value.unclear || [])); part.declined.push(...(g.value.declined || []));
+      if (g.partial) { still.push(...(g.missing && g.missing.length ? g.missing : [parts[i]])); if (g.note) notes.push(g.note); }
+    });
     normalizeTrace(part); traceToFull(part);
-    part.unclear.forEach((u, i) => { u.id = focus[0] + "r" + (i + 1); });
+    part.unclear.forEach(u => { u.id = unclearId(focus); });
     clearInterval(tick);
-    // a full answer replaces any items recovered from an earlier cut-off answer
-    r.trace.features = r.trace.features.filter(f => f._salv !== focus).concat(part.features);
+    // a full answer replaces any items recovered from an earlier cut-off answer of this pass or its halves
+    const covers = new Set([focus, ...(HALVES[focus] || [])]);
+    r.trace.features = r.trace.features.filter(f => !covers.has(f._salv)).concat(part.features);
     r.trace.declined = (r.trace.declined || []).concat(part.declined);
-    if (!got.partial) r.trace.missing = r.trace.missing.filter(x => x !== focus);
-    r.trace.passNotes = (r.trace.passNotes || []).filter(n => !n.startsWith(PASS_LABEL[focus]));
-    if (got.note && got.partial) r.trace.passNotes.push(got.note);
+    r.trace.missing = r.trace.missing.filter(x => x !== focus).concat(still.filter(x => x !== focus || parts.length === 1));
+    r.trace.missing = [...new Set(r.trace.missing)];
+    r.trace.passNotes = (r.trace.passNotes || []).filter(n => ![...covers].some(c => n.startsWith(PASS_LABEL[c]))).concat(notes);
     finalizeTrace(r.trace);
-    prog("trace", "done", `${part.features.length} more items added`);
+    prog("trace", r.trace.missing.length ? "need" : "done", `${part.features.length} more items added` + (r.trace.missing.length ? `; ${r.trace.missing.map(m => PASS_LABEL[m].replace(/^The /, "the ")).join(" and ")} still did not finish` : ""));
     if (S.review) {
       $("#p-tracing").hidden = false;
-      try { r.trace.reviewNotes = await reviewTrace(r.trace); } finally { $("#p-tracing").hidden = true; }
+      try { r.trace.reviewNotes = (r.trace.reviewNotes || []).concat(await reviewTrace(r.trace, [REVIEWS.length])); } finally { $("#p-tracing").hidden = true; }
     }
     r.trace.laneNotes = r.trace.passNotes.concat(finalizeTrace(r.trace), aisleNotes(r.trace.features), r.trace.reviewNotes || []);
     if (part.unclear.length) {
@@ -3731,15 +3932,15 @@ function pick(L) {
   $("#dl-msg").className = "msg";
   $("#s-download").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
-$("#regen").addEventListener("click", async () => {
+$("#regen").addEventListener("click", guard("regenerating", async () => {
   if (S.busy || !S.rounds.length) return;
   $("#regen-msg").textContent = ""; $("#s-download").hidden = true;
   const detail = $("#detail").value.trim();
   if (!detail) { $("#regen-msg").textContent = "Add some detail first, so the new options can differ."; return; }
   await runRound(detail);
-});
-$("#pass-retry-btn").addEventListener("click", () => retryMissing());
-$("#reborder").addEventListener("click", async () => {
+}));
+$("#pass-retry-btn").addEventListener("click", guard("running the pass again", () => retryMissing()));
+$("#reborder").addEventListener("click", guard("redrawing the border", async () => {
   if (S.busy || !S.rounds.length) return;
   $("#regen-msg").textContent = ""; $("#s-download").hidden = true;
   S.busy = true; setBusy(true);
@@ -3747,7 +3948,7 @@ $("#reborder").addEventListener("click", async () => {
   await settleBorder();
   S.busy = false;
   await runRound($("#detail").value.trim());
-});
+}));
 
 /* ---------- scale ---------- */
 function boxAround(a, b, pad) { return [Math.min(a[0], b[0]) - pad, Math.min(a[1], b[1]) - pad, Math.max(a[0], b[0]) + pad, Math.max(a[1], b[1]) + pad]; }
@@ -4191,7 +4392,7 @@ $("#addr-paste").addEventListener("click", async () => {
 /* ---------- back to the layout ---------- */
 function sketchPayload() {
   const r = S.rounds[S.view], ctx = Object.assign(sheetCtx(r), { bare: true }), svg = renderSheet(r, S.picked, ctx);
-  return { svg, meta: { type: "cd50-sketch-meta", v: 1, ppf: ctx.meta.ppf, north: ctx.meta.north, address: S.inputs.address, name: baseName() + ".png",
+  return { svg, meta: { type: "cd50-sketch-meta", v: 1, ppf: ctx.meta.ppf, north: ctx.meta.north, address: S.example ? "" : S.inputs.address, name: baseName() + ".png",
     scale: S.scaleEstimated ? "estimated" : S.pxPerFt ? "measured" : "unscaled", scaleSource: S.scaleSource || "" } };
 }
 // the layout tool listens for CD50.SKETCH (bridge.js), loads the PNG at its scale into the layout area and the sketch slot, and switches back

@@ -74,7 +74,7 @@ def test_layout_tool_imports_google_earth():
 def test_layout_tool_site_images_and_sketch():
     for slot in ('vicinity', 'lot', 'sketch'):
         assert f'data-slot="{slot}"' in TOOL_HTML
-    assert 'id="b-sketchapp"' in TOOL_HTML and 'install_box' in TOOL_HTML and 'site_images:photosExport()' in TOOL_HTML
+    assert 'id="b-sketchapp"' in TOOL_HTML and 'install_box' in TOOL_HTML and 'function layoutZip()' in TOOL_HTML
     # Aerial Site Sketch is built in: a second view in a shadow root; its result comes back by the cd50:sketch event
     # (or, from the standalone artifact, by message or paste with its scale note) into the layout area and the sketch slot
     assert 'id="sketchview"' in TOOL_HTML and 'id="sketch-tpl"' in TOOL_HTML and 'attachShadow(' in TOOL_HTML

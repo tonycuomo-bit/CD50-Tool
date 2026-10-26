@@ -100,5 +100,32 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
     gap: [Math.hypot(I1['1A'].x - I1['1B'].x, I1['1A'].y - I1['1B'].y), Math.hypot(I2['1A'].x - I2['1B'].x, I2['1A'].y - I2['1B'].y)] };
   await p.keyboard.press('Escape'); out.escClears = await p.$eval('#inspector', e => !e.textContent.includes('selected'));
 
+  // 9. site images belong to the project address: a lot photo is set aside at another address and comes back with its own
+  await go(false);
+  const slotHas = k => p.evaluate(k => !!document.querySelector(`.photo[data-slot="${k}"] img`), k);
+  await p.evaluate(() => document.querySelector('.photo[data-slot="lot"] .pv').click()).catch(() => {});
+  await p.setInputFiles('#photofile', [path.join(dir, 'sk.png')]); await p.waitForTimeout(700);
+  await p.click('#box-done').catch(() => {}); await p.waitForTimeout(100);
+  // Copy layout.json, caught on its way to the clipboard
+  const copied = async () => { await p.evaluate(() => { navigator.clipboard.writeText = t => { window.__copied = t; return Promise.resolve(); }; });
+    await p.click('#b-copy'); await p.waitForTimeout(100); return JSON.parse(await p.evaluate(() => window.__copied)); };
+  const setAddr = async a => { await p.fill('#addr', a); await p.press('#addr', 'Enter'); await p.waitForTimeout(500); };
+  out.photos = { a: await slotHas('lot') };
+  await setAddr('555 Center Drive Northwest, Walker, MI 49544');
+  out.photos.b = await slotHas('lot'); out.photos.note = await p.$eval('#photonote', e => e.textContent);
+  out.photos.exportB = (await copied()).site_images;
+  await setAddr('1201 Main St, Golden, CO');
+  out.photos.back = await slotHas('lot');
+  out.photos.exportA = (await copied()).site_images;
+
+  // 10. a sketch traced for another address is held back, with a button to load it anyway
+  out.mismatch = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 20;
+    window.dispatchEvent(new CustomEvent('cd50:sketch', { detail: { png: c.toDataURL('image/png'), ppf: 2, address: '9 Elsewhere Rd, Nowhere' } }));
+    const n = document.getElementById('photonote'); return { text: n.textContent, button: !!n.querySelector('button') }; });
+
+  // 11. Download layout with site images saves a zip: layout.json (no data URIs) plus images/
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click('#b-dl')]);
+  out.download = { name: dl.suggestedFilename(), path: path.join(dir, 'layout.zip') }; await dl.saveAs(out.download.path);
+
   console.log(JSON.stringify(out)); await b.close();
 })().catch(e => { console.log(JSON.stringify({ fatal: String(e && e.stack || e) })); process.exit(0); });

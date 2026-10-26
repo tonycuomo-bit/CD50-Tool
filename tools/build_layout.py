@@ -7,6 +7,7 @@ Edit the files in src/, then run this. The artifact stays one self-contained HTM
   bridge.js          the hand-off between the layout tool and Aerial Site Sketch, used by both scripts
   sketch/            Aerial Site Sketch: sketch.html (template with its styles and markup) and sketch.js
 A line that is exactly `<!-- @include NAME -->` is replaced by that file (relative to src/), recursively.
+@@TOOL_BUILD@@ in the sources becomes a hash of them, the tool build stamped on every exported layout.json.
   python3 tools/build_layout.py            write cd50-layout/cd50-layout.html
   python3 tools/build_layout.py --check    exit 1 if the committed file is not what src/ builds
 """
@@ -24,8 +25,15 @@ def expand(name, seen=()):
     return INC.sub(lambda m: expand(m.group(1), seen + (name,)), text)
 
 
+TOOL_BUILD = '@@TOOL_BUILD@@'
+
+
 def build():
-    return expand('page.html')
+    """The page, with TOOL_BUILD (layout.js) set to the first 12 hex digits of the sha256 of the expanded sources. Every
+    layout.json the page exports carries it as tool.build; `git log -S <build> -- cd50-layout/cd50-layout.html` finds the commit."""
+    import hashlib
+    html = expand('page.html')
+    return html.replace(TOOL_BUILD, hashlib.sha256(html.encode('utf-8')).hexdigest()[:12])
 
 
 def main(argv=None):

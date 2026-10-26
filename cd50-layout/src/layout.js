@@ -44,17 +44,29 @@ function sizeGroups(groups){
 
 <!-- @include sites.js -->
 
+// ---------- export contract with cd50-plansets/cd50.py (checked there by layout_io.py, described in cd50-layout/layout-format.md).
+// TOOL_BUILD is filled in by tools/build_layout.py with a hash of src/, so a build can be traced to the tool that made its layout.
+const LAYOUT_FORMAT = "cd50-layout/2", TOOL_BUILD = "@@TOOL_BUILD@@";
+
 // ---------- state
 const DEFAULT = {product:"V4", posts:4, inputKva:499, mwPosts:2, mwInputKva:1247, items:{}, routes:{}, img:null, view:null, sketch:true, opacity:0.8, bollards:true,
   park:{jur:"CA", stripe:"w4", w:9, l:18, stencil:true, sign:"tesla", aisleCol:"white"}, pk:{}};
 let S = {...structuredClone(DEFAULT), ...(load() || {})};
 S.park = {...DEFAULT.park, ...(S.park || {})}; S.pk = S.pk || {};
 const O = id => S.items[id] || S.pk[id];
+// one address, written different ways ("299 E. San Ysidro Blvd" / "299 east san ysidro boulevard"), compares equal
+const normAddr = a => String(a || "").toLowerCase().replace(/[.,#]/g, " ").replace(/\b(east)\b/g, "e").replace(/\b(west)\b/g, "w")
+  .replace(/\b(north)\b/g, "n").replace(/\b(south)\b/g, "s").replace(/\b(boulevard)\b/g, "blvd").replace(/\b(drive)\b/g, "dr")
+  .replace(/\b(street)\b/g, "st").replace(/\b(avenue)\b/g, "ave").replace(/\b(northwest)\b/g, "nw").replace(/\b(northeast)\b/g, "ne")
+  .replace(/\b(southwest)\b/g, "sw").replace(/\b(southeast)\b/g, "se").replace(/\s+/g, " ").trim();
+const addrKey = a => normAddr(a).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "none";
+const sameAddr = (a, b) => !a || !b || normAddr(a) === normAddr(b);   // an unknown address matches anything
 // Every background is placed so the site point (the address pin, or the centre of a sketch sent at its scale) lands here, in
 // tool feet, near the default equipment row. Load site, the sketch result, Google Earth import and Sketch view all use it.
 const SITE_PT = [60, 50];
 // How the background's scale is known, exported with layout.json (frame.scale) so the plan set can flag an estimate:
-// measured (preset, a marked length, stalls, an Earth path), estimated (Earth saved view, sketch from 9 ft stalls), unscaled.
+// measured (preset, a marked length, an Earth path), assumed (a count of standard 9 ft stalls), estimated (Earth saved view,
+// sketch from 9 ft stalls), unscaled. Anything but measured is flagged on the plan views.
 const setScale = (I, how, by) => { I.scale = {how, by}; return I; };
 const scaleHow = I => (I && I.scale && I.scale.how) || (I && I.guess ? "unscaled" : "measured");
 // ---------- browser storage. The layout goes to localStorage; its images (data URIs, often over 1 MB each) go to IndexedDB,
@@ -75,7 +87,7 @@ function keepImage(key, src){
   return "idb:" + key;
 }
 function storeWarn(what, e){ const w = document.getElementById("storewarn"); if (!w) return; w.hidden = false;
-  w.textContent = `This browser did not keep the ${what} (${(e && (e.name || e.message)) || "storage error"}), so they will be gone after a reload. Download layout.json to keep your work.`; }
+  w.textContent = `This browser did not keep the ${what} (${(e && (e.name || e.message)) || "storage error"}), so they will be gone after a reload. Download layout to keep your work.`; }
 function save(){
   let o = S;
   if (S.img){ const I = S.img; o = {...S, img:{...I, src:keepImage("bg", I.src), sketchSrc:I.sketchSrc === I.src ? "same" : keepImage("bgsketch", I.sketchSrc)}}; }
@@ -89,8 +101,7 @@ async function restoreImages(){
     const src = await get(I.src, "bg"), sk = I.sketchSrc === "same" ? src : await get(I.sketchSrc, "bgsketch");
     if (S.img === I){ if (src){ I.src = src; I.sketchSrc = sk || src; } else { lost = true; S.img = sampleLot(); } }
   }
-  for (const [k, v] of Object.entries(PH)){ if (typeof v?.src !== "string" || !v.src.startsWith("idb:")) continue;
-    const d = await IDB.get("ph-" + k).catch(() => null); if (d){ kept["ph-" + k] = d; v.src = d; } else { delete PH[k]; lost = true; } }
+  if (await restorePhotos()) lost = true;
   if (lost) storeWarn("saved images", {name:"not found"});
   drawPhotos(); syncInputs(); render();
 }
@@ -676,6 +687,7 @@ function syncInputs(){
   const how = scaleHow(S.img), st = document.getElementById("scalestat");
   st.hidden = !S.img || S.img.sample; st.className = "note" + (how === "measured" ? "" : " warn");
   st.textContent = !S.img ? "" : how === "measured" ? `Scale: ${(1 / S.img.ppf).toFixed(2)} ft per pixel, from ${(S.img.scale && S.img.scale.by) || "a set length"}.`
+    : how === "assumed" ? `Scale: ${(1 / S.img.ppf).toFixed(2)} ft per pixel, from ${(S.img.scale && S.img.scale.by) || "standard stalls"}. Stall widths vary (8.5 to 10 ft), so the plan set marks this scale to verify; set it from a known length (a survey dimension or measured curb) to clear that.`
     : how === "estimated" ? `Scale estimated (${(S.img.scale && S.img.scale.by) || "no measurement"}). Check it: Set scale, then click stripe centres a few stalls apart (standard stalls are 9 ft).`
     : "No scale yet. Set scale, then click stripe centres a few stalls apart (standard stalls are 9 ft), or both ends of a known length.";
   const site = S.img && SITES.find(s => s.id === S.img.site); const sn = document.getElementById("sitenote");
@@ -712,6 +724,9 @@ document.getElementById("pk-ins").onchange = e => { const f = e.target.dataset.p
 const siteSel = document.getElementById("site");
 siteSel.innerHTML = SITES.map(s => `<option value="${s.id}">${s.label}</option>`).join("");
 function loadSite(site){
+  if (!site) return;
+  // a saved site with its own address is that project: switch to it (which sets the last address's site images aside)
+  if (site.address && !sameAddr(site.address, S.address)) setAddress(site.address);
   const im = new Image(); im.onload = () => {
     const w = im.width, h = im.height, ppf = w / site.wFt;
     let sk = site.sketchSrc; if (!sk) try { sk = makeSketch(im, w, h); } catch(e){ sk = site.src; }
@@ -763,7 +778,7 @@ function siteLayout(){
     for (const b of bollards(it, s)) boll.push({item:it.id, kind:b.k, xy:tr([b.x, b.y])});
   }
   const im = S.img;
-  return {format:"cd50-layout/1", exported:new Date().toISOString().slice(0, 10), project:{address:S.address || null, geo:S.geo || null},
+  return {format:LAYOUT_FORMAT, exported:new Date().toISOString().slice(0, 10), tool:{build:TOOL_BUILD}, project:{address:S.address || null, geo:S.geo || null},
     frame:im ? {site:im.site || null, origin_ft:[r3(im.x), r3(im.y)], size_ft:[r3(im.w / im.ppf), r3(im.h / im.ppf)], north:im.north || 0,
       scale:{how:scaleHow(im), by:(im.scale && im.scale.by) || null}} : null,
     sizing:{total_kva:z.totalKva, xfmr_kva:z.xfmr, service_amps:z.svcAmps, service_tag:z.svcTag},
@@ -773,38 +788,101 @@ function siteLayout(){
     routes:R.map(r => { const P = pathPts(r); return {id:r.id, from:r.from, to:r.to, kind:r.kind, n:r.n, size:r.size, cond:r.cond, fn:r.fn,
       path:P.map(p => p.map(r3)), length_ft:+plen(P).toFixed(1)}; })};
 }
-// the site images ride along with the downloaded/copied layout.json as data URIs. The Build PDF request has a size limit,
-// so there they go up to the page's asset store first and travel as asset ids (Claude fetches them before the build).
+// layout.json carries the design only (a few KB). The site images never ride inside it as data URIs, which made it 99%
+// image bytes: Download puts them beside it in a zip (images/<slot>.<ext>, each with its sha256 and address stamp), Build PDF
+// sends asset ids from the page's asset store (Claude fetches them before the build), and Copy leaves them out.
 function dataUrlBlob(u){ const [h, b64] = u.split(","), bin = atob(b64), a = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], {type:(h.match(/^data:([^;]+)/) || [])[1] || "image/png"}); }
+async function sha256(blob){ try { const h = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join(""); } catch(e){ return null; } }
+const imgExt = t => ({"image/png":"png", "image/jpeg":"jpg", "image/webp":"webp", "image/gif":"gif"})[t] || "img";
 async function siteImageAssets(){
   const assets = window.claude?.use ? await window.claude.use("assets").catch(() => null) : null, out = {}, ex = photosExport();
   if (!assets || !Object.keys(ex).length) return {out, missing:Object.keys(ex)};
   for (const [k, v] of Object.entries(ex)){
-    const p = PH[k]; if (!(p.asset && p.asset.n === p.src.length)){ const r = await assets.upload(dataUrlBlob(p.src)); p.asset = {id:r.id, n:p.src.length}; }
-    const {src, ...rest} = v; out[k] = {...rest, asset_id:p.asset.id};
+    const p = PH[k], blob = dataUrlBlob(p.src);
+    if (!(p.asset && p.asset.n === p.src.length)){ const r = await assets.upload(blob); p.asset = {id:r.id, n:p.src.length}; }
+    const {src, ...rest} = v; out[k] = {...rest, asset_id:p.asset.id, sha256:await sha256(blob)};
   }
   savePhotos(); return {out, missing:[]};
 }
-const layoutText = () => JSON.stringify({...siteLayout(), site_images:photosExport()}, null, 1);
+// the zip: layout.json plus images/; unzip it into sites/<site>/ and cd50.py reads the images from there
+async function layoutZip(){
+  const ex = photosExport(), imgs = {}, z = new JSZip();
+  for (const [k, v] of Object.entries(ex)){ const blob = dataUrlBlob(v.src), file = `images/${k}.${imgExt(blob.type)}`, {src, ...rest} = v;
+    z.file(file, blob); imgs[k] = {...rest, file, sha256:await sha256(blob)}; }
+  z.file("layout.json", JSON.stringify({...siteLayout(), site_images:imgs}, null, 1));
+  return {blob:await z.generateAsync({type:"blob"}), n:Object.keys(imgs).length};
+}
+const copyText = () => { const ex = photosExport(), imgs = {};
+  for (const [k, v] of Object.entries(ex)){ const {src, ...rest} = v; imgs[k] = {...rest, omitted:"use Download layout for the image files"}; }
+  return JSON.stringify({...siteLayout(), site_images:imgs}, null, 1); };
 document.getElementById("b-copy").onclick = async (e) => {
-  try { await navigator.clipboard.writeText(layoutText()); e.target.textContent = "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
+  try { await navigator.clipboard.writeText(copyText()); e.target.textContent = Object.keys(photosExport()).length ? "Copied (without images)" : "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
   setTimeout(() => e.target.textContent = "Copy layout.json", 1600);
 };
 // In the claude.ai viewer, saves go through the downloads capability; opened as a local file, a plain link works.
+// With site images it saves <site>-layout.zip (layout.json + images/), without them a plain layout.json.
 document.getElementById("b-dl").onclick = async (e) => {
+  const label = e.target.textContent, ex = Object.keys(photosExport()).length;
+  let file;
+  try { file = ex ? {filename:`${pdfFolder() || "site"}-layout.zip`, data:(await layoutZip()).blob} : {filename:"layout.json", data:copyText()}; }
+  catch(err){ e.target.textContent = "Could not pack the images"; setTimeout(() => e.target.textContent = label, 2400); return; }
   const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
   if (dl) {
-    try { await dl.save({filename: "layout.json", data: layoutText()}); }
-    catch(err){ if (err?.code !== "declined") { e.target.textContent = "Download blocked, use Copy"; setTimeout(() => e.target.textContent = "Download layout.json", 2400); } }
+    try { await dl.save(file); }
+    catch(err){ if (err?.code !== "declined") { e.target.textContent = "Download blocked, use Copy"; setTimeout(() => e.target.textContent = label, 2400); } }
     return;
   }
-  const a =document.createElement("a"); a.href = URL.createObjectURL(new Blob([layoutText()], {type:"application/json"})); a.download = "layout.json";
+  const blob = typeof file.data === "string" ? new Blob([file.data], {type:"application/json"}) : file.data;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file.filename;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 // Build PDF: in the claude.ai viewer, fire Tony's "Build PDF" scheduled task through the Claude Code Remote connector,
 // which wakes the CD50 Claude session with this layout. Opened as a local file, save layout.json and copy a Claude Code prompt.
 const BUILD_TRIGGER = "trig_01SUGXsC5acu3krHpFg7uN6A";
+// Each build gets an id and a status doc builds/<id> in the page's db: {status: requested|working|ready|failed, site, address,
+// msg, pdf, at}. Claude moves it along and the page shows it, so a failed build is not mistaken for a slow one. While a build
+// of a site is open the button does not send that site again (no duplicate _rN), unless it has had no answer for BUILD_STALE_MIN.
+const BUILD_STALE_MIN = 30, OPEN_BUILD = new Set(["requested", "working"]);
+const hhmm = t => new Date(t || Date.now()).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+let buildDbP = null, buildWatch = null;
+const buildDb = () => buildDbP || (buildDbP = window.claude?.use ? window.claude.use("db").catch(() => null) : Promise.resolve(null));
+const buildStale = d => Date.now() - (+d.at || 0) > BUILD_STALE_MIN * 60000;
+async function openBuild(db, site){
+  try { const q = await db.collection("builds").where("site", "==", site).get();
+    for (const doc of q.docs){ const d = doc.data() || {};
+      if (!OPEN_BUILD.has(d.status)) continue;
+      if (buildStale(d)){ db.doc("builds/" + doc.id).update({status:"failed", msg:`no answer from Claude after ${BUILD_STALE_MIN} minutes`}).catch(() => {}); continue; }
+      return {id:doc.id, d}; } }
+  catch(e){}
+  return null;
+}
+function watchBuild(db, id){
+  if (buildWatch) buildWatch();
+  const stop = () => { if (buildWatch) buildWatch(); buildWatch = null; if (S.build && S.build.id === id){ delete S.build; save(); } };
+  buildWatch = db.doc("builds/" + id).onSnapshot(snap => {
+    const d = snap.exists ? snap.data() : null; if (!d) return;
+    if (d.status === "ready"){ stop(); pdfStatus.textContent = `PDF ready for ${d.site}: ${d.pdf || "posted in your CD50 project"}.` + (d.msg ? ` ${d.msg}` : ""); }
+    else if (d.status === "failed"){ stop(); pdfStatus.textContent = `Claude could not build ${d.site}: ${d.msg || "no reason given"}. Fix that and press Build PDF again, or use Download layout.`; }
+    else if (buildStale(d)){ stop(); pdfStatus.textContent = `No answer from Claude on ${d.site} since ${hhmm(d.at)}. Press Build PDF to send it again, or use Download layout.`; }
+    else pdfStatus.textContent = `Claude is building ${d.site} (sent ${hhmm(d.at)}): ${d.msg || d.status}…`;
+  }, () => {});
+}
+// pick up a build that was still open when the page was closed
+if (S.build) buildDb().then(db => { if (db && S.build) watchBuild(db, S.build.id); });
+// Aerials Claude fetched for the removed Find aerial step are in the page db as aerials/<site>; ready ones are listed under
+// Saved site imagery (Load site switches to their address). Read only: nothing waits on a request any more, so a doc left
+// in requested or working by a session that died is simply not listed.
+buildDb().then(async db => { if (!db) return;
+  try { const q = await db.collection("aerials").get();
+    q.docs.forEach(doc => { const d = doc.data() || {};
+      if (d.status !== "ready" || !d.asset_id || !(d.wFt > 0) || !Array.isArray(d.pin)) return;
+      const site = {id:"addr-" + doc.id, folder:doc.id, label:d.label || d.address || doc.id, wFt:d.wFt, hFt:d.hFt, pin:d.pin, address:d.address || null,
+        credit:d.credit || "", src:"/_blob/" + d.asset_id};
+      if (SITES.some(s => s.id === site.id)) return;
+      SITES.push(site); siteSel.add(new Option(site.label, site.id)); });
+  } catch(e){} });
 const SITE_FOLDER = {"san-ysidro-299e":"san-ysidro-r6", "san-ysidro-299e-sketch":"san-ysidro-r6"};
 const pdfSite = document.getElementById("pdf-site"), pdfStatus = document.getElementById("pdf-status");
 const pdfFolder = () => pdfSite.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || SITE_FOLDER[S.img?.site] || (SITES.find(s => s.id === S.img?.site) || {}).folder || "";
@@ -816,25 +894,34 @@ document.getElementById("b-pdf").onclick = async (e) => {
   e.target.disabled = true;
   if (mcp){
     pdfStatus.textContent = "Sending to Claude…";
+    const db = await buildDb();
+    const open = db ? await openBuild(db, site) : null;
+    if (open){
+      pdfStatus.textContent = `A build of ${site} is already with Claude (sent ${hhmm(open.d.at)}, ${open.d.msg || open.d.status}). This button sends again once it finishes, or after ${BUILD_STALE_MIN} minutes without an answer.`;
+      watchBuild(db, open.id); e.target.disabled = false; return;
+    }
+    const id = `${site}-${Date.now().toString(36)}`.slice(0, 120);
     try {
       let imgs = {out:{}, missing:[]};
       try { imgs = await siteImageAssets(); } catch(err){ imgs.missing = Object.keys(photosExport()); }
-      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({site, notes, layout: {...siteLayout(), site_images:imgs.out}})}, {cache:false});
-      const t = new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
-      pdfStatus.textContent = `Sent ${site} to Claude at ${t}. The PDF is usually posted in your CD50 project within 10 minutes.`
-        + (imgs.missing.length ? ` The site images (${imgs.missing.join(", ")}) could not be attached, so their sheets will be left out; use Download layout.json for those.` : "")
-        + " If nothing arrives, the Claude session behind this button may have ended: use Download layout.json and send it to Claude.";
+      if (db) try { await db.doc("builds/" + id).set({status:"requested", site, address:S.address || null, msg:"Waiting for Claude", at:Date.now()}); } catch(err){}
+      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({build_id: db ? id : null, site, notes, layout: {...siteLayout(), site_images:imgs.out}})}, {cache:false});
+      pdfStatus.textContent = `Sent ${site} to Claude at ${hhmm(Date.now())}.` + (db ? " Its progress shows here; the PDF is usually ready within 10 minutes." : " The PDF is usually posted in your CD50 project within 10 minutes.")
+        + (imgs.missing.length ? ` The site images (${imgs.missing.join(", ")}) could not be attached, so their sheets will be left out; use Download layout for those.` : "");
+      if (db){ S.build = {id, site, at:Date.now()}; save(); watchBuild(db, id); }
     } catch(err){
+      if (db) db.doc("builds/" + id).update({status:"failed", msg:"not sent"}).catch(() => {});
       pdfStatus.textContent = err?.code === "server_not_connected" ? "Connect Claude Code in claude.ai Settings → Connectors, then try again."
         : err?.code === "declined" || err?.code === "not_granted" ? "Not sent. Allow the Claude Code Remote connector for this page to use the button."
-        : `Not sent (${err?.message || err?.code || "error"}). Use Download layout.json and send it to Claude instead.`;
+        : `Not sent (${err?.message || err?.code || "error"}). Use Download layout and send it to Claude instead.`;
     }
     e.target.disabled = false; return;
   }
   document.getElementById("b-dl").click();
-  const prompt = `Build the CD50 PDF for sites/${site} from the layout.json in my Downloads folder: copy it to sites/${site}/layout.json, then run cd50.py and pdf.cjs.` + (notes ? ` Notes: ${notes}` : "");
-  try { await navigator.clipboard.writeText(prompt); pdfStatus.textContent = "Saved layout.json and copied a prompt. Paste it into Claude Code in your CD50-Tool folder."; }
-  catch(err){ pdfStatus.textContent = "Saved layout.json. In Claude Code, ask: " + prompt; }
+  const zip = Object.keys(photosExport()).length, what = zip ? `${site}-layout.zip` : "layout.json";
+  const prompt = `Build the CD50 PDF for sites/${site} from the ${what} in my Downloads folder: ${zip ? `unzip it into sites/${site}/ (layout.json and images/)` : `copy it to sites/${site}/layout.json`}, then run cd50.py and pdf.cjs.` + (notes ? ` Notes: ${notes}` : "");
+  try { await navigator.clipboard.writeText(prompt); pdfStatus.textContent = `Saved ${what} and copied a prompt. Paste it into Claude Code in your CD50-Tool folder.`; }
+  catch(err){ pdfStatus.textContent = `Saved ${what}. In Claude Code, ask: ` + prompt; }
   e.target.disabled = false;
 };
 document.getElementById("inspector").onclick = e => {
@@ -895,8 +982,17 @@ function sketchLayer(){
 
 // ---------- Aerial Site Sketch result back in the layout area: sent by the sketch window (postMessage to the window that
 // opened it) or pasted with its scale note. Loads as the plan background at the sketch's scale, and fills the sketch slot.
-function loadSketchResult(raw, how){
-  let d; try { d = CD50.sketchResult(raw); } catch(e){ document.getElementById("photonote").textContent = e.message; return false; }
+// A sketch traced for another address (the address changed while it was tracing, or it came from another site) is held
+// back with a "Load it anyway" button, so another site's linework never becomes this site's background by accident.
+function loadSketchResult(raw, how, force){
+  const note = document.getElementById("photonote");
+  let d; try { d = CD50.sketchResult(raw); } catch(e){ note.textContent = e.message; return false; }
+  if (!force && !sameAddr(d.address, S.address)){
+    note.replaceChildren(`This sketch was traced for ${d.address}, but the project address is ${S.address}, so it was not loaded. `);
+    const b = document.createElement("button"); b.type = "button"; b.textContent = "Load it anyway";
+    b.onclick = () => loadSketchResult(raw, how, true); note.appendChild(b);
+    return false;
+  }
   const im = new Image(); im.onload = () => {
     const k = Math.min(1, 1800 / Math.max(im.width, im.height)), w = Math.round(im.width * k), h = Math.round(im.height * k);
     const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d");
@@ -905,7 +1001,7 @@ function loadSketchResult(raw, how){
     S.img = {src, sketchSrc:src, w, h, ppf, x:ax - w / 2 / ppf, y:ay - h / 2 / ppf, sample:false, site:null, linework:true, north:d.north, fromSketch:true,
       scale:{how:d.scale, by:d.scale === "unscaled" ? "Aerial Site Sketch, not to scale" : `Aerial Site Sketch: ${d.scaleSource || "its scale"}`}};
     S.sketch = false; syncInputs(); fit(); render(); setMode(d.ppf ? "select" : "scale");
-    PH.sketch = {name:d.name, src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src, w, h, ...(d.ppf ? {ppf} : {}), north:d.north, bg:true,
+    PH.sketch = {name:d.name, src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src, w, h, ...(d.ppf ? {ppf} : {}), north:d.north, bg:true, addr:S.address || null,
       placement:d.ppf ? "sent at its scale" : "sent without a scale"}; savePhotos(); drawPhotos();
     document.getElementById("photonote").textContent = `Aerial Site Sketch ${how} into the layout area${d.ppf ? `, at its scale (${(1 / ppf).toFixed(2)} ft per pixel${d.scale === "estimated" ? ", estimated from 9 ft stalls" : ""})` : "; it had no scale, so set one with Set scale"}. Place equipment on it.`;
     try { document.getElementById("plan").scrollIntoView({block:"center"}); } catch(e){}
@@ -916,22 +1012,55 @@ function loadSketchResult(raw, how){
 // page opened as a local file), and only a valid sketch result (CD50.sketchResult) is loaded
 window.addEventListener("message", e => {
   const d = e.data; if (!d || d.type !== "cd50-sketch" || e.source === window) return;
-  if (!/^https:\/\/([a-z0-9-]+\.)*(claude\.ai|claudeusercontent\.com)$/.test(e.origin) && e.origin !== "null") return;
+  // "null" is a page opened as a local file; accepted only when this page is a local file too
+  if (!/^https:\/\/([a-z0-9-]+\.)*(claude\.ai|claudeusercontent\.com)$/.test(e.origin) && !(e.origin === "null" && location.protocol === "file:")) return;
   if (loadSketchResult(d, "came back")) try { e.source && e.source.postMessage({type:"cd50-sketch-ack"}, "*"); } catch(x){}
 });
 
 
 // ---------- site images: vicinity (wide), lot (with the install area boxed), and the Aerial Site Sketch result
-// kept under their own localStorage key so a full store never stops the layout itself from saving
-let PH = {}; try { PH = JSON.parse(localStorage.getItem("cd50photos") || "{}") || {}; } catch(e){}
-// the image data goes to IndexedDB (keepImage); localStorage keeps the names, boxes and scale notes
-function savePhotos(){ const o = {}; for (const [k, v] of Object.entries(PH)) if (v) o[k] = {...v, src:keepImage("ph-" + k, v.src)};
-  for (const k of ["vicinity", "lot", "sketch"]) if (!PH[k] && kept["ph-" + k]){ delete kept["ph-" + k]; IDB.del("ph-" + k).catch(() => {}); }
-  try { localStorage.setItem("cd50photos", JSON.stringify(o)); return true; }
+// They belong to one project address: PH holds the current address's images (each stamped with addr), PHS keeps other
+// addresses' images aside (names and IndexedDB keys only) until that address is entered again. So a lot photo from the last
+// site never goes out with the next site's layout. Kept under their own localStorage key so a full store never stops the
+// layout itself from saving; the image data goes to IndexedDB (keepImage), localStorage keeps the names, boxes and scale notes.
+let PH = {}, PHS = {};
+(() => { let raw = null; try { raw = JSON.parse(localStorage.getItem("cd50photos") || "null"); } catch(e){}
+  if (raw && raw.v === 2){ PHS = raw.sites || {}; const k = addrKey(S.address); PH = PHS[k] || {}; delete PHS[k]; }
+  else if (raw && typeof raw === "object"){ PH = raw; for (const v of Object.values(PH)) if (v && !v.addr) v.addr = S.address || null; }   // saved before v2
+})();
+const phKey = (k, v) => `ph-${addrKey(v && v.addr)}-${k}`;
+const idbOf = src => typeof src === "string" && src.startsWith("idb:") ? src.slice(4) : null;
+const phStore = set => { const o = {}; for (const [k, v] of Object.entries(set || {})) if (v) o[k] = {...v, src:keepImage(phKey(k, v), v.src)}; return o; };
+function savePhotos(){
+  const sites = {}; for (const [a, set] of Object.entries(PHS)) sites[a] = phStore(set);
+  sites[addrKey(S.address)] = phStore(PH);
+  try { localStorage.setItem("cd50photos", JSON.stringify({v:2, sites})); return true; }
   catch(e){ storeWarn("site images", e); return false; } }
+function dropPhoto(k){ const v = PH[k]; delete PH[k]; if (!v) return;
+  for (const key of [phKey(k, v), idbOf(v.src)]) if (key){ delete kept[key]; IDB.del(key).catch(() => {}); } }
+// put the current address's images back from IndexedDB; true when one was missing
+async function restorePhotos(){ const P = PH; let lost = false;
+  for (const [k, v] of Object.entries(P)){ const key = idbOf(v?.src); if (!key) continue;
+    const d = await IDB.get(key).catch(() => null); if (d){ kept[key] = d; v.src = d; } else { delete P[k]; lost = true; } }
+  return lost; }
+function switchPhotos(old, a){
+  if (!old){ for (const v of Object.values(PH)) if (v && !v.addr) v.addr = a; savePhotos(); return; }
+  const n = Object.keys(PH).length;
+  if (n) PHS[addrKey(old)] = phStore(PH);
+  const k = addrKey(a); PH = PHS[k] || {}; delete PHS[k];
+  savePhotos(); drawPhotos();
+  restorePhotos().then(lost => { if (lost) storeWarn("saved images", {name:"not found"}); drawPhotos(); render(); });
+  const back = Object.keys(PH).length;
+  document.getElementById("photonote").textContent = (n ? `The ${n} site image${n > 1 ? "s" : ""} for ${old} were set aside; they come back if you enter that address again. ` : "")
+    + (back ? `Loaded the ${back} site image${back > 1 ? "s" : ""} saved for this address.` : "");
+}
 const photoIn = document.getElementById("photofile"), boxDlg = document.getElementById("boxdlg"), boxCv = document.getElementById("boxcv");
 let photoSlot = null;
-function photosExport(){ const o = {}; for (const [k, v] of Object.entries(PH)) if (v && v.src) o[k] = {name:v.name || null, src:v.src, ...(v.box ? {install_box:v.box.map(n => +n.toFixed(4)), box_units:"fraction of image width/height, [x0,y0,x1,y1] from top left"} : {})}; return o; }
+// only images stamped with this project's address go out; each carries that stamp so the plan set generator can check it
+function photosExport(){ const o = {};
+  for (const [k, v] of Object.entries(PH)) if (v && v.src && sameAddr(v.addr, S.address)) o[k] = {name:v.name || null, address:v.addr || S.address || null, src:v.src,
+    ...(v.box ? {install_box:v.box.map(n => +n.toFixed(4)), box_units:"fraction of image width/height, [x0,y0,x1,y1] from top left"} : {})};
+  return o; }
 function drawPhotos(){
   document.querySelectorAll(".photo").forEach(el => {
     const k = el.dataset.slot, v = PH[k], pv = el.querySelector(".pv"), acts = el.querySelector(".acts");
@@ -945,7 +1074,7 @@ function drawPhotos(){
     const btn = (t, f) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = f; acts.appendChild(b); };
     if (k === "lot") btn(v.box ? "Edit box" : "Box the install area", () => openBox());
     btn("Replace", () => pickPhoto(k));
-    btn("Remove", () => { delete PH[k]; savePhotos(); drawPhotos(); if (k === "sketch") render(); });
+    btn("Remove", () => { dropPhoto(k); savePhotos(); drawPhotos(); if (k === "sketch") render(); });
   });
 }
 function pickPhoto(k){ photoSlot = k; photoIn.value = ""; photoIn.click(); }
@@ -956,7 +1085,7 @@ function takePhoto(k, f){
     c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
     let src = c.toDataURL(k === "sketch" ? "image/png" : "image/jpeg", 0.86);
     if (src.length > 1500000) src = c.toDataURL("image/jpeg", 0.86);   // a photo-like sketch PNG is too big to keep
-    PH[k] = {name:f.name, src, w:c.width, h:c.height}; savePhotos(); drawPhotos();
+    PH[k] = {name:f.name, src, w:c.width, h:c.height, addr:S.address || null}; savePhotos(); drawPhotos();
     if (k === "sketch"){ S.sketch = true; syncInputs(); render(); }   // Sketch view shows it
     if (k === "lot") openBox();
   }; im.src = rd.result; }; rd.readAsDataURL(f);
@@ -1108,8 +1237,9 @@ function geCalibrate(cl){
 // ---------- address first: the project address unlocks the other steps and goes out with layout.json
 const FTUS = 1200 / 3937;
 const addrIn = document.getElementById("addr"), addrStatus = document.getElementById("addrstatus");
-const normAddr = a => a.toLowerCase().replace(/[.,#]/g, " ").replace(/\b(east)\b/g, "e").replace(/\b(west)\b/g, "w").replace(/\b(boulevard)\b/g, "blvd").replace(/\s+/g, " ").trim();
-function setAddress(a, geo){ S.address = a; S.geo = geo || S.geo || null; addrIn.value = a; save(); gate(); }
+// a new address sets the last one's site images aside (switchPhotos), so they never go out with another site's layout
+function setAddress(a, geo){ const old = S.address || ""; S.address = a; S.geo = geo || S.geo || null; addrIn.value = a;
+  if (normAddr(old) !== normAddr(a)) switchPhotos(old, a); save(); gate(); }
 function gate(){ const on = !S.address; document.querySelector(".app").classList.toggle("locked", on); document.getElementById("gate").hidden = !on;
   document.querySelectorAll(".side>section:not(#addrblock)").forEach(el => { el.inert = on; }); if (!on && !addrIn.value) addrIn.value = S.address; }
 // the address unlocks the other steps: set on Enter, when the box loses focus, or with Open Aerial Site Sketch
@@ -1226,7 +1356,8 @@ document.getElementById("scaleok").onclick = () => {
   const truth = parseFloat(scaleFt.value); if (!(truth > 0) || scalePts.length < 2 || !S.img) return;
   const L = Math.hypot(scalePts[1][0]-scalePts[0][0], scalePts[1][1]-scalePts[0][1]); const f = truth / L, n = parseInt(scaleStalls.value);
   const [ox, oy] = scalePts[0]; S.img.ppf = S.img.ppf / f; S.img.x = ox + (S.img.x - ox) * f; S.img.y = oy + (S.img.y - oy) * f; delete S.img.guess;
-  setScale(S.img, "measured", n > 0 ? `${n} standard stall${n > 1 ? "s" : ""} at ${CD50.STALL_FT} ft` : `a ${truth} ft length`);
+  // a stall count rests on the 9 ft assumption, not on a measurement, so it is "assumed" and the plan set flags it
+  setScale(S.img, n > 0 ? "assumed" : "measured", n > 0 ? `${n} standard stall${n > 1 ? "s" : ""} at ${CD50.STALL_FT} ft` : `a ${truth} ft length`);
   if (S.img.ge) S.img.ge.how = S.img.scale.by;
   fit(); setMode("select"); syncInputs();
 };
