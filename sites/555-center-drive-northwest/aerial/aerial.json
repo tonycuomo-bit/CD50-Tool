@@ -1,0 +1,43 @@
+{
+ "format": "cd50-aerial/1",
+ "created": "2026-10-23",
+ "address": "555 Center Drive Northwest, Walker, MI 49544",
+ "geocode": {
+  "lon": -85.68144066862,
+  "lat": 43.018343429247,
+  "matched": "555 CENTER DR NW, WALKER, MI, 49544",
+  "source": "US Census geocoder (address range, interpolated)"
+ },
+ "frame": {
+  "w_ft": 700,
+  "h_ft": 525,
+  "ft_per_px": 0.5,
+  "px": [
+   1400,
+   1050
+  ],
+  "pin_ft": [
+   350.0,
+   262.5
+  ],
+  "crs": "Transverse Mercator, NAD83, US survey ft, k=1, origin at the address point",
+  "wkt": "PROJCS[\"CD50 local TM\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",0.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-85.6814407],PARAMETER[\"Scale_Factor\",1.0],PARAMETER[\"Latitude_Of_Origin\",43.0183434],UNIT[\"Foot_US\",0.3048006096012192]]"
+ },
+ "image": "555-center-drive-northwest_usgs-naip-plus_20220908_0.5ftpx_700x525ft.jpg",
+ "chosen": "usgs-naip-plus",
+ "blocked_better": [],
+ "credit": "USGS NAIP Plus, public domain, 2022-09-08 (1.97 ft native), 0.5 ft/px, north up, local TM frame centred on the address; contrast and unsharp mask applied. Pin from US Census geocoder (address range, interpolated).",
+ "enhanced": true,
+ "candidates": [
+  {
+   "id": "usgs-naip-plus",
+   "name": "USGS NAIP Plus (NAIP 0.6 m, HRO where flown)",
+   "license": "public",
+   "credit": "USGS NAIP Plus, public domain",
+   "gsd_ft": 1.9685000000000001,
+   "date": "2022-09-08",
+   "detail": "m_4308559_se_16_060_20220908 (USDA)",
+   "status": "ok"
+  }
+ ]
+}

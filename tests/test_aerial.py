@@ -8,7 +8,8 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import aerial  # noqa: E402
 
 CFG = json.load(open(aerial.SOURCES, encoding='utf-8'))
-TOOL_HTML = open(aerial.TOOL, encoding='utf-8').read()
+TOOL_HTML = open(os.path.join(ROOT, 'cd50-layout', 'cd50-layout.html'), encoding='utf-8').read()   # built from cd50-layout/src/
+SITES_JS = open(aerial.TOOL, encoding='utf-8').read()                                                  # src/sites.js
 
 
 def test_sources_table():
@@ -49,22 +50,42 @@ def test_enhance_keeps_size():
 
 @pytest.mark.skipif(not shutil.which('node'), reason='node not installed')
 def test_add_to_tool_inserts_then_replaces(tmp_path):
-    p = tmp_path / 'tool.html'; p.write_text(TOOL_HTML, encoding='utf-8')
+    p = tmp_path / 'sites.js'; p.write_text(SITES_JS, encoding='utf-8')
     meta = {'frame': {'w_ft': 700, 'h_ft': 525}, 'address': '1 Test St, Town, CA', 'geocode': {'lon': -117.0, 'lat': 32.6}, 'credit': 'test'}
     for jpg in (b'first', b'second'):
         aerial.add_to_tool(aerial.sites_entry('zz-test', '1 TEST ST', meta, jpg), 'zz-test', str(p))
     html = p.read_text(encoding='utf-8')
     assert html.count('{id:"zz-test"') == 1 and 'c2Vjb25k' in html          # base64 of b'second'
-    js = re.search(r'<script>\n(.*)</script>', html, re.S).group(1)
-    subprocess.run(['node', '-e', 'new Function(require("fs").readFileSync(0, "utf8"))'], input=js, text=True, check=True)
+    subprocess.run(['node', '-e', 'new Function(require("fs").readFileSync(0, "utf8"))'], input=html, text=True, check=True)
 
 
 def test_layout_tool_requires_the_address():
     assert 'id="addrblock"' in TOOL_HTML and 'id="addr"' in TOOL_HTML and 'gate();' in TOOL_HTML
-    assert re.search(r'const FIND_TRIGGER = "trig_\w+"', TOOL_HTML)
     assert 'project:{address:S.address' in TOOL_HTML                     # the address goes out with layout.json
-    # Claude's result comes back through the page db (aerials/<site>) and an uploaded asset, so it loads with no republish
-    assert 'db.doc("aerials/" + id).onSnapshot' in TOOL_HTML and '"/_blob/" + d.asset_id' in TOOL_HTML
+    # Enter, leaving the box or Open Aerial Site Sketch commits the address; the old Find aerial search is gone
+    assert 'function commitAddress(' in TOOL_HTML and 'id="b-addr"' not in TOOL_HTML and 'FIND_TRIGGER' not in TOOL_HTML
+
+
+def test_layout_tool_imports_google_earth():
+    assert 'id="gefile"' in TOOL_HTML and 'function parseKml(' in TOOL_HTML and 'DecompressionStream("deflate-raw")' in TOOL_HTML
+    assert 'function geCalibrate(' in TOOL_HTML
+
+
+def test_layout_tool_site_images_and_sketch():
+    for slot in ('vicinity', 'lot', 'sketch'):
+        assert f'data-slot="{slot}"' in TOOL_HTML
+    assert 'id="b-sketchapp"' in TOOL_HTML and 'install_box' in TOOL_HTML and 'function layoutZip()' in TOOL_HTML
+    # Aerial Site Sketch is built in: a second view in a shadow root; its result comes back by the cd50:sketch event
+    # (or, from the standalone artifact, by message or paste with its scale note) into the layout area and the sketch slot
+    assert 'id="sketchview"' in TOOL_HTML and 'id="sketch-tpl"' in TOOL_HTML and 'attachShadow(' in TOOL_HTML
+    assert 'SKETCH: "cd50:sketch"' in TOOL_HTML and 'ADDRESS: "cd50:address"' in TOOL_HTML and 'id="send-layout"' in TOOL_HTML
+    assert '"cd50-sketch"' in TOOL_HTML and 'cd50-sketch-ack' in TOOL_HTML and 'cd50-sketch-meta' in TOOL_HTML
+
+
+@pytest.mark.skipif(not shutil.which('node'), reason='node not installed')
+def test_layout_tool_scripts_parse():
+    for js in re.findall(r'<script>\n(.*?)</script>', TOOL_HTML, re.S):
+        subprocess.run(['node', '-e', 'new Function(require("fs").readFileSync(0, "utf8"))'], input=js, text=True, check=True)
 
 
 def test_blocked_better_names_sharper_sources_and_their_hosts():

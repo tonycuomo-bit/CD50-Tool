@@ -1,0 +1,300 @@
+<meta charset="utf-8">
+<title>CD50 Site Layout</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: drafting-table split. Left = sizing sheet + schedule, right = plan canvas with a title-block style toolbar. */
+:root{
+  --paper:#f3f5f4; --sheet:#ffffff; --ink:#18211f; --muted:#5d6b67; --rule:#cfd8d5;
+  --accent:#0b6e69; --accent-ink:#ffffff; --warn:#a15c00; --warn-bg:#fff3df; --bad:#b3261e; --ok:#1d7a3a;
+  --pad:#9aa8a4; --clear:#c2410c; --conduit-ac:#1d4ed8; --conduit-dc:#b3261e; --conduit-com:#6d28d9;
+  --canvas:#eef1f0; --sel:#0b6e69;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#111716; --sheet:#182120; --ink:#e3ebe8; --muted:#93a39e; --rule:#2c3936;
+  --accent:#3fb8ae; --accent-ink:#06201e; --warn:#f0b35a; --warn-bg:#3a2a10; --bad:#ff8a80; --ok:#6fd58f;
+  --pad:#6b7b77; --clear:#fb923c; --conduit-ac:#7aa2ff; --conduit-dc:#ff8a80; --conduit-com:#c4a5ff;
+  --canvas:#0d1312; --sel:#3fb8ae; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#111716; --sheet:#182120; --ink:#e3ebe8; --muted:#93a39e; --rule:#2c3936;
+  --accent:#3fb8ae; --accent-ink:#06201e; --warn:#f0b35a; --warn-bg:#3a2a10; --bad:#ff8a80; --ok:#6fd58f;
+  --pad:#6b7b77; --clear:#fb923c; --conduit-ac:#7aa2ff; --conduit-dc:#ff8a80; --conduit-com:#c4a5ff;
+  --canvas:#0d1312; --sel:#3fb8ae; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px;box-sizing:border-box}
+*{box-sizing:border-box}
+h1,h2{font-family:var(--f-display);font-weight:600;margin:0;text-wrap:balance}
+h1{font-size:22px;letter-spacing:.01em}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.app{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:16px;height:calc(100% - 4px);min-height:560px}
+.side{display:flex;flex-direction:column;gap:14px;overflow:auto;min-width:0;padding-right:4px}
+.block{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.head{display:flex;flex-direction:column;gap:2px}
+.sub{color:var(--muted);font-size:12.5px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+input,select,button,textarea{font:inherit;color:inherit}
+input[type=number],select,input[type=text],textarea{background:var(--paper);border:1px solid var(--rule);border-radius:4px;padding:6px 8px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:14px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+.seg button{border:0;background:var(--paper);padding:7px 6px;cursor:pointer;font-size:13px}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:10px}
+.row2>*{min-width:0} .row2 select,.row2 input{width:100%;min-width:0}
+[hidden]{display:none!important}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:13px}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;font-family:var(--f-body);font-weight:600}
+.pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.ok{color:var(--ok);border:1px solid currentColor}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btn{border:1px solid var(--rule);background:var(--paper);border-radius:4px;padding:6px 10px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid var(--rule);padding:5px 6px;text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+td.n{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.tag{font-family:var(--f-mono);white-space:nowrap}
+.swatch{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.stage{display:flex;flex-direction:column;min-width:0;background:var(--sheet);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--rule)}
+.toolbar .sp{flex:1}
+.hint{font-size:12px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--rule);min-height:30px}
+.canvaswrap{position:relative;flex:1;min-height:420px;background:var(--canvas)}
+svg#plan{position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none;cursor:grab}
+svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
+.scalebox{position:absolute;left:10px;bottom:10px;display:flex;gap:6px;align-items:center;background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:6px 8px;font-size:12px}
+.scalebox input{width:80px}
+.inspector{font-size:13px}
+.note{font-size:12px;color:var(--muted)}
+.note.warn,.storewarn{color:var(--warn);background:var(--warn-bg);padding:6px 8px;border-radius:3px}
+.storewarn{font-size:13px;margin:0 0 10px}
+.assume{font-size:11.5px;color:var(--muted);border-top:1px dashed var(--rule);padding-top:8px}
+@media (max-width:860px){.app{grid-template-columns:1fr;height:auto}.canvaswrap{min-height:480px}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+.sketch-dark{}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.photo{display:grid;gap:4px;align-content:start;min-width:0}
+.photo .pv{position:relative;aspect-ratio:4/3;border:1px dashed var(--rule);border-radius:4px;background:var(--canvas);display:grid;place-items:center;overflow:hidden;cursor:pointer;font-size:11.5px;color:var(--muted);text-align:center;padding:4px}
+.photo .pv img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.photo .pv .hl{position:absolute;border:2px solid var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent);pointer-events:none}
+.photo b{font-size:11.5px;font-weight:600}
+.photo .acts{display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px}
+.photo .acts button{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+dialog.boxdlg{width:min(96vw,1400px);max-width:none;padding:0;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);color:var(--ink)}
+dialog.boxdlg::backdrop{background:rgba(10,14,18,.6)}
+.boxdlg .bh{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.boxdlg .bw{position:relative;max-height:78vh;overflow:auto;background:var(--canvas)}
+.boxdlg canvas{display:block;width:100%;height:auto;cursor:crosshair;touch-action:none}
+.chk{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)}
+.app.locked .side>section:not(#addrblock){opacity:.45}
+.gate{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;background:color-mix(in srgb,var(--canvas) 82%,transparent);
+  font-family:var(--f-display);font-size:18px;color:var(--muted)}
+.cands td input{margin:0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) image.sketch{filter:invert(1) hue-rotate(180deg)}}
+:root[data-theme="dark"] image.sketch{filter:invert(1) hue-rotate(180deg)}
+/* Aerial Site Sketch is a second view of this page: it replaces the layout while open */
+body.sk .app{display:none}
+</style>
+
+<div class="app">
+  <aside class="side">
+    <div class="head">
+      <h1>CD50 Site Layout</h1>
+      <div class="sub">Start with the project address. Then sketch the site in Aerial Site Sketch (it comes back here at scale), size, place equipment and route conduit.</div>
+    </div>
+    <div class="storewarn" id="storewarn" role="alert" hidden></div>
+
+    <section class="block" aria-labelledby="h-addr" id="addrblock">
+      <h2 id="h-addr">0 · Project address</h2>
+      <form id="addrform" class="row2" style="grid-template-columns:auto auto;justify-content:start;align-items:end">
+        <label class="f" style="grid-column:1/-1">Site address (required)<input id="addr" type="text" autocomplete="street-address" placeholder="Street, city, state ZIP" required></label>
+        <button type="button" class="btn primary" id="b-sketchapp">Open Aerial Site Sketch</button>
+      </form>
+      <label class="chk"><input id="sk-auto" type="checkbox" checked> Switch to Aerial Site Sketch when I enter an address (the address goes with it)</label>
+      <div class="note" id="addrstatus" role="status" aria-live="polite">Enter the address and press Enter (or Open Aerial Site Sketch) to start. Aerial Site Sketch opens on this page with it; Send to the layout brings the finished sketch back here to place equipment on it.</div>
+    </section>
+
+    <section class="block" aria-labelledby="h-photos" id="photoblock">
+      <h2 id="h-photos">Site images and sketch</h2>
+      <div class="photos">
+        <div class="photo" data-slot="vicinity"><b>Vicinity (wide overhead)</b><div class="pv" tabindex="0" role="button" aria-label="Upload the wide overhead image">Upload or drop</div><div class="acts"></div></div>
+        <div class="photo" data-slot="lot"><b>Lot, install area boxed</b><div class="pv" tabindex="0" role="button" aria-label="Upload the zoomed lot image">Upload or drop</div><div class="acts"></div></div>
+        <div class="photo" data-slot="sketch"><b>Aerial sketch result</b><div class="pv" tabindex="0" role="button" aria-label="Upload the sketch PNG from Aerial Site Sketch">Upload the sketch PNG</div><div class="acts"></div></div>
+      </div>
+      <input id="photofile" type="file" accept="image/*" hidden>
+      <div class="note" id="photonote">Wide overhead of the general area, a closer view of the lot with the proposed install area boxed, and the PNG from Aerial Site Sketch. They belong to this project address and go out with Download layout (a zip with layout.json and the images).</div>
+    </section>
+
+    <section class="block" aria-labelledby="h-size">
+      <h2 id="h-size">1 · Sizing</h2>
+      <div class="seg" role="group" aria-label="Product" style="grid-template-columns:1fr 1fr 1fr">
+        <button id="p-v4" type="button" aria-pressed="true">V4 Supercharger</button>
+        <button id="p-mw" type="button" aria-pressed="false">V4 Megacharger</button>
+        <button id="p-mix" type="button" aria-pressed="false">MW + V4</button>
+      </div>
+      <div class="row2">
+        <label class="f"><span id="posts-l">Posts installed</span><input id="posts" type="number" min="1" max="64" step="1" value="4"></label>
+        <label class="f"><span id="input-l">Cabinet input</span><select id="input"></select></label>
+      </div>
+      <div class="row2" id="mwrow" hidden>
+        <label class="f">MW posts<input id="mwposts" type="number" min="1" max="32" step="1" value="2"></label>
+        <label class="f">MW cabinet input<select id="mwinput"></select></label>
+      </div>
+      <dl class="kv" id="results"></dl>
+      <div class="assume" id="assume"></div>
+    </section>
+
+    <section class="block" aria-labelledby="h-site">
+      <h2 id="h-site">2 · Site view</h2>
+      <div class="note" id="imgnote">Showing a sample lot. Send a sketch back from Aerial Site Sketch, import a Google Earth image (drop it here or on the plan, with its KMZ for the scale), or load or paste (Ctrl+V) a screenshot of the overhead view, crop to the work area, then set the scale from a known dimension such as a 9 ft stall.</div>
+      <div class="btns">
+        <label class="btn primary" for="file">Load overhead image</label>
+        <input id="file" type="file" accept="image/*" hidden>
+        <label class="btn" for="gefile">Import Google Earth</label>
+        <input id="gefile" type="file" accept=".jpg,.jpeg,.png,.kml,.kmz,image/*" multiple hidden>
+        <button class="btn" id="b-sketch" type="button" aria-pressed="true">Sketch view</button>
+        <button class="btn" id="b-boll" type="button" aria-pressed="true">Bollards</button>
+      </div>
+      <div class="row2" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
+        <label class="f">Saved site imagery<select id="site"></select></label>
+        <button class="btn" id="b-site" type="button">Load site</button>
+      </div>
+      <div class="note" id="scalestat" role="status" hidden></div>
+      <div class="note" id="sitenote" hidden></div>
+      <div class="note" id="genote" hidden></div>
+      <button class="btn" id="b-gecal" type="button" hidden>Refine the scale with the Earth path</button>
+      <details class="note"><summary>Saving a view from Google Earth Pro</summary>
+        <ol style="margin:6px 0 0 18px;padding:0">
+          <li>Zoom to the site, then press <b>U</b> (straight down) and <b>N</b> (north up).</li>
+          <li>Add a placemark on the site (Add › Placemark). Optionally add a path (Add › Path) along a long straight edge, such as a curb line or building wall. With a path the scale is exact.</li>
+          <li>File › Save › Save Image, at the highest resolution.</li>
+          <li>Select the placemark and the path in the Places list (put them in one folder), then right-click › Save Place As (KMZ or KML).</li>
+          <li>Here, press Import Google Earth and pick both files. With a path, click its first point and then its last point on the image.</li>
+        </ol>
+        Google Earth imagery is for preliminary, reference layouts; check Google's terms before issuing drawings traced from it.</details>
+      <label class="f">Image strength<input id="opacity" type="range" min="0.1" max="1" step="0.05" value="0.8"></label>
+    </section>
+
+    <section class="block" aria-labelledby="h-eq">
+      <h2 id="h-eq">3 · Equipment</h2>
+      <div class="inspector" id="inspector"></div>
+      <div class="btns">
+        <button class="btn" id="b-arrange" type="button">Re-arrange all</button>
+        <button class="btn" id="b-reroute" type="button">Reset conduit paths</button>
+        <button class="btn" id="b-copy" type="button">Copy layout.json</button>
+        <button class="btn" id="b-dl" type="button">Download layout</button>
+      </div>
+      <div class="note">Drag equipment to move it. Select it to rotate. Pads are hatched; dashed outlines are working clearances.</div>
+    </section>
+
+    <section class="block" aria-labelledby="h-park">
+      <h2 id="h-park">4 · Parking, ADA, signs and landscaping</h2>
+      <div class="row2">
+        <label class="f">ADA standard<select id="pk-jur"></select></label>
+        <label class="f">Striping<select id="pk-stripe"></select></label>
+      </div>
+      <div class="row2">
+        <label class="f">EV stall width (ft)<input id="pk-w" type="number" min="9" max="14" step="0.5"></label>
+        <label class="f">Stall length (ft)<input id="pk-l" type="number" min="17" max="24" step="0.5"></label>
+      </div>
+      <div class="row2">
+        <label class="f">EV stall sign<select id="pk-sign"></select></label>
+        <label class="f">Pavement stencil<select id="pk-stencil"><option value="1">EV CHARGING ONLY</option><option value="0">None</option></select></label>
+      </div>
+      <label class="f">Access aisle striping<select id="pk-aisle"></select></label>
+      <div class="btns">
+        <button class="btn" id="pk-posts" type="button">Stalls at V4 posts</button>
+        <button class="btn" id="pk-van" type="button">+ Van accessible</button>
+        <button class="btn" id="pk-std" type="button">+ Standard accessible</button>
+        <button class="btn" id="pk-amb" type="button">+ Ambulatory</button>
+        <button class="btn" id="pk-ev" type="button">+ EV stall</button>
+        <button class="btn" id="pk-signs" type="button">Signs at stalls</button>
+        <button class="btn" id="pk-addsign" type="button">+ Sign</button>
+      </div>
+      <div id="pk-check"></div>
+      <div class="inspector" id="pk-ins"></div>
+      <div class="row2">
+        <label class="f">Landscaping<select id="ls-kind"></select></label>
+        <div class="btns" style="align-self:end"><button class="btn" id="ls-add" type="button">+ Plant</button></div>
+      </div>
+      <div class="note">New stalls, signs and plants drop at the centre of the view. Drag to place, select to rotate (R), change type, or delete (Delete key). Plants are generic (species TBD) and print on the L-101 landscape plan.</div>
+    </section>
+
+    <section class="block" aria-labelledby="h-sch">
+      <h2 id="h-sch">5 · Conduit schedule</h2>
+      <div class="tablewrap"><table id="sched"></table></div>
+      <div class="note">Click a conduit to add a bend point, drag a point to reroute, double-click a point to remove it. Lengths are center to center on plan, before stub-ups.</div>
+      <div id="sched-check" class="note"></div>
+      <details class="note"><summary>Tesla design limits</summary><div id="tesla-notes"></div></details>
+    </section>
+
+    <section class="block" aria-labelledby="h-pdf">
+      <h2 id="h-pdf">6 · Plan set PDF</h2>
+      <label class="f">Site folder<input id="pdf-site" type="text" placeholder="from the project address" spellcheck="false"></label>
+      <div class="note" id="pdf-where"></div>
+      <label class="f">Notes for Claude (optional)<textarea id="pdf-notes" rows="2" placeholder="e.g. move the issue date to Monday"></textarea></label>
+      <div class="btns"><button class="btn primary" id="b-pdf" type="button">Build PDF with Claude</button></div>
+      <div class="note" id="pdf-status">Sends this layout to Claude, who builds the CD50 plan set and posts the PDF in your CD50 project.</div>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div class="toolbar">
+      <button class="btn" id="m-select" type="button" aria-pressed="true">Select</button>
+      <button class="btn" id="m-crop" type="button" aria-pressed="false">Crop view</button>
+      <button class="btn" id="m-scale" type="button" aria-pressed="false">Set scale</button>
+      <button class="btn" id="m-rotate" type="button" aria-pressed="false" title="Drag an item (or the selected group) around to rotate it. Shift snaps to 15°.">⟳ Rotate</button>
+      <button class="btn" id="m-multi" type="button" aria-pressed="false" title="Click items to add or drop them from the selection, or drag a box around them. Shift-click does the same.">Multi-select</button>
+      <span class="sp"></span>
+      <button class="btn" id="z-out" type="button" aria-label="Zoom out">−</button>
+      <button class="btn" id="z-in" type="button" aria-label="Zoom in">+</button>
+      <button class="btn" id="z-fit" type="button">Fit</button>
+    </div>
+    <dialog class="boxdlg" id="boxdlg" aria-labelledby="boxdlg-t">
+  <div class="bh"><b id="boxdlg-t">Drag a box around the proposed install area</b>
+    <div class="btns" style="margin:0"><button class="btn" id="box-clear" type="button">Clear box</button><button class="btn primary" id="box-done" type="button">Done</button></div></div>
+  <div class="bw"><canvas id="boxcv"></canvas></div>
+</dialog>
+<div class="hint" id="hint">Drag empty space to pan, scroll to zoom.</div>
+    <div class="canvaswrap">
+      <svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="gate" id="gate" hidden>Enter the project address in step 0 to start.</div>
+      <div class="scalebox" id="scalebox" hidden>
+        <span id="scalemeas"></span>
+        <label for="scalestalls">Stalls apart (9 ft each)</label>
+        <input id="scalestalls" type="number" min="1" step="1" value="1" style="width:4em">
+        <label for="scaleft">or true length (ft)</label>
+        <input id="scaleft" type="number" min="0.5" step="0.5" value="9">
+        <button class="btn primary" id="scaleok" type="button">Apply</button>
+        <button class="btn" id="scalecancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="sketchview" hidden></div>
+<!-- @include sketch/sketch.html -->
+<script>
+<!-- @include bridge.js -->
+</script>
+<script>
+<!-- @include layout.js -->
+</script>
+<script>
+<!-- @include vendor/jspdf-2.5.1.umd.min.js -->
+</script>
+<script>
+<!-- @include vendor/jszip-3.10.1.min.js -->
+</script>
+<script>
+<!-- @include sketch/sketch.js -->
+</script>
