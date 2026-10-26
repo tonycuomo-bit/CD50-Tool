@@ -239,7 +239,8 @@ body.sk .app{display:none}
 
     <section class="block" aria-labelledby="h-pdf">
       <h2 id="h-pdf">6 · Plan set PDF</h2>
-      <label class="f">Site folder<input id="pdf-site" type="text" placeholder="e.g. san-ysidro-r6" spellcheck="false"></label>
+      <label class="f">Site folder<input id="pdf-site" type="text" placeholder="from the project address" spellcheck="false"></label>
+      <div class="note" id="pdf-where"></div>
       <label class="f">Notes for Claude (optional)<textarea id="pdf-notes" rows="2" placeholder="e.g. move the issue date to Monday"></textarea></label>
       <div class="btns"><button class="btn primary" id="b-pdf" type="button">Build PDF with Claude</button></div>
       <div class="note" id="pdf-status">Sends this layout to Claude, who builds the CD50 plan set and posts the PDF in your CD50 project.</div>

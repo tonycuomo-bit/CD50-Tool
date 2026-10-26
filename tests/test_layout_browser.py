@@ -101,3 +101,10 @@ def test_rotate_toggle_and_group_move(run):
     r = run['groupRot']                                                       # the group turns about its centre and keeps its spacing
     assert r['a'] == 90 and r['b'] == 90 and abs(r['gap'][0] - r['gap'][1]) < 0.05
     assert run['escClears']
+
+
+def test_site_folder_follows_the_address(run):
+    f = run['folder']
+    assert f['auto'] == '1201-main-st' and 'sites/1201-main-st/' in f['where']
+    assert f['other'] == '555-center-drive-northwest'                         # a new address starts from its own slug
+    assert f['back'] == 'golden-main-r2' and f['reload'] == 'golden-main-r2'  # a typed folder is kept for its address

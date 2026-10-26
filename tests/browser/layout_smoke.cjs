@@ -127,5 +127,16 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
   const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click('#b-dl')]);
   out.download = { name: dl.suggestedFilename(), path: path.join(dir, 'layout.zip') }; await dl.saveAs(out.download.path);
 
+  // 9. Site folder: defaults from the address, and a typed folder is remembered for that address
+  await go(false);
+  const folder = () => p.$eval('#pdf-site', e => e.value);
+  out.folder = { auto: await folder(), where: await p.$eval('#pdf-where', e => e.textContent) };
+  await p.fill('#pdf-site', 'golden-main-r2'); await p.dispatchEvent('#pdf-site', 'input');
+  await p.fill('#addr', '555 Center Drive Northwest, Walker, MI 49544'); await p.press('#addr', 'Enter'); await p.waitForTimeout(200);
+  out.folder.other = await folder();
+  await p.fill('#addr', '1201 Main St, Golden, CO'); await p.press('#addr', 'Enter'); await p.waitForTimeout(200);
+  out.folder.back = await folder();
+  await p.reload(); await p.waitForTimeout(600); out.folder.reload = await folder();
+
   console.log(JSON.stringify(out)); await b.close();
 })().catch(e => { console.log(JSON.stringify({ fatal: String(e && e.stack || e) })); process.exit(0); });

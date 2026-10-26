@@ -65,7 +65,8 @@ def test_layout_export_format(site_id):
     assert f'LAYOUT_FORMAT = "{layout_io.CURRENT}"' in tool and lay['format'] == layout_io.CURRENT
     ids = {i['id'] for i in lay['items']}
     assert all(b['item'] in ids for b in lay['bollards']) and all(r['from'] in ids and r['to'] in ids for r in lay['routes'])
-    assert {g['kind'] for g in lay['chargers']} == {'MW', 'V4'}       # drawings need one MW and one V4 group for now
+    kinds = [g['kind'] for g in lay['chargers']]                      # up to one MW and one V4 group (or just one of them)
+    assert kinds and set(kinds) <= {'MW', 'V4'} and len(kinds) == len(set(kinds))
     for pl in (lay.get('landscape') or {}).get('plants', []):        # generic plants only; species are picked at CD90
         assert pl['species'] == 'TBD' and pl['dia_ft'] > 0 and f'code:"{pl["code"]}"' in tool
 
@@ -86,3 +87,37 @@ def test_site_images_sheets(tmp_path):
     assert 'VICINITY MAP' in out and 'PROPOSED EV CHARGING INSTALL AREA' in out
     nums = re.findall(r'font-size="44"[^>]*>([A-Z]-\d{3})<', out)
     assert nums[:5] == ['G-001', 'G-002', 'G-003', 'A-100', 'A-101'], nums
+
+
+@pytest.mark.parametrize('keep', ['V4', 'MW'])
+def test_one_product_site_builds(keep, tmp_path):
+    """A V4-only or MW-only layout (e.g. Tony's Walker MI site) builds every sheet, from a generic site.json (tools/new_site.py)."""
+    pytest.importorskip('shapely')
+    sys.path.insert(0, os.path.join(ROOT, 'tools')); import new_site
+    lay = json.load(open(os.path.join(SITES, 'san-ysidro-r6', 'layout.json'), encoding='utf-8'))
+    drop = {i['id'] for i in lay['items'] if i['kind'] and i['kind'] != keep}
+    lay['chargers'] = [g for g in lay['chargers'] if g['kind'] == keep]
+    lay['items'] = [i for i in lay['items'] if i['id'] not in drop]
+    lay['bollards'] = [b for b in lay['bollards'] if b['item'] not in drop]
+    lay['routes'] = [r for r in lay['routes'] if r['from'] not in drop and r['to'] not in drop]
+    lay['project'] = {'address': '1 Test St, Walker, MI 49544'}; lay.pop('site_images', None)
+    d = tmp_path / 'sites' / 'one'; d.mkdir(parents=True)
+    json.dump(lay, open(d / 'layout.json', 'w')); site = new_site.site_json(lay, 'one'); json.dump(site, open(d / 'site.json', 'w'))
+    for key, items in site['text'].items():                          # the generic notes only use known fields
+        for t in (c for i in items for c in (i if isinstance(i, list) else [i])):
+            for _, name, _, _ in string.Formatter().parse(t):
+                if name is not None: assert name.split('[')[0] in CTX_KEYS, f"{key}: unknown field {{{name}}}"
+    r = subprocess.run([sys.executable, os.path.join(ROOT, 'cd50-plansets', 'cd50.py'), str(d)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    html_ = open(d / 'out' / 'cd50.html', encoding='utf-8').read()
+    assert html_.count('<section class="page">') >= 9 and 'SINGLE-LINE DIAGRAM' in html_ and '1 TEST ST' in html_
+    assert ('Megacharger' in html_) == (keep == 'MW') or keep == 'V4'
+    data = json.load(open(d / 'out' / 'cd50_data.json'))
+    assert data['xfmr'] and data['svc'] and data['bollards']
+
+
+def test_new_site_slug_matches_the_tool():
+    sys.path.insert(0, os.path.join(ROOT, 'tools')); import new_site
+    assert new_site.slugify('555 Center Drive Northwest, Walker, MI 49544') == '555-center-drive-northwest'
+    tool = open(os.path.join(ROOT, 'cd50-layout', 'src', 'layout.js'), encoding='utf-8').read()
+    assert 'function siteSlug(' in tool

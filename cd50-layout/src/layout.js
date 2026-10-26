@@ -60,6 +60,8 @@ const normAddr = a => String(a || "").toLowerCase().replace(/[.,#]/g, " ").repla
   .replace(/\b(street)\b/g, "st").replace(/\b(avenue)\b/g, "ave").replace(/\b(northwest)\b/g, "nw").replace(/\b(northeast)\b/g, "ne")
   .replace(/\b(southwest)\b/g, "sw").replace(/\b(southeast)\b/g, "se").replace(/\s+/g, " ").trim();
 const addrKey = a => normAddr(a).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "none";
+// the site folder name for an address, same rule as tools/aerial.py and tools/new_site.py: street part, up to 5 words
+function siteSlug(a){ return String(a || "").toLowerCase().split(",")[0].replace(/[^a-z0-9 ]+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 5).join("-"); }
 const sameAddr = (a, b) => !a || !b || normAddr(a) === normAddr(b);   // an unknown address matches anything
 // Every background is placed so the site point (the address pin, or the centre of a sketch sent at its scale) lands here, in
 // tool feet, near the default equipment row. Load site, the sketch result, Google Earth import and Sketch view all use it.
@@ -745,7 +747,7 @@ function loadSite(site){
     if (site.mwLayout || site.svcLayout){ const svcT = ["svc","xfmr","ct","mtr"];
       Object.values(S.items).filter(i => (site.mwLayout && i.kind === "MW") || (site.svcLayout && svcT.includes(i.type))).forEach(i => { i.x = null; });
       S.routes = {}; arrange(size(), true); }
-    const fo = SITE_FOLDER[site.id] || site.folder; if (fo && !pdfSite.value) pdfSite.value = fo;
+    const fo = SITE_FOLDER[site.id] || site.folder; S.folders = S.folders || {}; if (fo && !S.folders[normAddr(S.address)]) S.folders[normAddr(S.address)] = fo; syncFolder();
     syncInputs(); setMode("select");
   }; im.src = site.src;
 }
@@ -885,7 +887,18 @@ buildDb().then(async db => { if (!db) return;
   } catch(e){} });
 const SITE_FOLDER = {"san-ysidro-299e":"san-ysidro-r6", "san-ysidro-299e-sketch":"san-ysidro-r6"};
 const pdfSite = document.getElementById("pdf-site"), pdfStatus = document.getElementById("pdf-status");
-const pdfFolder = () => pdfSite.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || SITE_FOLDER[S.img?.site] || (SITES.find(s => s.id === S.img?.site) || {}).folder || "";
+// Site folder: sites/<folder> in the CD50-Tool repo, where Claude saves layout.json and site.json and builds the PDF.
+// It is remembered per address (S.folders); a new address starts from its slug (siteSlug), a saved site from its own folder.
+const pdfWhere = document.getElementById("pdf-where");
+const cleanFolder = v => String(v || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+const autoFolder = () => SITE_FOLDER[S.img?.site] || (SITES.find(s => s.id === S.img?.site) || {}).folder || siteSlug(S.address);
+const pdfFolder = () => cleanFolder(pdfSite.value) || autoFolder() || "";
+function showWhere(){ const f = pdfFolder();
+  pdfWhere.textContent = f ? `Claude saves this layout to sites/${f}/ in the CD50-Tool repo (with a starter site.json for a new site) and the PDF to your CD50 project files as cd50-plansets/${f}_CD50_<date>_rN.pdf, never overwriting an earlier revision.` : "Enter the project address first."; }
+function syncFolder(){ S.folders = S.folders || {}; pdfSite.value = S.folders[normAddr(S.address)] || autoFolder() || ""; showWhere(); }
+pdfSite.addEventListener("input", () => { S.folders = S.folders || {}; const k = normAddr(S.address), f = cleanFolder(pdfSite.value);
+  if (f) S.folders[k] = f; else delete S.folders[k]; save(); showWhere(); });
+pdfSite.addEventListener("change", () => { pdfSite.value = pdfFolder(); showWhere(); });
 document.getElementById("b-pdf").onclick = async (e) => {
   const site = pdfFolder();
   if (!site){ pdfStatus.textContent = "Enter the site folder name first (the folder under sites/ in the repo)."; pdfSite.focus(); return; }
@@ -1239,7 +1252,7 @@ const FTUS = 1200 / 3937;
 const addrIn = document.getElementById("addr"), addrStatus = document.getElementById("addrstatus");
 // a new address sets the last one's site images aside (switchPhotos), so they never go out with another site's layout
 function setAddress(a, geo){ const old = S.address || ""; S.address = a; S.geo = geo || S.geo || null; addrIn.value = a;
-  if (normAddr(old) !== normAddr(a)) switchPhotos(old, a); save(); gate(); }
+  if (normAddr(old) !== normAddr(a)){ switchPhotos(old, a); syncFolder(); } save(); gate(); }
 function gate(){ const on = !S.address; document.querySelector(".app").classList.toggle("locked", on); document.getElementById("gate").hidden = !on;
   document.querySelectorAll(".side>section:not(#addrblock)").forEach(el => { el.inert = on; }); if (!on && !addrIn.value) addrIn.value = S.address; }
 // the address unlocks the other steps: set on Enter, when the box loses focus, or with Open Aerial Site Sketch
@@ -1383,6 +1396,6 @@ if (S.img && S.img.guess && !S.img.scale){ S.img.scale = {how:"unscaled", by:"lo
 if (!S.img) S.img = sampleLot();
 buildItems(size());
 if (!S.view) fit();
-syncInputs(); syncPark(); setMode("select"); gate();
+syncInputs(); syncPark(); setMode("select"); gate(); syncFolder();
 restoreImages();
 })();
