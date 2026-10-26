@@ -115,7 +115,8 @@ if not LAYOUT:    # hand-placed San Ysidro geometry (sites without layout.json)
     from shapely.geometry import Point as _Pt
     _frag = open(site_path(FILES['swept_path'])).read()
     SWEPT = Polygon([tuple(map(float, q.split(','))) for q in re.findall(r'<polygon points="([^"]+)"', _frag)[0].split()])
-    def clear_path(b): return [(p, r) for p, r in b if not SWEPT.buffer(0.5*F).contains(_Pt(p))]
+    SWEPT_B = SWEPT.buffer(0.5*F)                                       # built once, not per bollard
+    def clear_path(b): return [(p, r) for p, r in b if not SWEPT_B.contains(_Pt(p))]
     B_YARD, B_V4C, B_MWC = [clear_path(kinds(b)) for b in (B_YARD, B_V4C, B_MWC)]
     BOLLARDS = B_YARD + B_V4C + B_POST + B_MWC + B_MP
     NB = len(BOLLARDS); NBR = sum(1 for _, r in BOLLARDS if r == "removable"); NBT = sum(1 for _, r in BOLLARDS if r == "rebound")
