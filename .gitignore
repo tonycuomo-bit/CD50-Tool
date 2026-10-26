@@ -22,3 +22,6 @@ desktop.ini
 sites/*/aerial/*_raw.jpg
 sites/*/aerial/candidates.jpg
 sites/*/aerial/tool_doc.json
+
+# Build PDF kit (tools/build_kit.py)
+build/

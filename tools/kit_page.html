@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CD50 Build Kit</title>
+<style>
+:root{--bg:#f7f7f5;--fg:#1d1d1b;--mute:#62625e;--line:#d9d9d4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1b1a;--fg:#ececea;--mute:#a3a39e;--line:#3a3a37}}
+:root[data-theme="dark"]{--bg:#1b1b1a;--fg:#ececea;--mute:#a3a39e;--line:#3a3a37}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;margin:0;padding:32px 16px}
+main{max-width:640px;margin:0 auto}h1{font-size:22px;margin:0 0 12px}p{margin:0 0 12px}
+code{font:13px ui-monospace,monospace;background:var(--line);padding:1px 4px;border-radius:3px}
+.m{color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:12px;margin-top:20px}
+</style></head><body><main>
+<h1>CD50 build kit</h1>
+<p>This page carries the CD50 plan set generator for the layout tool's <b>Build PDF with Claude</b> button. Each build starts a fresh Claude session with no copy of the repository, so the session reads <code>kit/cd50-kit.b64.txt</code> from here and builds the PDF from it.</p>
+<p>The kit is a packed copy of <code>cd50-plansets</code>, <code>rules</code>, <code>tools/new_site.py</code> and <code>sites</code> from the CD50-Tool repository. Its first line names the commit it came from.</p>
+<p class="m">Refresh it after generator changes merge: <code>python3 tools/build_kit.py</code>, then republish this page with the new kit file.</p>
+</main></body></html>
