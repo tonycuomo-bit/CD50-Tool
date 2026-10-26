@@ -998,7 +998,8 @@ function render(){
   const unit = v.w / svg.clientWidth || 0.05; // ft per screen px
 
   if (S.img){
-    const im = el("image", {href: S.sketch ? S.img.sketchSrc : S.img.src, x:S.img.x, y:S.img.y, width:S.img.w / S.img.ppf, height:S.img.h / S.img.ppf, opacity:S.opacity, preserveAspectRatio:"none"}, svg);
+    const sl = S.sketch ? sketchLayer() : null;
+    const im = el("image", sl ? {...sl, opacity:S.opacity, preserveAspectRatio:"none"} : {href: S.sketch ? S.img.sketchSrc : S.img.src, x:S.img.x, y:S.img.y, width:S.img.w / S.img.ppf, height:S.img.h / S.img.ppf, opacity:S.opacity, preserveAspectRatio:"none"}, svg);
     if (S.sketch) im.setAttribute("class", "sketch");
     if (S.img.pin){ const [px, py] = S.img.pin; const gp = el("g", {"pointer-events":"none"}, svg);
       el("circle", {cx:px, cy:py, r:unit*7, fill:"none", stroke:"var(--clear)", "stroke-width":unit*2}, gp);
@@ -1365,6 +1366,21 @@ function loadImageFile(f) {
   }; im.src = rd.result; }; rd.readAsDataURL(f);
 }
 
+// Sketch view shows the Aerial sketch result from the Site images slot when there is one, else the traced linework of the
+// current image. A sketch sent from Aerial Site Sketch carries its scale and is centred on the site point (60, 50 ft) like the
+// aerials; one uploaded by hand is fitted to the width of the current image. Check its fit before placing equipment on it.
+function sketchLayer(){
+  let v; try { v = PH.sketch; } catch(e){ return null; }
+  if (!v || !v.src || !S.img) return null;
+  if (S.img.fromSketch && v.bg) return null;   // the sketch is already the background
+  if (!v.w){ if (!sketchLayer.busy){ sketchLayer.busy = true; const im = new Image();
+      im.onload = () => { sketchLayer.busy = false; if (PH.sketch === v){ v.w = im.naturalWidth; v.h = im.naturalHeight; savePhotos(); render(); } }; im.src = v.src; }
+    return null; }
+  const I = S.img, iw = I.w / I.ppf, ih = I.h / I.ppf, ppf = v.ppf > 0 ? v.ppf : v.w / iw, W = v.w / ppf, H = v.h / ppf;
+  const [cx, cy] = v.ppf > 0 ? [60, 50] : [I.x + iw / 2, I.y + ih / 2];
+  return {href:v.src, x:cx - W / 2, y:cy - H / 2, width:W, height:H};
+}
+
 // ---------- Aerial Site Sketch result back in the layout area: sent by the sketch window (postMessage to the window that
 // opened it) or pasted with its scale note. Loads as the plan background at the sketch's scale, and fills the sketch slot.
 function loadSketchResult(d, how){
@@ -1377,7 +1393,7 @@ function loadSketchResult(d, how){
     const ax = 60, ay = 50;
     S.img = {src, sketchSrc:src, w, h, ppf, x:ax - w / 2 / ppf, y:ay - h / 2 / ppf, sample:false, site:null, linework:true, north:+d.north || 0, fromSketch:true, ...(scaled ? {} : {guess:true})};
     S.sketch = false; syncInputs(); fit(); render(); setMode(scaled ? "select" : "scale");
-    PH.sketch = {name:d.name || "aerial-sketch.png", src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src}; savePhotos(); drawPhotos();
+    PH.sketch = {name:d.name || "aerial-sketch.png", src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src, w, h, ...(scaled ? {ppf} : {}), north:+d.north || 0, bg:true}; savePhotos(); drawPhotos();
     document.getElementById("photonote").textContent = `Aerial Site Sketch ${how} into the layout area${scaled ? `, at its scale (${(1 / ppf).toFixed(2)} ft per pixel)` : "; it had no scale, so set one with Set scale"}. Place equipment on it.`;
     try { document.getElementById("plan").scrollIntoView({block:"center"}); } catch(e){}
   }; im.src = d.png;
@@ -1410,7 +1426,7 @@ function drawPhotos(){
     const btn = (t, f) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = f; acts.appendChild(b); };
     if (k === "lot") btn(v.box ? "Edit box" : "Box the install area", () => openBox());
     btn("Replace", () => pickPhoto(k));
-    btn("Remove", () => { delete PH[k]; savePhotos(); drawPhotos(); });
+    btn("Remove", () => { delete PH[k]; savePhotos(); drawPhotos(); if (k === "sketch") render(); });
   });
 }
 function pickPhoto(k){ photoSlot = k; photoIn.value = ""; photoIn.click(); }
@@ -1421,7 +1437,8 @@ function takePhoto(k, f){
     c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
     let src = c.toDataURL(k === "sketch" ? "image/png" : "image/jpeg", 0.86);
     if (src.length > 1500000) src = c.toDataURL("image/jpeg", 0.86);   // a photo-like sketch PNG is too big to keep
-    PH[k] = {name:f.name, src}; savePhotos(); drawPhotos();
+    PH[k] = {name:f.name, src, w:c.width, h:c.height}; savePhotos(); drawPhotos();
+    if (k === "sketch"){ S.sketch = true; syncInputs(); render(); }   // Sketch view shows it
     if (k === "lot") openBox();
   }; im.src = rd.result; }; rd.readAsDataURL(f);
 }
