@@ -252,7 +252,7 @@ function signsAtStalls(){
 function drawParking(g, unit){
   const P = S.park, sp = STRIPES[P.stripe] || STRIPES.w4;
   for (const o of Object.values(S.pk)){
-    const on = selected === o.id, gg = el("g", {transform:`translate(${o.x} ${o.y}) rotate(${o.rot})`, "data-pk":o.id, style:"cursor:move"}, g);
+    const on = isSel(o.id), gg = el("g", {transform:`translate(${o.x} ${o.y}) rotate(${o.rot})`, "data-pk":o.id, style:"cursor:move"}, g);
     if (o.type === "plant"){ const pl = PLANTS[o.plant] || PLANTS.shrub_sm, r = (o.dia || pl.dia)/2;
       el("circle", {cx:0, cy:0, r, fill:"#16a34a", "fill-opacity":pl.tree ? 0.18 : 0.3, stroke:on ? "var(--sel)" : "#15803d", "stroke-width":unit*(on ? 3 : 1.2), "stroke-dasharray":pl.tree ? `${unit*5} ${unit*2}` : "none"}, gg);
       if (pl.tree){ el("circle", {cx:0, cy:0, r:Math.max(0.3, r*0.08), fill:"#15803d"}, gg); for (let k = 0; k < 6; k++){ const a = k*Math.PI/3; el("line", {x1:0, y1:0, x2:r*0.7*Math.cos(a), y2:r*0.7*Math.sin(a), stroke:"#15803d", "stroke-width":unit*0.8}, gg); } }
@@ -438,7 +438,19 @@ function cropImage(src, sx, sy, sw, sh){
 }
 
 // ---------- render
-let selected = null, selBoll = null, mode = "select";
+// selection: selSet holds every selected item and parking/landscape object; selected is the one the inspectors show
+let selected = null, selBoll = null, mode = "select", selSet = new Set(), multi = false;
+const isSel = id => selSet.has(id);
+function selectOnly(id){ selected = id || null; selSet = new Set(id ? [id] : []); selBoll = null; }
+const selIds = () => [...selSet].filter(id => O(id));
+const selCentre = ids => { let x = 0, y = 0; for (const id of ids){ x += O(id).x; y += O(id).y; } return [x / ids.length, y / ids.length]; };
+const norm360 = a => +(((a % 360) + 360) % 360).toFixed(1);
+const snapOf = ids => Object.fromEntries(ids.map(id => { const o = O(id); return [id, {x:o.x, y:o.y, rot:o.rot || 0}]; }));
+// rotate the objects in snap by deg about pivot c (a single item turns in place); any angle, 0 to 360
+function rotateSnap(snap, c, deg){ const t = deg * Math.PI / 180, cs = Math.cos(t), sn = Math.sin(t);
+  for (const [id, s0] of Object.entries(snap)){ const o = O(id); if (!o) continue; delete o.auto;
+    const dx = s0.x - c[0], dy = s0.y - c[1]; o.x = +(c[0] + dx*cs - dy*sn).toFixed(2); o.y = +(c[1] + dx*sn + dy*cs).toFixed(2); o.rot = norm360(s0.rot + deg); } }
+function rotateSel(deg){ const ids = selIds(); if (!ids.length) return; rotateSnap(snapOf(ids), ids.length > 1 ? selCentre(ids) : [O(ids[0]).x, O(ids[0]).y], deg); }
 function render(){
   const z = size(); const R = runs(z);
   const v = S.view; svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
@@ -470,9 +482,9 @@ function render(){
     if (s.pw) el("rect", {x:-s.pw/2, y:-s.pd/2, width:s.pw, height:s.pd, fill:"url(#hatch)", stroke:"var(--pad)", "stroke-width":unit*1.2}, gP)
       .setAttribute("transform", `translate(${it.x} ${it.y}) rotate(${it.rot})`);
     const col = (it.kind === "MW" && S.product === "MIX" && COLORS[it.type + "MW"]) || COLORS[it.type];
-    if (s.shape === "oval") el("ellipse", {cx:0, cy:0, rx:s.w/2, ry:s.d/2, fill:col, stroke:selected === it.id ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
-    else if (s.shape === "round") el("circle", {cx:0, cy:0, r:s.w/2, fill:col, stroke:selected === it.id ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
-    else el("rect", {x:-s.w/2, y:-s.d/2, width:s.w, height:s.d, fill:col, rx:0.15, stroke:selected === it.id ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
+    if (s.shape === "oval") el("ellipse", {cx:0, cy:0, rx:s.w/2, ry:s.d/2, fill:col, stroke:isSel(it.id) ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
+    else if (s.shape === "round") el("circle", {cx:0, cy:0, r:s.w/2, fill:col, stroke:isSel(it.id) ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
+    else el("rect", {x:-s.w/2, y:-s.d/2, width:s.w, height:s.d, fill:col, rx:0.15, stroke:isSel(it.id) ? "var(--sel)" : "none", "stroke-width":unit*3}, g);
     bollards(it, s).forEach((b, i) => { const on = selBoll && selBoll.id === it.id && selBoll.i === i;
       const gb = el("g", {transform:`translate(${it.x} ${it.y}) rotate(${it.rot})`, "data-boll":`${it.id}|${i}`, style:"cursor:move"}, gH);
       el("circle", {cx:b.x, cy:b.y, r:Math.max(0.45, unit*7), fill:"transparent"}, gb);
@@ -501,6 +513,16 @@ function render(){
     (S.routes[r.id] || []).forEach((p, i) => el("circle", {cx:p[0], cy:p[1], r:unit*5, fill:"var(--sheet)", stroke:col, "stroke-width":unit*2, "data-vtx":`${r.id}|${i}`, style:"cursor:pointer"}, gH));
   }
 
+  // group selection outline, rotate guide, selection box
+  if (selSet.size > 1){ const ids = selIds(); if (ids.length){ const xs = ids.map(id => O(id).x), ys = ids.map(id => O(id).y), m = 3;
+    el("rect", {x:Math.min(...xs) - m, y:Math.min(...ys) - m, width:Math.max(...xs) - Math.min(...xs) + 2*m, height:Math.max(...ys) - Math.min(...ys) + 2*m, fill:"none", stroke:"var(--sel)", "stroke-width":unit*1.5, "stroke-dasharray":`${unit*4} ${unit*3}`, "pointer-events":"none"}, gH); } }
+  if (drag && drag.kind === "rot" && drag.cur){ const [cx, cy] = drag.c, [qx, qy] = drag.cur, r = Math.hypot(qx - cx, qy - cy);
+    el("circle", {cx, cy, r, fill:"none", stroke:"var(--sel)", "stroke-width":unit*1.2, "stroke-dasharray":`${unit*5} ${unit*4}`, "pointer-events":"none"}, gH);
+    el("line", {x1:cx, y1:cy, x2:qx, y2:qy, stroke:"var(--sel)", "stroke-width":unit*1.5, "pointer-events":"none"}, gH);
+    const t = el("text", {x:qx + unit*10, y:qy - unit*10, "font-size":unit*13, fill:"var(--sel)", "font-family":"IBM Plex Mono, monospace", "paint-order":"stroke", stroke:"var(--canvas)", "stroke-width":unit*3, "pointer-events":"none"}, gH);
+    t.textContent = drag.ids.length > 1 ? `${drag.deg >= 0 ? "+" : ""}${(drag.deg || 0).toFixed(1)}°` : `${norm360(O(drag.ids[0]).rot || 0)}°`; }
+  if (drag && drag.kind === "box"){ const [x0,y0] = drag.a, [x1,y1] = drag.b;
+    el("rect", {x:Math.min(x0,x1), y:Math.min(y0,y1), width:Math.abs(x1-x0), height:Math.abs(y1-y0), fill:"var(--sel)", "fill-opacity":0.08, stroke:"var(--sel)", "stroke-width":unit*1.5, "stroke-dasharray":`${unit*4} ${unit*3}`, "pointer-events":"none"}, gH); }
   // crop / scale overlays
   if (drag && drag.kind === "crop"){ const [x0,y0] = drag.a, [x1,y1] = drag.b;
     el("rect", {x:Math.min(x0,x1), y:Math.min(y0,y1), width:Math.abs(x1-x0), height:Math.abs(y1-y0), fill:"var(--accent)", "fill-opacity":0.12, stroke:"var(--accent)", "stroke-width":unit*2, "stroke-dasharray":`${unit*6} ${unit*4}`}, gH); }
@@ -569,10 +591,19 @@ function renderSide(z, R){
     (z.svcOver ? ` That exceeds a single 5000 A, 480 V service, so plan on a second service or a utility discussion about load management.` : "");
   renderPark();
   const ins = document.getElementById("inspector");
-  if (selected && S.items[selected]){
+  if (selSet.size > 1){ const ids = selIds();
+    ins.innerHTML = `<div><b>${ids.length} items selected</b> <span class="sub">${ids.join(", ")}</span></div>
+      <div class="note">Drag any of them to move the group. Rotate turns the group about its centre.</div>
+      <div class="btns"><button class="btn" type="button" data-grot="-90">⟲ 90°</button><button class="btn" type="button" data-grot="-15">⟲ 15°</button>
+      <button class="btn" type="button" data-grot="15">⟳ 15°</button><button class="btn" type="button" data-grot="90">⟳ 90°</button>
+      <label class="note" style="margin:0">Turn by <input id="grotdeg" type="number" min="-360" max="360" step="1" value="0" style="width:64px">°</label>
+      <button class="btn" type="button" data-gact="clear">Clear selection</button></div>`;
+  } else if (selected && S.items[selected]){
     const it = S.items[selected]; const s = spec(it, z);
     ins.innerHTML = `<div><b style="font-family:var(--f-mono)">${it.id}</b> · ${s.name}</div>
-      <div class="note">Pad ${s.pw ? s.pw.toFixed(1) + " × " + s.pd.toFixed(1) + " ft" : "on rack"} · rotation ${Math.round(it.rot)}°</div>
+      <div class="note">Pad ${s.pw ? s.pw.toFixed(1) + " × " + s.pd.toFixed(1) + " ft" : "on rack"}</div>
+      <div class="btns" style="align-items:center"><label for="rotdeg" class="note" style="margin:0">Rotation</label>
+      <input id="rotdeg" type="number" min="0" max="360" step="1" value="${norm360(it.rot)}" style="width:72px"><span class="note" style="margin:0">° (0 to 360)</span></div>
       <div class="btns"><button class="btn" type="button" data-rot="-90">⟲ 90°</button><button class="btn" type="button" data-rot="-15">⟲ 15°</button>
       <button class="btn" type="button" data-rot="15">⟳ 15°</button><button class="btn" type="button" data-rot="90">⟳ 90°</button></div>
       ${S.bollards === false ? "" : (() => { const B = bollards(it, s); const inPath = it.bl ? B.filter(b => b.k !== "rebound" && inTruckPath(it, b)).length : 0;
@@ -587,7 +618,7 @@ function renderSide(z, R){
               `<button class="btn" type="button" data-bact="fixed" aria-pressed="${sb.k === "fixed"}">Fixed</button><button class="btn" type="button" data-bact="removable" aria-pressed="${sb.k === "removable"}">Removable</button>`}
             <button class="btn" type="button" data-bact="delete">Delete</button></div>` : ""}
           <div class="note">Drag a bollard to move it. Select one and press Delete to remove it.</div>`; })()}`;
-  } else ins.innerHTML = `<div class="note">${Object.keys(S.items).length} items placed. Select one on the plan to rotate it.</div>`;
+  } else ins.innerHTML = `<div class="note">${Object.keys(S.items).length} items placed. Select one on the plan to rotate it, or use ⟳ Rotate and drag it round. Shift-click or Multi-select picks several to move together.</div>`;
   const t = document.getElementById("sched");
   const rows = R.map(r => { const L = plen(pathPts(r)); const over = catRun(r) && L + STUB_FT > TESLA.cat_max_ft;
     const col = r.kind === "dc" ? "var(--conduit-dc)" : r.kind === "com" ? "var(--conduit-com)" : "var(--conduit-ac)";
@@ -604,20 +635,22 @@ function renderPark(){
     <dt>Van / standard / amb.</dt><dd>${row("van")} · ${row("std")} · ${row("amb")}</dd>
     <dt>Van / standard size</dt><dd>${stallDims({kind:"van"}).w}' + ${stallDims({kind:"van"}).aisle}' · ${stallDims({kind:"std"}).w}' + ${stallDims({kind:"std"}).aisle}' aisle, ${stallDims({kind:"van"}).l}' long</dd></dl>
     <div class="note">${P.jur === "CA" ? "Scoping per CBC Table 11B-228.3.2.1 (MW truck posts excluded). Fishbone and on-the-line ADA stalls are not allowed in CA (Tesla G-104). " : "Federal has no enforceable EV scoping yet: count uses the 2010 ADA 208.2 parking table as a proxy (1 in 6 van); sizes follow the US Access Board EV recommendations. "}Sizes are the larger of Tesla G-104 and the code. Tesla G-104: 30" x 48" clear floor space at the post (dashed), 3' clear behind the post and 1:48 max slope where the accessible route passes the stall head; 4" border and cross striping, NO PARKING in 12" letters; ADA signs per AHJ, clear of operable parts. EV stalls: Tesla G-101 minimum 9' x 17', 10'-6" wide with an obstruction on one side, 11' with both. Verify with the AHJ.</div>`;
-  const pi = document.getElementById("pk-ins"), o = selected && S.pk[selected];
+  const pi = document.getElementById("pk-ins"), o = selSet.size === 1 && selected && S.pk[selected];
   if (!o){ pi.innerHTML = ""; return; }
   const opts = (M, v, f) => Object.entries(M).map(([k, x]) => `<option value="${k}"${k === v ? " selected" : ""}>${f(x)}</option>`).join("");
   if (o.type === "plant"){ const pl = PLANTS[o.plant] || PLANTS.shrub_sm;
     pi.innerHTML = `<div><b style="font-family:var(--f-mono)">${o.id}</b> · ${pl.code} ${pl.label} · species TBD</div><div class="btns"><select data-pkf="plant">${opts(PLANTS, o.plant, x => `${x.code} ${x.label} (${x.dia}' dia)`)}</select>
       <label class="note" style="margin:0">Dia (ft) <input data-pkf="dia" type="number" min="1" max="60" step="1" value="${o.dia || pl.dia}" style="width:56px"></label><button class="btn" type="button" data-pka="del">Delete</button></div>`; return; }
   pi.innerHTML = o.type === "sign"
-    ? `<div><b style="font-family:var(--f-mono)">${o.id}</b> · sign</div><div class="btns"><select data-pkf="sign">${opts(SIGNS, o.sign, x => x.label)}</select><button class="btn" type="button" data-pka="del">Delete</button></div>`
+    ? `<div><b style="font-family:var(--f-mono)">${o.id}</b> · sign</div><div class="btns"><select data-pkf="sign">${opts(SIGNS, o.sign, x => x.label)}</select>
+      <label class="note" style="margin:0">Rotation <input data-pkf="rot" type="number" min="0" max="360" step="1" value="${norm360(o.rot || 0)}" style="width:64px">°</label><button class="btn" type="button" data-pka="del">Delete</button></div>`
     : `<div><b style="font-family:var(--f-mono)">${o.id}</b> · ${STALL_KINDS[o.kind]} · ${stallDims(o).w}' x ${stallDims(o).l}'${stallDims(o).aisle ? ` + ${stallDims(o).aisle}' aisle` : ""}</div>
        <div class="btns"><select data-pkf="kind">${opts(STALL_KINDS, o.kind, x => x)}</select>
        ${o.kind !== "ev" && stallDims(o).aisle ? `<button class="btn" type="button" data-pka="flip">Aisle ${o.aisle === "L" ? "left" : "right"} ⇄</button>
          <button class="btn" type="button" data-pka="buffer" aria-pressed="${!!o.buffer}">2' buffer</button>` : ""}
        ${o.kind === "ev" ? `<select data-pkf="obs">${["No side obstructions (9')", "Obstruction one side (10'-6\")", "Obstructions both sides (11')"].map((t, i) => `<option value="${i}"${(+o.obs || 0) === i ? " selected" : ""}>${t}</option>`).join("")}</select>` : ""}
-       <button class="btn" type="button" data-pka="-90">⟲ 90°</button><button class="btn" type="button" data-pka="90">⟳ 90°</button>
+       <button class="btn" type="button" data-pka="-90">⟲ 90°</button><button class="btn" type="button" data-pka="-15">⟲ 15°</button><button class="btn" type="button" data-pka="15">⟳ 15°</button><button class="btn" type="button" data-pka="90">⟳ 90°</button>
+       <label class="note" style="margin:0">Rotation <input data-pkf="rot" type="number" min="0" max="360" step="1" value="${norm360(o.rot || 0)}" style="width:64px">°</label>
        <button class="btn" type="button" data-pka="del">Delete</button></div>`;
 }
 document.getElementById("tesla-notes").innerHTML = TESLA.notes.map(([t, r, src]) => `<p><b>${t}.</b> ${r} <span class="sub">(${src})</span></p>`).join("") +
@@ -666,16 +699,16 @@ pkAisle.innerHTML = Object.entries(AISLE_COL).map(([k, j]) => `<option value="${
 pkAisle.onchange = e => { S.park.aisleCol = e.target.value; render(); };
 const viewC = () => [S.view.x + S.view.w/2, S.view.y + S.view.h/2];
 document.getElementById("pk-posts").onclick = () => { stallsAtPosts(); render(); };
-for (const k of ["van","std","amb","ev"]) document.getElementById("pk-" + k).onclick = () => { const [x, y] = viewC(); selected = addStall(k, x, y, 0); selBoll = null; render(); };
+for (const k of ["van","std","amb","ev"]) document.getElementById("pk-" + k).onclick = () => { const [x, y] = viewC(); selectOnly(addStall(k, x, y, 0)); render(); };
 const lsKind = document.getElementById("ls-kind");
 lsKind.innerHTML = Object.entries(PLANTS).map(([k, x]) => `<option value="${k}">${x.code} ${x.label} (${x.dia}')</option>`).join("");
-document.getElementById("ls-add").onclick = () => { const [x, y] = viewC(); selected = addPlant(lsKind.value, x, y); selBoll = null; render(); };
+document.getElementById("ls-add").onclick = () => { const [x, y] = viewC(); selectOnly(addPlant(lsKind.value, x, y)); render(); };
 document.getElementById("pk-signs").onclick = () => { signsAtStalls(); render(); };
-document.getElementById("pk-addsign").onclick = () => { const [x, y] = viewC(); selected = addSign(S.park.sign, x, y); selBoll = null; render(); };
+document.getElementById("pk-addsign").onclick = () => { const [x, y] = viewC(); selectOnly(addSign(S.park.sign, x, y)); render(); };
 document.getElementById("pk-ins").onclick = e => { const a = e.target.closest("[data-pka]"), o = selected && S.pk[selected]; if (!a || !o) return;
-  const v = a.dataset.pka; if (v === "del"){ delete S.pk[o.id]; selected = null; } else if (v === "flip") o.aisle = o.aisle === "L" ? "R" : "L"; else if (v === "buffer") o.buffer = !o.buffer;
-  else o.rot = ((o.rot + +v) % 360 + 360) % 360; render(); };
-document.getElementById("pk-ins").onchange = e => { const f = e.target.dataset.pkf, o = selected && S.pk[selected]; if (!f || !o) return; o[f] = f === "obs" || f === "dia" ? +e.target.value : e.target.value; if (f === "plant") delete o.dia; delete o.auto; render(); };
+  const v = a.dataset.pka; if (v === "del"){ delete S.pk[o.id]; selectOnly(null); } else if (v === "flip") o.aisle = o.aisle === "L" ? "R" : "L"; else if (v === "buffer") o.buffer = !o.buffer;
+  else o.rot = norm360((o.rot || 0) + +v); render(); };
+document.getElementById("pk-ins").onchange = e => { const f = e.target.dataset.pkf, o = selected && S.pk[selected]; if (!f || !o) return; o[f] = f === "rot" ? norm360(+e.target.value || 0) : f === "obs" || f === "dia" ? +e.target.value : e.target.value; if (f === "plant") delete o.dia; delete o.auto; render(); };
 const siteSel = document.getElementById("site");
 siteSel.innerHTML = SITES.map(s => `<option value="${s.id}">${s.label}</option>`).join("");
 function loadSite(site){
@@ -805,8 +838,10 @@ document.getElementById("b-pdf").onclick = async (e) => {
   e.target.disabled = false;
 };
 document.getElementById("inspector").onclick = e => {
-  if (!selected) return; const it = S.items[selected];
-  const b = e.target.closest("[data-rot]"); if (b){ it.rot = ((it.rot + +b.dataset.rot) % 360 + 360) % 360; render(); return; }
+  const g = e.target.closest("[data-grot],[data-gact]");
+  if (g){ if (g.dataset.gact === "clear") selectOnly(null); else rotateSel(+g.dataset.grot); render(); return; }
+  if (!selected) return; const it = S.items[selected]; if (!it) return;
+  const b = e.target.closest("[data-rot]"); if (b){ it.rot = norm360(it.rot + +b.dataset.rot); render(); return; }
   const a = e.target.closest("[data-bact]"); if (!a) return; const act = a.dataset.bact;
   if (act === "reset"){ delete it.bl; selBoll = null; }
   else if (selBoll && selBoll.id === it.id){ const B = customBollards(it, size());
@@ -814,6 +849,8 @@ document.getElementById("inspector").onclick = e => {
   render();
 };
 document.getElementById("inspector").onchange = e => {
+  if (e.target.id === "grotdeg"){ rotateSel(+e.target.value || 0); render(); return; }
+  if (e.target.id === "rotdeg" && S.items[selected]){ S.items[selected].rot = norm360(+e.target.value || 0); render(); return; }
   if (e.target.id !== "bcount" || !selected) return; const it = S.items[selected]; if (!RING[it.type]) return;
   const n = Math.max(0, Math.min(40, parseInt(e.target.value) || 0)); it.bl = bollardRingN(it, spec(it, size()), n); selBoll = null; render();
 };
@@ -1086,17 +1123,21 @@ delete S.aerialSite;   // left by the removed Find aerial step
 
 // ---------- modes
 const hints = {
-  select:"Drag equipment or a single bollard to move it. Click a conduit to add a bend point. Drag empty space to pan, scroll to zoom.",
+  select:"Drag equipment, stalls or a single bollard to move them. Shift-click (or Multi-select) picks several to move as a group; Shift-drag on empty space boxes them. Click a conduit to add a bend point. Drag empty space to pan, scroll to zoom.",
+  rotate:"Press on an item and drag around it to rotate it to any angle (a selected group turns about its centre). Hold Shift to snap to 15°. Esc or Select to finish.",
   crop:"Drag a box around the work area to crop the overhead view. Press on equipment, or Esc, to go back to Select.",
   scale:"Click the centres of two stall stripes (standard stalls are 9 ft wide; several stalls apart is more accurate), or both ends of any known length, then enter the stall count or the length. Esc or Select to skip.",
   gecal:"Click the first point of the Google Earth path on the image, then its last point.",
 };
 function setMode(m){ mode = m; scalePts = []; document.getElementById("scalebox").hidden = true;
-  ["select","crop","scale"].forEach(k => document.getElementById("m-" + k).setAttribute("aria-pressed", k === m));
+  ["select","crop","scale","rotate"].forEach(k => document.getElementById("m-" + k).setAttribute("aria-pressed", k === m));
   svg.setAttribute("class", "mode-" + m); document.getElementById("hint").textContent = hints[m]; render(); }
 document.getElementById("m-select").onclick = () => setMode("select");
 document.getElementById("m-crop").onclick = () => setMode("crop");
 document.getElementById("m-scale").onclick = () => setMode("scale");
+document.getElementById("m-rotate").onclick = () => setMode(mode === "rotate" ? "select" : "rotate");   // a toggle
+const multiBtn = document.getElementById("m-multi");
+multiBtn.onclick = () => { multi = !multi; multiBtn.setAttribute("aria-pressed", multi); };
 document.getElementById("z-in").onclick = () => zoom(0.8);
 document.getElementById("z-out").onclick = () => zoom(1.25);
 document.getElementById("z-fit").onclick = () => { fit(); render(); };
@@ -1115,9 +1156,17 @@ svg.addEventListener("pointerdown", e => {
   const boll = e.target.closest("[data-boll]"), pk = !boll && !item && e.target.closest("[data-pk]");
   if (vtx){ const [id, i] = vtx.dataset.vtx.split("|"); drag = {kind:"vtx", id, i:+i}; return; }
   if (boll){ const [id, i] = boll.dataset.boll.split("|"); const it = S.items[id]; customBollards(it, size());
-    selected = id; selBoll = {id, i:+i}; drag = {kind:"boll", id, i:+i}; render(); return; }
-  if (pk){ const o = S.pk[pk.dataset.pk]; selected = o.id; selBoll = null; drag = {kind:"item", id:o.id, dx:p[0] - o.x, dy:p[1] - o.y}; render(); return; }
-  if (item){ const it = S.items[item.dataset.item]; selected = it.id; selBoll = null; drag = {kind:"item", id:it.id, dx:p[0] - it.x, dy:p[1] - it.y}; render(); return; }
+    selectOnly(id); selBoll = {id, i:+i}; drag = {kind:"boll", id, i:+i}; render(); return; }
+  const hit = pk ? S.pk[pk.dataset.pk] : item ? S.items[item.dataset.item] : null;
+  if (hit){
+    if (multi || e.shiftKey || e.ctrlKey || e.metaKey){   // add to, or drop from, the selection
+      if (isSel(hit.id)){ selSet.delete(hit.id); selected = selIds().pop() || null; selBoll = null; render(); return; }
+      selSet.add(hit.id); selected = hit.id; selBoll = null;
+    } else if (!isSel(hit.id)) selectOnly(hit.id);
+    else { selected = hit.id; selBoll = null; }   // pressing one of the group grabs the whole group
+    const ids = selIds(), snap = snapOf(ids);
+    drag = mode === "rotate" ? {kind:"rot", ids, snap, c:ids.length > 1 ? selCentre(ids) : [hit.x, hit.y], a0:null, deg:0} : {kind:"move", ids, snap, p0:p};
+    render(); return; }
   if (run){ // insert a bend point on the nearest segment
     const r = runs(size()).find(x => x.id === run.dataset.run); const pts = pathPts(r);
     let bi = 1, bd = Infinity;
@@ -1125,12 +1174,19 @@ svg.addEventListener("pointerdown", e => {
       const t = Math.max(0, Math.min(1, ((p[0]-ax)*(bx-ax) + (p[1]-ay)*(by-ay)) / L2)); const d = Math.hypot(p[0] - (ax + t*(bx-ax)), p[1] - (ay + t*(by-ay)));
       if (d < bd){ bd = d; bi = i; } }
     const mid = (S.routes[r.id] || []).slice(); mid.splice(bi - 1, 0, p); S.routes[r.id] = mid; drag = {kind:"vtx", id:r.id, i:bi - 1}; render(); return; }
-  selected = null; selBoll = null; drag = {kind:"pan", sx:e.clientX, sy:e.clientY, v:{...S.view}}; render();
+  if (multi || e.shiftKey){ drag = {kind:"box", a:p, b:p}; return; }   // box several items into the selection
+  selectOnly(null); drag = {kind:"pan", sx:e.clientX, sy:e.clientY, v:{...S.view}}; render();
 });
 svg.addEventListener("pointermove", e => {
   if (!drag) return; const p = toFt(e);
   if (drag.kind === "pan"){ const k = drag.v.w / svg.clientWidth; S.view = {...drag.v, x:drag.v.x - (e.clientX - drag.sx) * k, y:drag.v.y - (e.clientY - drag.sy) * k}; render(); }
-  else if (drag.kind === "item"){ const it = O(drag.id); delete it.auto; it.x = +(p[0] - drag.dx).toFixed(2); it.y = +(p[1] - drag.dy).toFixed(2); render(); }
+  else if (drag.kind === "move"){ const dx = p[0] - drag.p0[0], dy = p[1] - drag.p0[1];
+    for (const [id, s0] of Object.entries(drag.snap)){ const o = O(id); if (!o) continue; delete o.auto; o.x = +(s0.x + dx).toFixed(2); o.y = +(s0.y + dy).toFixed(2); } render(); }
+  else if (drag.kind === "rot"){ const [cx, cy] = drag.c, unit = S.view.w / svg.clientWidth; drag.cur = p;
+    if (drag.a0 === null){ if (Math.hypot(p[0] - cx, p[1] - cy) < unit*14){ render(); return; } drag.a0 = Math.atan2(p[1] - cy, p[0] - cx); }   // start once clear of the pivot
+    let deg = (Math.atan2(p[1] - cy, p[0] - cx) - drag.a0) * 180 / Math.PI; deg = ((deg + 540) % 360) - 180;
+    if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+    drag.deg = deg; rotateSnap(drag.snap, drag.c, deg); render(); }
   else if (drag.kind === "boll"){ const it = S.items[drag.id], b = it.bl[drag.i]; const c = Math.cos(it.rot * Math.PI / 180), sn = Math.sin(it.rot * Math.PI / 180);
     const dx = p[0] - it.x, dy = p[1] - it.y; b.x = +(dx*c + dy*sn).toFixed(3); b.y = +(-dx*sn + dy*c).toFixed(3); render(); }
   else if (drag.kind === "vtx"){ S.routes[drag.id][drag.i] = [+p[0].toFixed(2), +p[1].toFixed(2)]; render(); }
@@ -1149,6 +1205,9 @@ svg.addEventListener("pointerup", async e => {
     }
     render(); return;
   }
+  if (d.kind === "box"){ const x0 = Math.min(d.a[0], d.b[0]), y0 = Math.min(d.a[1], d.b[1]), x1 = Math.max(d.a[0], d.b[0]), y1 = Math.max(d.a[1], d.b[1]);
+    for (const o of [...Object.values(S.items), ...Object.values(S.pk)]) if (o.x >= x0 && o.x <= x1 && o.y >= y0 && o.y <= y1){ selSet.add(o.id); selected = o.id; }
+    selBoll = null; render(); return; }
   if (d.kind === "gecal"){ scalePts.push(d.b); if (scalePts.length === 2) geCalibrate(scalePts); render(); return; }
   if (d.kind === "scale"){ scalePts.push(d.b); if (scalePts.length === 2){ const L = Math.hypot(scalePts[1][0]-scalePts[0][0], scalePts[1][1]-scalePts[0][1]);
       document.getElementById("scalemeas").textContent = `Measured ${L.toFixed(1)} ft (about ${(L / CD50.STALL_FT).toFixed(1)} stalls at the current scale)`;
@@ -1175,10 +1234,16 @@ document.getElementById("scalecancel").onclick = () => setMode("select");
 window.addEventListener("keydown", e => {
   if (document.body.classList.contains("sk")) return;   // keys belong to Aerial Site Sketch while it is open
   if (e.key === "Escape" && mode !== "select" && !e.target.matches("input,select,textarea")){ setMode("select"); return; }
-  if (!selected || e.target.matches("input,select")) return;
-  if ((e.key === "Delete" || e.key === "Backspace") && !selBoll && S.pk[selected]){ e.preventDefault(); delete S.pk[selected]; selected = null; render(); return; }
+  if (e.target.matches("input,select,textarea")) return;
+  if (e.key === "Escape" && selSet.size){ selectOnly(null); render(); return; }
+  if (!selSet.size) return;
+  if ((e.key === "Delete" || e.key === "Backspace") && !selBoll && selIds().some(id => S.pk[id])){ e.preventDefault();   // equipment comes from the sizing, so only parking and plants delete
+    for (const id of selIds()) if (S.pk[id]){ delete S.pk[id]; selSet.delete(id); } selected = selIds().pop() || null; render(); return; }
   if ((e.key === "Delete" || e.key === "Backspace") && selBoll){ e.preventDefault(); S.items[selBoll.id].bl.splice(selBoll.i, 1); selBoll = null; render(); return; }
-  if (e.key === "r" || e.key === "R"){ const it = O(selected); it.rot = (it.rot + (e.shiftKey ? -15 : 15) + 360) % 360; render(); }
+  if (e.key === "r" || e.key === "R"){ rotateSel(e.shiftKey ? -15 : 15); render(); return; }
+  const k = {ArrowLeft:[-1, 0], ArrowRight:[1, 0], ArrowUp:[0, -1], ArrowDown:[0, 1]}[e.key];   // nudge 0.5 ft, Shift 5 ft
+  if (k && !selBoll){ e.preventDefault(); const st = e.shiftKey ? 5 : 0.5;
+    for (const id of selIds()){ const o = O(id); delete o.auto; o.x = +(o.x + k[0]*st).toFixed(2); o.y = +(o.y + k[1]*st).toFixed(2); } render(); }
 });
 window.addEventListener("resize", () => render());
 

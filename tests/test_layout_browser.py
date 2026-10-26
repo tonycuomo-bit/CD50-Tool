@@ -60,3 +60,15 @@ def test_google_earth_import_and_stall_scale(run):
 
 def test_sketch_view_uses_the_sketch_slot(run):
     assert run['sketchView'] == {'pressed': 'true', 'href': 'data:image/png;base64,'}
+
+
+def test_rotate_toggle_and_group_move(run):
+    assert run['rotPressed'] == 'true' and run['rotOff'] == 'true'           # Rotate is a toggle back to Select
+    assert 40 < run['rotOne']['d'] < 50                                       # dragged round 45 degrees, not a 15 degree step
+    assert run['rotOne']['stayed'] < 0.01 and run['rotOne']['other']          # a single item turns in place, alone
+    assert run['groupText']
+    g = run['groupMove']                                                      # both selected posts move by the same amount, the rest stay
+    assert g['a'] == g['b'] and abs(g['a'][0]) > 1 and g['c'] == [0, 0]
+    r = run['groupRot']                                                       # the group turns about its centre and keeps its spacing
+    assert r['a'] == 90 and r['b'] == 90 and abs(r['gap'][0] - r['gap'][1]) < 0.05
+    assert run['escClears']

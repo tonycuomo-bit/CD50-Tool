@@ -42,6 +42,7 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
   await p.waitForTimeout(200);
   const vb = () => p.$eval('#plan', s => s.getAttribute('viewBox'));
   async function drag(sel) {
+    await p.waitForTimeout(250);   // let the plan settle: a hint line that wraps differently moves it
     for (const el of await p.$$(sel)) {
       const r = await el.boundingBox(); if (!r) continue;
       const [n, v] = await el.evaluate(e => { const a = [...e.attributes].find(a => a.name.startsWith('data-')); return [a.name, a.value]; });
@@ -77,6 +78,27 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
   await p.evaluate(() => document.querySelector('.photo[data-slot="sketch"] .pv').click()).catch(() => {});
   await p.setInputFiles('#photofile', [path.join(dir, 'sk.png')]); await p.waitForTimeout(700);
   out.sketchView = await p.evaluate(() => ({ pressed: document.getElementById('b-sketch').getAttribute('aria-pressed'), href: document.querySelector('#plan image').getAttribute('href').slice(0, 22) }));
+
+  // 8. Rotate toggle turns an item to any angle; Shift-click picks several and they move and rotate as a group
+  await go(false);
+  const items = () => p.evaluate(() => JSON.parse(localStorage.getItem('cd50layout')).items);
+  const centre = async id => { const r = await (await p.$(`#plan [data-item="${id}"]`)).boundingBox(); return [r.x + r.width / 2, r.y + r.height / 2]; };
+  let I0 = await items(); await p.click('#m-rotate'); const [ax, ay] = await centre('1A');   // the hint line can move the plan
+  out.rotPressed = await p.$eval('#m-rotate', e => e.getAttribute('aria-pressed'));
+  await p.mouse.move(ax, ay); await p.mouse.down(); await p.mouse.move(ax + 60, ay, { steps: 3 }); await p.mouse.move(ax + 42, ay + 42, { steps: 4 }); await p.mouse.up();
+  let I1 = await items();
+  out.rotOne = { d: ((I1['1A'].rot - I0['1A'].rot) % 360 + 360) % 360, stayed: Math.hypot(I1['1A'].x - I0['1A'].x, I1['1A'].y - I0['1A'].y), other: I1['1B'].rot === I0['1B'].rot };
+  await p.click('#m-rotate'); out.rotOff = await p.$eval('#m-select', e => e.getAttribute('aria-pressed'));
+  const [bx, by] = await centre('1B'), [cx2, cy2] = await centre('1A');
+  await p.mouse.click(cx2, cy2); await p.keyboard.down('Shift'); await p.mouse.click(bx, by); await p.keyboard.up('Shift');
+  out.groupText = await p.$eval('#inspector', e => e.textContent.includes('2 items selected'));
+  I0 = await items(); await p.mouse.move(bx, by); await p.mouse.down(); await p.mouse.move(bx + 40, by + 20, { steps: 4 }); await p.mouse.up(); I1 = await items();
+  const mv = id => [+(I1[id].x - I0[id].x).toFixed(2), +(I1[id].y - I0[id].y).toFixed(2)];
+  out.groupMove = { a: mv('1A'), b: mv('1B'), c: mv('1C') };
+  await p.click('#inspector [data-grot="90"]'); const I2 = await items();
+  out.groupRot = { a: ((I2['1A'].rot - I1['1A'].rot) % 360 + 360) % 360, b: ((I2['1B'].rot - I1['1B'].rot) % 360 + 360) % 360,
+    gap: [Math.hypot(I1['1A'].x - I1['1B'].x, I1['1A'].y - I1['1B'].y), Math.hypot(I2['1A'].x - I2['1B'].x, I2['1A'].y - I2['1B'].y)] };
+  await p.keyboard.press('Escape'); out.escClears = await p.$eval('#inspector', e => !e.textContent.includes('selected'));
 
   console.log(JSON.stringify(out)); await b.close();
 })().catch(e => { console.log(JSON.stringify({ fatal: String(e && e.stack || e) })); process.exit(0); });
