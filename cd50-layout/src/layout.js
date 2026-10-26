@@ -937,7 +937,9 @@ function watchBuild(db, id){
   const stop = () => { if (buildWatch) buildWatch(); buildWatch = null; if (S.build && S.build.id === id){ delete S.build; save(); } };
   buildWatch = db.doc("builds/" + id).onSnapshot(snap => {
     const d = snap.exists ? snap.data() : null; if (!d) return;
-    if (d.status === "ready"){ stop(); pdfStatus.textContent = `PDF ready for ${d.site}: ${d.pdf || "posted in your CD50 project"}.` + (d.msg ? ` ${d.msg}` : ""); }
+    if (d.status === "ready"){ stop(); pdfStatus.textContent = `PDF ready for ${d.site}: ${d.pdf || "posted in your CD50 project"}.` + (d.msg ? ` ${d.msg}` : "");
+      if (/^(https:\/\/|\/)/.test(d.pdf_url || "")){ const a = document.createElement("a"); a.href = d.pdf_url; a.target = "_blank"; a.rel = "noopener"; a.textContent = " Open PDF";
+        pdfStatus.append(a); } }
     else if (d.status === "failed"){ stop(); pdfStatus.textContent = `Claude could not build ${d.site}: ${d.msg || "no reason given"}. Fix that and press Build PDF again, or use Download layout.`; }
     else if (buildStale(d)){ stop(); pdfStatus.textContent = `No answer from Claude on ${d.site} since ${hhmm(d.at)}. Press Build PDF to send it again, or use Download layout.`; }
     else pdfStatus.textContent = `Claude is building ${d.site} (sent ${hhmm(d.at)}): ${d.msg || d.status}…`;
@@ -989,15 +991,21 @@ document.getElementById("b-pdf").onclick = async (e) => {
     try {
       let imgs = {out:{}, missing:[]};
       try { imgs = await siteImageAssets(); } catch(err){ imgs.missing = Object.keys(imagesExport()); }
-      if (db) try { await db.doc("builds/" + id).set({status:"requested", site, address:S.address || null, msg:"Waiting for Claude", at:Date.now()}); } catch(err){}
-      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({build_id: db ? id : null, site, notes, layout: {...siteLayout(), site_images:imgs.out}})}, {cache:false});
+      // the whole request lives in builds/<id>: each fire starts a fresh Claude session, which reads it from there
+      // (a fire's text arrives only as a later message, so it carries just the id)
+      const layout = {...siteLayout(), site_images:imgs.out};
+      if (!db) throw {code:"no_db", message:"the page database is not available here"};
+      await db.doc("builds/" + id).set({status:"requested", site, address:S.address || null, notes, layout, msg:"Waiting for Claude", at:Date.now()});
+      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({build_id:id, site})}, {cache:false});
       pdfStatus.textContent = `Sent ${site} to Claude at ${hhmm(Date.now())}.` + (db ? " Its progress shows here; the PDF is usually ready within 10 minutes." : " The PDF is usually posted in your CD50 project within 10 minutes.")
         + (imgs.missing.length ? ` The site images (${imgs.missing.join(", ")}) could not be attached, so their sheets will be left out; use Download layout for those.` : "");
       if (db){ S.build = {id, site, at:Date.now()}; save(); watchBuild(db, id); }
     } catch(err){
-      if (db) db.doc("builds/" + id).update({status:"failed", msg:"not sent"}).catch(() => {});
+      const why = `${err?.code || "error"}: ${String(err?.message || "").slice(0, 300)}`;   // kept on the doc, so Claude can see why a send failed
+      if (db) db.doc("builds/" + id).update({status:"failed", msg:"not sent (" + why + ")"}).catch(() => {});
       pdfStatus.textContent = err?.code === "server_not_connected" ? "Connect Claude Code in claude.ai Settings → Connectors, then try again."
-        : err?.code === "declined" || err?.code === "not_granted" ? "Not sent. Allow the Claude Code Remote connector for this page to use the button."
+        : err?.code === "declined" || err?.code === "not_granted" || err?.code === "not_in_manifest" ? "Not sent. Allow the Claude Code Remote connector for this page (the page's Permissions menu), then press Build PDF again."
+        : err?.code === "approval_required" ? "Not sent: the request needs your approval. Press Build PDF again and choose Allow."
         : `Not sent (${err?.message || err?.code || "error"}). Use Download layout and send it to Claude instead.`;
     }
     e.target.disabled = false; return;
