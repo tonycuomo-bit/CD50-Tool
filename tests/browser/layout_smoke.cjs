@@ -46,8 +46,13 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
     for (const el of await p.$$(sel)) {
       const r = await el.boundingBox(); if (!r) continue;
       const [n, v] = await el.evaluate(e => { const a = [...e.attributes].find(a => a.name.startsWith('data-')); return [a.name, a.value]; });
-      const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
-      if (!await p.evaluate(([x, y, n, v]) => { const h = document.elementFromPoint(x, y); const c = h && h.closest('[' + n + ']'); return !!c && c.getAttribute(n) === v; }, [cx, cy, n, v])) continue;
+      // grab it at a point where it is on top: the centre, else another point inside it (a post or sign can cover a stall's centre)
+      let cx = null, cy = null;
+      for (const [fx, fy] of [[0.5, 0.5], [0.3, 0.3], [0.7, 0.7], [0.3, 0.7], [0.7, 0.3], [0.5, 0.2], [0.5, 0.8]]) {
+        const x = r.x + r.width * fx, y = r.y + r.height * fy;
+        if (await p.evaluate(([x, y, n, v]) => { const h = document.elementFromPoint(x, y); const c = h && h.closest('[' + n + ']'); return !!c && c.getAttribute(n) === v; }, [x, y, n, v])) { cx = x; cy = y; break; }
+      }
+      if (cx === null) continue;
       const v0 = await vb(); await p.mouse.move(cx, cy); await p.mouse.down(); await p.mouse.move(cx + 25, cy + 15, { steps: 4 }); await p.mouse.up(); await p.waitForTimeout(80);
       const r2 = await (await p.$(`[${n}="${v}"]`)).boundingBox();
       return { moved: Math.hypot(r2.x - r.x, r2.y - r.y) > 5, panned: v0 !== await vb(), select: await p.$eval('#m-select', e => e.getAttribute('aria-pressed')) === 'true' };
@@ -138,6 +143,47 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
   await p.fill('#addr', '1201 Main St, Golden, CO'); await p.press('#addr', 'Enter'); await p.waitForTimeout(200);
   out.folder.back = await folder();
   await p.reload(); await p.waitForTimeout(600); out.folder.reload = await folder();
+
+  // 12. Undo: each settled change is one step, the last 4 are kept, Ctrl+Z and the button step back
+  await go(false); await p.waitForTimeout(600);
+  const undoLabel = () => p.$eval('#b-undo', e => [e.textContent, e.disabled]);
+  const itemBox = async id => { const r = await (await p.$(`#plan [data-item="${id}"]`)).boundingBox(); return [Math.round(r.x), Math.round(r.y)]; };
+  const id0 = await p.$eval('#plan [data-item]', e => e.getAttribute('data-item'));
+  out.undo = { start: await undoLabel(), at0: await itemBox(id0) };
+  await p.evaluate(() => document.activeElement && document.activeElement.blur());   // keys go to the plan, not the address box
+  await p.click(`#plan [data-item="${id0}"]`); await p.waitForTimeout(600);   // selecting is not a change
+  for (let i = 0; i < 6; i++) { await p.keyboard.press('Shift+ArrowRight'); await p.waitForTimeout(550); }
+  out.undo.after6 = await undoLabel(); out.undo.at6 = await itemBox(id0);
+  await p.keyboard.press('Control+z'); await p.waitForTimeout(100);
+  out.undo.afterKey = await undoLabel();
+  for (let i = 0; i < 3; i++) { await p.$eval('#b-undo', e => e.click()); await p.waitForTimeout(100); }
+  out.undo.end = await undoLabel(); out.undo.at2 = await itemBox(id0);
+
+  // 13. Choose save folder: Download layout writes layout.json and images/ into the chosen folder (a stand-in folder here)
+  await p.evaluate(() => { const mk = name => { const kids = {}; return { kind: 'directory', name, kids,
+      getDirectoryHandle: async n => kids[n] || (kids[n] = mk(n)),
+      getFileHandle: async n => ({ createWritable: async () => { let parts = []; return { write: async b => parts.push(b), close: async () => { kids[n] = await new Blob(parts).text(); } }; } }) }; };
+    window.__dir = mk('golden-main'); window.showDirectoryPicker = async () => window.__dir; });
+  await p.click('#b-savedir'); await p.waitForTimeout(200);
+  out.saveDir = { folder: await p.$eval('#pdf-site', e => e.value), note: await p.$eval('#savedir-note', e => e.textContent) };
+  await p.click('#b-dl'); await p.waitForTimeout(500);
+  out.saveDir.files = await p.evaluate(() => Object.keys(window.__dir.kids));
+  out.saveDir.format = await p.evaluate(() => { try { return JSON.parse(window.__dir.kids['layout.json']).format; } catch (e) { return null; } });
+  out.saveDir.button = await p.$eval('#b-dl', e => e.textContent);
+
+  // 14. Start new: asks first, then clears the address, layout and images and comes back at the address step; site folders stay
+  await go(false); await p.waitForTimeout(400);
+  await p.setInputFiles('#file', [path.join(dir, 'ge.jpg')]); await p.waitForTimeout(600);
+  await p.fill('#pdf-site', 'golden-main-r3'); await p.dispatchEvent('#pdf-site', 'input'); await p.waitForTimeout(500);
+  await p.click('#b-new'); out.startNew = { asks: await p.$eval('#newconfirm', e => !e.hidden), addr0: await p.$eval('#addr', e => e.value) };
+  await p.click('#b-new-no'); out.startNew.cancel = await p.$eval('#newconfirm', e => e.hidden);
+  await p.click('#b-new'); await Promise.all([p.waitForNavigation(), p.click('#b-new-yes')]); await p.waitForTimeout(800);
+  out.startNew.addr = await p.$eval('#addr', e => e.value); out.startNew.gate = await p.$eval('#gate', e => !e.hidden);
+  out.startNew.bg = await p.evaluate(() => (document.querySelector('#plan image') || {}).getAttribute?.('href')?.slice(0, 15) || null);
+  out.startNew.idb = await p.evaluate(() => new Promise(res => { const r = indexedDB.open('cd50layout', 1);
+    r.onsuccess = () => { const q = r.result.transaction('img').objectStore('img').getAllKeys(); q.onsuccess = () => res(q.result.filter(k => !String(k).startsWith('dir-'))); }; r.onerror = () => res(null); }));
+  await p.fill('#addr', '1201 Main St, Golden, CO'); await p.press('#addr', 'Enter'); await p.waitForTimeout(300);
+  out.startNew.folder = await p.$eval('#pdf-site', e => e.value);
 
   console.log(JSON.stringify(out)); await b.close();
 })().catch(e => { console.log(JSON.stringify({ fatal: String(e && e.stack || e) })); process.exit(0); });

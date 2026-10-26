@@ -80,7 +80,8 @@ const IDB = (() => {
     catch(e){ rej(e); } }));
   const run = (mode, fn) => open().then(db => new Promise((res, rej) => { const t = db.transaction("img", mode), q = fn(t.objectStore("img"));
     t.oncomplete = () => res(q.result); t.onerror = t.onabort = () => rej(t.error); }));
-  return {get:k => run("readonly", st => st.get(k)), put:(k, v) => run("readwrite", st => st.put(v, k)), del:k => run("readwrite", st => st.delete(k))};
+  return {get:k => run("readonly", st => st.get(k)), put:(k, v) => run("readwrite", st => st.put(v, k)), del:k => run("readwrite", st => st.delete(k)),
+    keys:() => run("readonly", st => st.getAllKeys())};
 })();
 const kept = {};   // key -> the data URI last written, so an unchanged image is not written again
 function keepImage(key, src){
@@ -90,10 +91,38 @@ function keepImage(key, src){
 }
 function storeWarn(what, e){ const w = document.getElementById("storewarn"); if (!w) return; w.hidden = false;
   w.textContent = `This browser did not keep the ${what} (${(e && (e.name || e.message)) || "storage error"}), so they will be gone after a reload. Download layout to keep your work.`; }
+let clearing = false;   // set by Start new, so nothing writes the old layout back while it is cleared
 function save(){
+  if (clearing) return;
+  undoNote();
   let o = S;
   if (S.img){ const I = S.img; o = {...S, img:{...I, src:keepImage("bg", I.src), sketchSrc:I.sketchSrc === I.src ? "same" : keepImage("bgsketch", I.sketchSrc)}}; }
   try { localStorage.setItem("cd50layout", JSON.stringify(o)); } catch(e){ storeWarn("layout", e); }
+}
+// ---------- undo: the last UNDO_MAX changes to the layout. save() runs on every render, so a change is taken as done once the
+// layout has been still for UNDO_IDLE ms (a whole drag is one step). Pan/zoom, the address, site folders and builds are not undone.
+const UNDO_MAX = 4, UNDO_IDLE = 400, UNDO_KEEP = ["view", "address", "folders", "build", "sketchAuto"];
+const undoStack = []; let undoCur = null, undoTimer = null;
+function undoSnap(){ const o = {...S}; for (const k of UNDO_KEEP) delete o[k];
+  const I = S.img; if (I) o.img = {...I, src:null, sketchSrc:null};
+  return {json:JSON.stringify(o), src:I && I.src, sk:I && I.sketchSrc}; }   // image data URIs are kept by reference, not copied
+const sameSnap = (a, b) => a && b && a.json === b.json && a.src === b.src && a.sk === b.sk;
+function undoNote(){ clearTimeout(undoTimer); undoTimer = setTimeout(() => { const s = undoSnap();
+  if (!undoCur){ undoCur = s; return; }
+  if (sameSnap(s, undoCur)) return;
+  undoStack.push(undoCur); if (undoStack.length > UNDO_MAX) undoStack.shift(); undoCur = s; undoBtn(); }, UNDO_IDLE); }
+function undoReset(){ clearTimeout(undoTimer); undoStack.length = 0; undoCur = null; undoNote(); undoBtn(); }   // a new project address starts a fresh history
+function undoBtn(){ const b = document.getElementById("b-undo"); if (!b) return;
+  b.disabled = !undoStack.length; b.textContent = undoStack.length ? `↶ Undo (${undoStack.length})` : "↶ Undo"; }
+function undo(){
+  clearTimeout(undoTimer); const now = undoSnap();
+  if (undoCur && !sameSnap(now, undoCur)){ undoCur = now; }   // an edit still settling counts as the step being undone
+  const s = undoStack.pop(); if (!s) return;
+  const keep = {}; for (const k of UNDO_KEEP) if (k in S) keep[k] = S[k];
+  const o = JSON.parse(s.json); if (o.img){ o.img.src = s.src; o.img.sketchSrc = s.sk; }
+  for (const k of Object.keys(S)) delete S[k];
+  Object.assign(S, o, keep); undoCur = s;
+  selectOnly(null); syncInputs(); syncPark(); render(); undoBtn();
 }
 // put saved images back after load; a missing one (storage cleared) falls back to the sample lot with a warning
 async function restoreImages(){
@@ -810,13 +839,51 @@ async function siteImageAssets(){
   savePhotos(); return {out, missing:[]};
 }
 // the zip: layout.json plus images/; unzip it into sites/<site>/ and cd50.py reads the images from there
-async function layoutZip(){
-  const ex = imagesExport(), imgs = {}, z = new JSZip();
+async function layoutFiles(){   // [[path, Blob]]: layout.json and images/<slot>.<ext>, as the zip or a chosen folder holds them
+  const ex = imagesExport(), imgs = {}, files = [];
   for (const [k, v] of Object.entries(ex)){ const blob = dataUrlBlob(v.src), file = `images/${k}.${imgExt(blob.type)}`, {src, ...rest} = v;
-    z.file(file, blob); imgs[k] = {...rest, file, sha256:await sha256(blob)}; }
-  z.file("layout.json", JSON.stringify({...siteLayout(), site_images:imgs}, null, 1));
-  return {blob:await z.generateAsync({type:"blob"}), n:Object.keys(imgs).length};
+    files.push([file, blob]); imgs[k] = {...rest, file, sha256:await sha256(blob)}; }
+  files.unshift(["layout.json", new Blob([JSON.stringify({...siteLayout(), site_images:imgs}, null, 1)], {type:"application/json"})]);
+  return {files, n:Object.keys(imgs).length};
 }
+async function layoutZip(){
+  const {files, n} = await layoutFiles(), z = new JSZip();
+  for (const [f, b] of files) z.file(f, b);
+  return {blob:await z.generateAsync({type:"blob"}), n};
+}
+// Choose save folder: with a folder chosen for this address, Download layout writes layout.json and images/ straight into it
+// (File System Access API: Chrome and Edge, with the tool opened as a file). The folder handle is kept in IndexedDB per address.
+const dirKey = () => "dir-" + addrKey(S.address), dirNote = document.getElementById("savedir-note");
+const GENERIC_DIRS = new Set(["downloads", "desktop", "documents", "sites", "onedrive", "cd50-tool", "hion-claude"]);
+let saveDir = null;
+async function loadSaveDir(){ saveDir = await IDB.get(dirKey()).catch(() => null) || null; showSaveDir(); }
+const DIR_NOTE = dirNote.textContent;
+function showSaveDir(){ dirNote.textContent = saveDir ? `Download layout saves layout.json and its images into the folder “${saveDir.name}”. Choose again to change it.` : DIR_NOTE; }
+async function writeToDir(dir){
+  if (dir.queryPermission && await dir.queryPermission({mode:"readwrite"}) !== "granted" && await dir.requestPermission({mode:"readwrite"}) !== "granted") throw {name:"NotAllowedError"};
+  const {files} = await layoutFiles();
+  for (const [path, blob] of files){
+    const parts = path.split("/"); let d = dir;
+    for (const sub of parts.slice(0, -1)) d = await d.getDirectoryHandle(sub, {create:true});
+    const w = await (await d.getFileHandle(parts.at(-1), {create:true})).createWritable(); await w.write(blob); await w.close();
+  }
+  return files.length;
+}
+document.getElementById("b-savedir").onclick = async () => {
+  if (!window.showDirectoryPicker){ dirNote.textContent = "This browser cannot pick a folder. Use Chrome or Edge with the tool opened as a file, or set your browser to ask where to save each download."; return; }
+  try {
+    const h = await window.showDirectoryPicker({id:"cd50-site", mode:"readwrite", startIn:"documents"});
+    saveDir = h; await IDB.put(dirKey(), h).catch(() => {});
+    const f = cleanFolder(h.name);
+    if (f && !GENERIC_DIRS.has(f)){ pdfSite.value = f; pdfSite.dispatchEvent(new Event("input")); }   // the folder's name is the site folder
+    showSaveDir();
+  } catch(err){
+    if (err?.name === "AbortError") return;
+    dirNote.textContent = err?.name === "SecurityError"
+      ? "The claude.ai viewer does not let pages pick folders. Open the tool as a file in Chrome or Edge to save into a folder, or set your browser to ask where to save each download."
+      : `Could not use that folder (${err?.message || err?.name || "error"}).`;
+  }
+};
 const copyText = () => { const ex = imagesExport(), imgs = {};
   for (const [k, v] of Object.entries(ex)){ const {src, ...rest} = v; imgs[k] = {...rest, omitted:"use Download layout for the image files"}; }
   return JSON.stringify({...siteLayout(), site_images:imgs}, null, 1); };
@@ -828,6 +895,10 @@ document.getElementById("b-copy").onclick = async (e) => {
 // With site images it saves <site>-layout.zip (layout.json + images/), without them a plain layout.json.
 document.getElementById("b-dl").onclick = async (e) => {
   const label = e.target.textContent, ex = Object.keys(imagesExport()).length;
+  if (saveDir){   // a chosen folder: write straight into it; if that fails, fall back to a normal download
+    try { const n = await writeToDir(saveDir); e.target.textContent = `Saved ${n} file${n > 1 ? "s" : ""} to ${saveDir.name}`; setTimeout(() => e.target.textContent = label, 2400); return; }
+    catch(err){ dirNote.textContent = `Could not write to “${saveDir.name}” (${err?.name || "error"}), so the layout was downloaded instead. Choose the folder again.`; }
+  }
   let file;
   try { file = ex ? {filename:`${pdfFolder() || "site"}-layout.zip`, data:(await layoutZip()).blob} : {filename:"layout.json", data:copyText()}; }
   catch(err){ e.target.textContent = "Could not pack the images"; setTimeout(() => e.target.textContent = label, 2400); return; }
@@ -1046,6 +1117,7 @@ const phKey = (k, v) => `ph-${addrKey(v && v.addr)}-${k}`;
 const idbOf = src => typeof src === "string" && src.startsWith("idb:") ? src.slice(4) : null;
 const phStore = set => { const o = {}; for (const [k, v] of Object.entries(set || {})) if (v) o[k] = {...v, src:keepImage(phKey(k, v), v.src)}; return o; };
 function savePhotos(){
+  if (clearing) return true;
   const sites = {}; for (const [a, set] of Object.entries(PHS)) sites[a] = phStore(set);
   sites[addrKey(S.address)] = phStore(PH);
   try { localStorage.setItem("cd50photos", JSON.stringify({v:2, sites})); return true; }
@@ -1257,7 +1329,7 @@ const FTUS = 1200 / 3937;
 const addrIn = document.getElementById("addr"), addrStatus = document.getElementById("addrstatus");
 // a new address sets the last one's site images aside (switchPhotos), so they never go out with another site's layout
 function setAddress(a, geo){ const old = S.address || ""; S.address = a; S.geo = geo || S.geo || null; addrIn.value = a;
-  if (normAddr(old) !== normAddr(a)){ switchPhotos(old, a); syncFolder(); } save(); gate(); }
+  if (normAddr(old) !== normAddr(a)){ switchPhotos(old, a); syncFolder(); loadSaveDir(); undoReset(); } save(); gate(); }
 function gate(){ const on = !S.address; document.querySelector(".app").classList.toggle("locked", on); document.getElementById("gate").hidden = !on;
   document.querySelectorAll(".side>section:not(#addrblock)").forEach(el => { el.inert = on; }); if (!on && !addrIn.value) addrIn.value = S.address; }
 // the address unlocks the other steps: set on Enter, when the box loses focus, or with Open Aerial Site Sketch
@@ -1384,6 +1456,7 @@ window.addEventListener("keydown", e => {
   if (document.body.classList.contains("sk")) return;   // keys belong to Aerial Site Sketch while it is open
   if (e.key === "Escape" && mode !== "select" && !e.target.matches("input,select,textarea")){ setMode("select"); return; }
   if (e.target.matches("input,select,textarea")) return;
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")){ e.preventDefault(); undo(); return; }
   if (e.key === "Escape" && selSet.size){ selectOnly(null); render(); return; }
   if (!selSet.size) return;
   if ((e.key === "Delete" || e.key === "Backspace") && !selBoll && selIds().some(id => S.pk[id])){ e.preventDefault();   // equipment comes from the sizing, so only parking and plants delete
@@ -1395,6 +1468,19 @@ window.addEventListener("keydown", e => {
     for (const id of selIds()){ const o = O(id); delete o.auto; o.x = +(o.x + k[0]*st).toFixed(2); o.y = +(o.y + k[1]*st).toFixed(2); } render(); }
 });
 window.addEventListener("resize", () => render());
+document.getElementById("b-undo").onclick = () => undo();
+// Start new: clears the address, the layout and every image this browser holds (this and other addresses), then reloads to
+// the address step. Kept: site folders per address, chosen save folders (dir-* handles) and the sketch auto-open setting.
+const newBox = document.getElementById("newconfirm");
+document.getElementById("b-new").onclick = () => { newBox.hidden = !newBox.hidden; };
+document.getElementById("b-new-no").onclick = () => { newBox.hidden = true; };
+document.getElementById("b-new-yes").onclick = async () => {
+  clearing = true; clearTimeout(undoTimer);
+  try { localStorage.setItem("cd50layout", JSON.stringify({folders:S.folders || {}, sketchAuto:S.sketchAuto})); localStorage.removeItem("cd50photos"); } catch(e){}
+  const keys = await IDB.keys().catch(() => []);
+  await Promise.all(keys.filter(k => !String(k).startsWith("dir-")).map(k => IDB.del(k).catch(() => {})));
+  location.reload();
+};
 
 // ---------- boot
 if (S.img && S.img.guess && !S.img.scale){ S.img.scale = {how:"unscaled", by:"loaded image"}; delete S.img.guess; }   // saved before scale.how
@@ -1402,5 +1488,5 @@ if (!S.img) S.img = sampleLot();
 buildItems(size());
 if (!S.view) fit();
 syncInputs(); syncPark(); setMode("select"); gate(); syncFolder();
-restoreImages();
+restoreImages(); loadSaveDir(); undoBtn();
 })();
