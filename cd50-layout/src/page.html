@@ -37,6 +37,10 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .block{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 .head{display:flex;flex-direction:column;gap:2px}
 .sub{color:var(--muted);font-size:12.5px}
+.headrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.newconfirm{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--warn);background:var(--warn-bg);padding:8px;border-radius:3px;margin-top:6px}
+.newconfirm .row{display:flex;gap:6px;flex-wrap:wrap}
+.btn.danger{border-color:var(--warn);color:var(--warn);font-weight:600}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 input,select,button,textarea{font:inherit;color:inherit}
 input[type=number],select,input[type=text],textarea{background:var(--paper);border:1px solid var(--rule);border-radius:4px;padding:6px 8px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:14px}
@@ -108,7 +112,12 @@ body.sk .app{display:none}
 <div class="app">
   <aside class="side">
     <div class="head">
-      <h1>CD50 Site Layout</h1>
+      <div class="headrow"><h1>CD50 Site Layout</h1>
+        <button class="btn" id="b-new" type="button" title="Clear the address, layout and images in this browser and start a new site">⟲ Start new</button></div>
+      <div class="newconfirm" id="newconfirm" role="alert" hidden>
+        <span>Clear the address, the layout and all site images saved in this browser? Download layout first to keep this work. Site folders and chosen save folders are kept.</span>
+        <span class="row"><button class="btn danger" id="b-new-yes" type="button">Clear and start new</button><button class="btn" id="b-new-no" type="button">Cancel</button></span>
+      </div>
       <div class="sub">Start with the project address. Then sketch the site in Aerial Site Sketch (it comes back here at scale), size, place equipment and route conduit.</div>
     </div>
     <div class="storewarn" id="storewarn" role="alert" hidden></div>

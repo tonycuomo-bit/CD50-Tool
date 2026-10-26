@@ -124,3 +124,11 @@ def test_download_into_a_chosen_folder(run):
     d = run['saveDir']
     assert d['folder'] == 'golden-main' and 'golden-main' in d['note']
     assert 'layout.json' in d['files'] and d['format'] == 'cd50-layout/2' and 'Saved' in d['button']
+
+
+def test_start_new_clears_the_layout(run):
+    n = run['startNew']
+    assert n['asks'] and n['addr0'] and n['cancel']                           # asks first, Cancel keeps everything
+    assert n['addr'] == '' and n['gate'] and set(n['idb']) <= {'bg'}            # back at the address step; only the default lot is stored
+    assert not (n['bg'] or '').startswith('data:image/jpeg')                 # the uploaded background is gone
+    assert n['folder'] == 'golden-main-r3'                                   # a typed site folder is kept for its address

@@ -80,7 +80,8 @@ const IDB = (() => {
     catch(e){ rej(e); } }));
   const run = (mode, fn) => open().then(db => new Promise((res, rej) => { const t = db.transaction("img", mode), q = fn(t.objectStore("img"));
     t.oncomplete = () => res(q.result); t.onerror = t.onabort = () => rej(t.error); }));
-  return {get:k => run("readonly", st => st.get(k)), put:(k, v) => run("readwrite", st => st.put(v, k)), del:k => run("readwrite", st => st.delete(k))};
+  return {get:k => run("readonly", st => st.get(k)), put:(k, v) => run("readwrite", st => st.put(v, k)), del:k => run("readwrite", st => st.delete(k)),
+    keys:() => run("readonly", st => st.getAllKeys())};
 })();
 const kept = {};   // key -> the data URI last written, so an unchanged image is not written again
 function keepImage(key, src){
@@ -90,7 +91,9 @@ function keepImage(key, src){
 }
 function storeWarn(what, e){ const w = document.getElementById("storewarn"); if (!w) return; w.hidden = false;
   w.textContent = `This browser did not keep the ${what} (${(e && (e.name || e.message)) || "storage error"}), so they will be gone after a reload. Download layout to keep your work.`; }
+let clearing = false;   // set by Start new, so nothing writes the old layout back while it is cleared
 function save(){
+  if (clearing) return;
   undoNote();
   let o = S;
   if (S.img){ const I = S.img; o = {...S, img:{...I, src:keepImage("bg", I.src), sketchSrc:I.sketchSrc === I.src ? "same" : keepImage("bgsketch", I.sketchSrc)}}; }
@@ -1114,6 +1117,7 @@ const phKey = (k, v) => `ph-${addrKey(v && v.addr)}-${k}`;
 const idbOf = src => typeof src === "string" && src.startsWith("idb:") ? src.slice(4) : null;
 const phStore = set => { const o = {}; for (const [k, v] of Object.entries(set || {})) if (v) o[k] = {...v, src:keepImage(phKey(k, v), v.src)}; return o; };
 function savePhotos(){
+  if (clearing) return true;
   const sites = {}; for (const [a, set] of Object.entries(PHS)) sites[a] = phStore(set);
   sites[addrKey(S.address)] = phStore(PH);
   try { localStorage.setItem("cd50photos", JSON.stringify({v:2, sites})); return true; }
@@ -1465,6 +1469,18 @@ window.addEventListener("keydown", e => {
 });
 window.addEventListener("resize", () => render());
 document.getElementById("b-undo").onclick = () => undo();
+// Start new: clears the address, the layout and every image this browser holds (this and other addresses), then reloads to
+// the address step. Kept: site folders per address, chosen save folders (dir-* handles) and the sketch auto-open setting.
+const newBox = document.getElementById("newconfirm");
+document.getElementById("b-new").onclick = () => { newBox.hidden = !newBox.hidden; };
+document.getElementById("b-new-no").onclick = () => { newBox.hidden = true; };
+document.getElementById("b-new-yes").onclick = async () => {
+  clearing = true; clearTimeout(undoTimer);
+  try { localStorage.setItem("cd50layout", JSON.stringify({folders:S.folders || {}, sketchAuto:S.sketchAuto})); localStorage.removeItem("cd50photos"); } catch(e){}
+  const keys = await IDB.keys().catch(() => []);
+  await Promise.all(keys.filter(k => !String(k).startsWith("dir-")).map(k => IDB.del(k).catch(() => {})));
+  location.reload();
+};
 
 // ---------- boot
 if (S.img && S.img.guess && !S.img.scale){ S.img.scale = {how:"unscaled", by:"loaded image"}; delete S.img.guess; }   // saved before scale.how
