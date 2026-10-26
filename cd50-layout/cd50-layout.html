@@ -678,7 +678,7 @@ const SITES = [
 
 // ---------- export contract with cd50-plansets/cd50.py (checked there by layout_io.py, described in cd50-layout/layout-format.md).
 // TOOL_BUILD is filled in by tools/build_layout.py with a hash of src/, so a build can be traced to the tool that made its layout.
-const LAYOUT_FORMAT = "cd50-layout/2", TOOL_BUILD = "d9d5a564e7b9";
+const LAYOUT_FORMAT = "cd50-layout/2", TOOL_BUILD = "95ad5128f4a4";
 
 // ---------- state
 const DEFAULT = {product:"V4", posts:4, inputKva:499, mwPosts:2, mwInputKva:1247, items:{}, routes:{}, img:null, view:null, sketch:true, opacity:0.8, bollards:true,
@@ -1546,7 +1546,7 @@ document.getElementById("b-dl").onclick = async (e) => {
 };
 // Build PDF: in the claude.ai viewer, fire Tony's "Build PDF" scheduled task through the Claude Code Remote connector,
 // which wakes the CD50 Claude session with this layout. Opened as a local file, save layout.json and copy a Claude Code prompt.
-const BUILD_TRIGGER = "trig_01SUGXsC5acu3krHpFg7uN6A";
+const BUILD_TRIGGER = "trig_013cYm27Bco98P2r11BMaPAv";   // the page db doc config/build {trigger_id} overrides it, so the task can change without a republish
 // Each build gets an id and a status doc builds/<id> in the page's db: {status: requested|working|ready|failed, site, address,
 // msg, pdf, at}. Claude moves it along and the page shows it, so a failed build is not mistaken for a slow one. While a build
 // of a site is open the button does not send that site again (no duplicate _rN), unless it has had no answer for BUILD_STALE_MIN.
@@ -1628,7 +1628,9 @@ document.getElementById("b-pdf").onclick = async (e) => {
       const layout = {...siteLayout(), site_images:imgs.out};
       if (!db) throw {code:"no_db", message:"the page database is not available here"};
       await db.doc("builds/" + id).set({status:"requested", site, address:S.address || null, notes, layout, msg:"Waiting for Claude", at:Date.now()});
-      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({build_id:id, site})}, {cache:false});
+      let trig = BUILD_TRIGGER;
+      try { const c = await db.doc("config/build").get(), t = c.exists ? (c.data() || {}).trigger_id : ""; if (/^trig_\w+$/.test(t || "")) trig = t; } catch(err){}
+      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: trig, text: JSON.stringify({build_id:id, site})}, {cache:false});
       pdfStatus.textContent = `Sent ${site} to Claude at ${hhmm(Date.now())}.` + (db ? " Its progress shows here; the PDF is usually ready within 10 minutes." : " The PDF is usually posted in your CD50 project within 10 minutes.")
         + (imgs.missing.length ? ` The site images (${imgs.missing.join(", ")}) could not be attached, so their sheets will be left out; use Download layout for those.` : "");
       if (db){ S.build = {id, site, at:Date.now()}; save(); watchBuild(db, id); }
