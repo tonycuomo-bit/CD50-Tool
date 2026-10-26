@@ -55,8 +55,8 @@ def test_add_to_tool_inserts_then_replaces(tmp_path):
         aerial.add_to_tool(aerial.sites_entry('zz-test', '1 TEST ST', meta, jpg), 'zz-test', str(p))
     html = p.read_text(encoding='utf-8')
     assert html.count('{id:"zz-test"') == 1 and 'c2Vjb25k' in html          # base64 of b'second'
-    js = re.search(r'<script>\n(.*)</script>', html, re.S).group(1)
-    subprocess.run(['node', '-e', 'new Function(require("fs").readFileSync(0, "utf8"))'], input=js, text=True, check=True)
+    for js in re.findall(r'<script>\n(.*?)</script>', html, re.S):
+        subprocess.run(['node', '-e', 'new Function(require("fs").readFileSync(0, "utf8"))'], input=js, text=True, check=True)
 
 
 def test_layout_tool_requires_the_address():
@@ -75,8 +75,17 @@ def test_layout_tool_site_images_and_sketch():
     for slot in ('vicinity', 'lot', 'sketch'):
         assert f'data-slot="{slot}"' in TOOL_HTML
     assert 'id="b-sketchapp"' in TOOL_HTML and 'install_box' in TOOL_HTML and 'site_images:photosExport()' in TOOL_HTML
-    # the sketch comes back by message (or paste with its scale note) into the layout area and the sketch slot
-    assert '"cd50-sketch"' in TOOL_HTML and 'cd50-sketch-ack' in TOOL_HTML and 'cd50-sketch-meta' in TOOL_HTML and 'from=cd50layout' in TOOL_HTML
+    # Aerial Site Sketch is built in: a second view in a shadow root; its result comes back by the cd50:sketch event
+    # (or, from the standalone artifact, by message or paste with its scale note) into the layout area and the sketch slot
+    assert 'id="sketchview"' in TOOL_HTML and 'id="sketch-tpl"' in TOOL_HTML and 'attachShadow(' in TOOL_HTML
+    assert '"cd50:sketch"' in TOOL_HTML and '"cd50:address"' in TOOL_HTML and 'id="send-layout"' in TOOL_HTML
+    assert '"cd50-sketch"' in TOOL_HTML and 'cd50-sketch-ack' in TOOL_HTML and 'cd50-sketch-meta' in TOOL_HTML
+
+
+@pytest.mark.skipif(not shutil.which('node'), reason='node not installed')
+def test_layout_tool_scripts_parse():
+    for js in re.findall(r'<script>\n(.*?)</script>', TOOL_HTML, re.S):
+        subprocess.run(['node', '-e', 'new Function(require("fs").readFileSync(0, "utf8"))'], input=js, text=True, check=True)
 
 
 def test_blocked_better_names_sharper_sources_and_their_hosts():
