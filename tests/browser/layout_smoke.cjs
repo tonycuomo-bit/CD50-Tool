@@ -171,5 +171,19 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
   out.saveDir.format = await p.evaluate(() => { try { return JSON.parse(window.__dir.kids['layout.json']).format; } catch (e) { return null; } });
   out.saveDir.button = await p.$eval('#b-dl', e => e.textContent);
 
+  // 14. Start new: asks first, then clears the address, layout and images and comes back at the address step; site folders stay
+  await go(false); await p.waitForTimeout(400);
+  await p.setInputFiles('#file', [path.join(dir, 'ge.jpg')]); await p.waitForTimeout(600);
+  await p.fill('#pdf-site', 'golden-main-r3'); await p.dispatchEvent('#pdf-site', 'input'); await p.waitForTimeout(500);
+  await p.click('#b-new'); out.startNew = { asks: await p.$eval('#newconfirm', e => !e.hidden), addr0: await p.$eval('#addr', e => e.value) };
+  await p.click('#b-new-no'); out.startNew.cancel = await p.$eval('#newconfirm', e => e.hidden);
+  await p.click('#b-new'); await Promise.all([p.waitForNavigation(), p.click('#b-new-yes')]); await p.waitForTimeout(800);
+  out.startNew.addr = await p.$eval('#addr', e => e.value); out.startNew.gate = await p.$eval('#gate', e => !e.hidden);
+  out.startNew.bg = await p.evaluate(() => (document.querySelector('#plan image') || {}).getAttribute?.('href')?.slice(0, 15) || null);
+  out.startNew.idb = await p.evaluate(() => new Promise(res => { const r = indexedDB.open('cd50layout', 1);
+    r.onsuccess = () => { const q = r.result.transaction('img').objectStore('img').getAllKeys(); q.onsuccess = () => res(q.result.filter(k => !String(k).startsWith('dir-'))); }; r.onerror = () => res(null); }));
+  await p.fill('#addr', '1201 Main St, Golden, CO'); await p.press('#addr', 'Enter'); await p.waitForTimeout(300);
+  out.startNew.folder = await p.$eval('#pdf-site', e => e.value);
+
   console.log(JSON.stringify(out)); await b.close();
 })().catch(e => { console.log(JSON.stringify({ fatal: String(e && e.stack || e) })); process.exit(0); });

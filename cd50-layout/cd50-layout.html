@@ -37,6 +37,10 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .block{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 .head{display:flex;flex-direction:column;gap:2px}
 .sub{color:var(--muted);font-size:12.5px}
+.headrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.newconfirm{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--warn);background:var(--warn-bg);padding:8px;border-radius:3px;margin-top:6px}
+.newconfirm .row{display:flex;gap:6px;flex-wrap:wrap}
+.btn.danger{border-color:var(--warn);color:var(--warn);font-weight:600}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 input,select,button,textarea{font:inherit;color:inherit}
 input[type=number],select,input[type=text],textarea{background:var(--paper);border:1px solid var(--rule);border-radius:4px;padding:6px 8px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:14px}
@@ -108,7 +112,12 @@ body.sk .app{display:none}
 <div class="app">
   <aside class="side">
     <div class="head">
-      <h1>CD50 Site Layout</h1>
+      <div class="headrow"><h1>CD50 Site Layout</h1>
+        <button class="btn" id="b-new" type="button" title="Clear the address, layout and images in this browser and start a new site">⟲ Start new</button></div>
+      <div class="newconfirm" id="newconfirm" role="alert" hidden>
+        <span>Clear the address, the layout and all site images saved in this browser? Download layout first to keep this work. Site folders and chosen save folders are kept.</span>
+        <span class="row"><button class="btn danger" id="b-new-yes" type="button">Clear and start new</button><button class="btn" id="b-new-no" type="button">Cancel</button></span>
+      </div>
       <div class="sub">Start with the project address. Then sketch the site in Aerial Site Sketch (it comes back here at scale), size, place equipment and route conduit.</div>
     </div>
     <div class="storewarn" id="storewarn" role="alert" hidden></div>
@@ -669,7 +678,7 @@ const SITES = [
 
 // ---------- export contract with cd50-plansets/cd50.py (checked there by layout_io.py, described in cd50-layout/layout-format.md).
 // TOOL_BUILD is filled in by tools/build_layout.py with a hash of src/, so a build can be traced to the tool that made its layout.
-const LAYOUT_FORMAT = "cd50-layout/2", TOOL_BUILD = "d3f468fb3417";
+const LAYOUT_FORMAT = "cd50-layout/2", TOOL_BUILD = "4ee49e06e9a4";
 
 // ---------- state
 const DEFAULT = {product:"V4", posts:4, inputKva:499, mwPosts:2, mwInputKva:1247, items:{}, routes:{}, img:null, view:null, sketch:true, opacity:0.8, bollards:true,
@@ -703,7 +712,8 @@ const IDB = (() => {
     catch(e){ rej(e); } }));
   const run = (mode, fn) => open().then(db => new Promise((res, rej) => { const t = db.transaction("img", mode), q = fn(t.objectStore("img"));
     t.oncomplete = () => res(q.result); t.onerror = t.onabort = () => rej(t.error); }));
-  return {get:k => run("readonly", st => st.get(k)), put:(k, v) => run("readwrite", st => st.put(v, k)), del:k => run("readwrite", st => st.delete(k))};
+  return {get:k => run("readonly", st => st.get(k)), put:(k, v) => run("readwrite", st => st.put(v, k)), del:k => run("readwrite", st => st.delete(k)),
+    keys:() => run("readonly", st => st.getAllKeys())};
 })();
 const kept = {};   // key -> the data URI last written, so an unchanged image is not written again
 function keepImage(key, src){
@@ -713,7 +723,9 @@ function keepImage(key, src){
 }
 function storeWarn(what, e){ const w = document.getElementById("storewarn"); if (!w) return; w.hidden = false;
   w.textContent = `This browser did not keep the ${what} (${(e && (e.name || e.message)) || "storage error"}), so they will be gone after a reload. Download layout to keep your work.`; }
+let clearing = false;   // set by Start new, so nothing writes the old layout back while it is cleared
 function save(){
+  if (clearing) return;
   undoNote();
   let o = S;
   if (S.img){ const I = S.img; o = {...S, img:{...I, src:keepImage("bg", I.src), sketchSrc:I.sketchSrc === I.src ? "same" : keepImage("bgsketch", I.sketchSrc)}}; }
@@ -1737,6 +1749,7 @@ const phKey = (k, v) => `ph-${addrKey(v && v.addr)}-${k}`;
 const idbOf = src => typeof src === "string" && src.startsWith("idb:") ? src.slice(4) : null;
 const phStore = set => { const o = {}; for (const [k, v] of Object.entries(set || {})) if (v) o[k] = {...v, src:keepImage(phKey(k, v), v.src)}; return o; };
 function savePhotos(){
+  if (clearing) return true;
   const sites = {}; for (const [a, set] of Object.entries(PHS)) sites[a] = phStore(set);
   sites[addrKey(S.address)] = phStore(PH);
   try { localStorage.setItem("cd50photos", JSON.stringify({v:2, sites})); return true; }
@@ -2088,6 +2101,18 @@ window.addEventListener("keydown", e => {
 });
 window.addEventListener("resize", () => render());
 document.getElementById("b-undo").onclick = () => undo();
+// Start new: clears the address, the layout and every image this browser holds (this and other addresses), then reloads to
+// the address step. Kept: site folders per address, chosen save folders (dir-* handles) and the sketch auto-open setting.
+const newBox = document.getElementById("newconfirm");
+document.getElementById("b-new").onclick = () => { newBox.hidden = !newBox.hidden; };
+document.getElementById("b-new-no").onclick = () => { newBox.hidden = true; };
+document.getElementById("b-new-yes").onclick = async () => {
+  clearing = true; clearTimeout(undoTimer);
+  try { localStorage.setItem("cd50layout", JSON.stringify({folders:S.folders || {}, sketchAuto:S.sketchAuto})); localStorage.removeItem("cd50photos"); } catch(e){}
+  const keys = await IDB.keys().catch(() => []);
+  await Promise.all(keys.filter(k => !String(k).startsWith("dir-")).map(k => IDB.del(k).catch(() => {})));
+  location.reload();
+};
 
 // ---------- boot
 if (S.img && S.img.guess && !S.img.scale){ S.img.scale = {how:"unscaled", by:"loaded image"}; delete S.img.guess; }   // saved before scale.how
