@@ -124,6 +124,7 @@ const [page_, dir] = process.argv.slice(2), url = 'file://' + path.resolve(page_
     const n = document.getElementById('photonote'); return { text: n.textContent, button: !!n.querySelector('button') }; });
 
   // 11. Download layout with site images saves a zip: layout.json (no data URIs) plus images/
+  await p.setInputFiles('#file', [path.join(dir, 'ge.jpg')]); await p.waitForTimeout(600);   // a plan background, which goes out as the background slot
   const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click('#b-dl')]);
   out.download = { name: dl.suggestedFilename(), path: path.join(dir, 'layout.zip') }; await dl.saveAs(out.download.path);
 

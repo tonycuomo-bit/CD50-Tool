@@ -798,35 +798,36 @@ function dataUrlBlob(u){ const [h, b64] = u.split(","), bin = atob(b64), a = new
 async function sha256(blob){ try { const h = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
   return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join(""); } catch(e){ return null; } }
 const imgExt = t => ({"image/png":"png", "image/jpeg":"jpg", "image/webp":"webp", "image/gif":"gif"})[t] || "img";
+const BG_ASSET = {};   // the background's uploaded asset (site image slots keep theirs on PH)
 async function siteImageAssets(){
-  const assets = window.claude?.use ? await window.claude.use("assets").catch(() => null) : null, out = {}, ex = photosExport();
+  const assets = window.claude?.use ? await window.claude.use("assets").catch(() => null) : null, out = {}, ex = imagesExport();
   if (!assets || !Object.keys(ex).length) return {out, missing:Object.keys(ex)};
   for (const [k, v] of Object.entries(ex)){
-    const p = PH[k], blob = dataUrlBlob(p.src);
-    if (!(p.asset && p.asset.n === p.src.length)){ const r = await assets.upload(blob); p.asset = {id:r.id, n:p.src.length}; }
+    const p = PH[k] || BG_ASSET, blob = dataUrlBlob(v.src);
+    if (!(p.asset && p.asset.n === v.src.length && p.asset.head === v.src.slice(-64))){ const r = await assets.upload(blob); p.asset = {id:r.id, n:v.src.length, head:v.src.slice(-64)}; }
     const {src, ...rest} = v; out[k] = {...rest, asset_id:p.asset.id, sha256:await sha256(blob)};
   }
   savePhotos(); return {out, missing:[]};
 }
 // the zip: layout.json plus images/; unzip it into sites/<site>/ and cd50.py reads the images from there
 async function layoutZip(){
-  const ex = photosExport(), imgs = {}, z = new JSZip();
+  const ex = imagesExport(), imgs = {}, z = new JSZip();
   for (const [k, v] of Object.entries(ex)){ const blob = dataUrlBlob(v.src), file = `images/${k}.${imgExt(blob.type)}`, {src, ...rest} = v;
     z.file(file, blob); imgs[k] = {...rest, file, sha256:await sha256(blob)}; }
   z.file("layout.json", JSON.stringify({...siteLayout(), site_images:imgs}, null, 1));
   return {blob:await z.generateAsync({type:"blob"}), n:Object.keys(imgs).length};
 }
-const copyText = () => { const ex = photosExport(), imgs = {};
+const copyText = () => { const ex = imagesExport(), imgs = {};
   for (const [k, v] of Object.entries(ex)){ const {src, ...rest} = v; imgs[k] = {...rest, omitted:"use Download layout for the image files"}; }
   return JSON.stringify({...siteLayout(), site_images:imgs}, null, 1); };
 document.getElementById("b-copy").onclick = async (e) => {
-  try { await navigator.clipboard.writeText(copyText()); e.target.textContent = Object.keys(photosExport()).length ? "Copied (without images)" : "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
+  try { await navigator.clipboard.writeText(copyText()); e.target.textContent = Object.keys(imagesExport()).length ? "Copied (without images)" : "Copied"; } catch(err){ e.target.textContent = "Copy blocked"; }
   setTimeout(() => e.target.textContent = "Copy layout.json", 1600);
 };
 // In the claude.ai viewer, saves go through the downloads capability; opened as a local file, a plain link works.
 // With site images it saves <site>-layout.zip (layout.json + images/), without them a plain layout.json.
 document.getElementById("b-dl").onclick = async (e) => {
-  const label = e.target.textContent, ex = Object.keys(photosExport()).length;
+  const label = e.target.textContent, ex = Object.keys(imagesExport()).length;
   let file;
   try { file = ex ? {filename:`${pdfFolder() || "site"}-layout.zip`, data:(await layoutZip()).blob} : {filename:"layout.json", data:copyText()}; }
   catch(err){ e.target.textContent = "Could not pack the images"; setTimeout(() => e.target.textContent = label, 2400); return; }
@@ -916,7 +917,7 @@ document.getElementById("b-pdf").onclick = async (e) => {
     const id = `${site}-${Date.now().toString(36)}`.slice(0, 120);
     try {
       let imgs = {out:{}, missing:[]};
-      try { imgs = await siteImageAssets(); } catch(err){ imgs.missing = Object.keys(photosExport()); }
+      try { imgs = await siteImageAssets(); } catch(err){ imgs.missing = Object.keys(imagesExport()); }
       if (db) try { await db.doc("builds/" + id).set({status:"requested", site, address:S.address || null, msg:"Waiting for Claude", at:Date.now()}); } catch(err){}
       await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({build_id: db ? id : null, site, notes, layout: {...siteLayout(), site_images:imgs.out}})}, {cache:false});
       pdfStatus.textContent = `Sent ${site} to Claude at ${hhmm(Date.now())}.` + (db ? " Its progress shows here; the PDF is usually ready within 10 minutes." : " The PDF is usually posted in your CD50 project within 10 minutes.")
@@ -931,7 +932,7 @@ document.getElementById("b-pdf").onclick = async (e) => {
     e.target.disabled = false; return;
   }
   document.getElementById("b-dl").click();
-  const zip = Object.keys(photosExport()).length, what = zip ? `${site}-layout.zip` : "layout.json";
+  const zip = Object.keys(imagesExport()).length, what = zip ? `${site}-layout.zip` : "layout.json";
   const prompt = `Build the CD50 PDF for sites/${site} from the ${what} in my Downloads folder: ${zip ? `unzip it into sites/${site}/ (layout.json and images/)` : `copy it to sites/${site}/layout.json`}, then run cd50.py and pdf.cjs.` + (notes ? ` Notes: ${notes}` : "");
   try { await navigator.clipboard.writeText(prompt); pdfStatus.textContent = `Saved ${what} and copied a prompt. Paste it into Claude Code in your CD50-Tool folder.`; }
   catch(err){ pdfStatus.textContent = `Saved ${what}. In Claude Code, ask: ` + prompt; }
@@ -1070,6 +1071,10 @@ function switchPhotos(old, a){
 const photoIn = document.getElementById("photofile"), boxDlg = document.getElementById("boxdlg"), boxCv = document.getElementById("boxcv");
 let photoSlot = null;
 // only images stamped with this project's address go out; each carries that stamp so the plan set generator can check it
+// the plan background (it fills layout.frame) goes out as the "background" slot, so cd50.py draws it on the plan sheets
+function bgExport(){ const im = S.img;
+  return im && !im.sample && /^data:image\//.test(im.src || "") ? {background:{name:im.site || (im.fromSketch ? "aerial sketch" : "plan background"), address:S.address || null, src:im.src}} : {}; }
+const imagesExport = () => ({...photosExport(), ...bgExport()});
 function photosExport(){ const o = {};
   for (const [k, v] of Object.entries(PH)) if (v && v.src && sameAddr(v.addr, S.address)) o[k] = {name:v.name || null, address:v.addr || S.address || null, src:v.src,
     ...(v.box ? {install_box:v.box.map(n => +n.toFixed(4)), box_units:"fraction of image width/height, [x0,y0,x1,y1] from top left"} : {})};

@@ -80,11 +80,14 @@ def test_download_is_a_zip_with_image_files(run):
         assert 'data:image' not in raw and lay['format'] == 'cd50-layout/2' and len(lay['tool']['build']) == 12
         lot = lay['site_images']['lot']
         assert lot['file'].startswith('images/lot.') and hashlib.sha256(z.read(lot['file'])).hexdigest() == lot['sha256']
+        bg = lay['site_images']['background']                 # the plan background goes out too, for A-101 / E-101 / E-102
+        assert bg['file'].startswith('images/background.') and hashlib.sha256(z.read(bg['file'])).hexdigest() == bg['sha256']
         z.extractall(os.path.join(os.path.dirname(d['path']), 'unzipped'))
     # cd50.py's reader takes it as is: the image comes back as a data URI from the file beside layout.json
     sys.path.insert(0, os.path.join(ROOT, 'cd50-plansets')); import layout_io
     got, warn = layout_io.load_layout(os.path.join(os.path.dirname(d['path']), 'unzipped', 'layout.json'))
     assert got['site_images']['lot']['src'].startswith('data:image/') and not [w for w in warn if 'lot' in w]
+    assert got['site_images']['background']['src'].startswith('data:image/')
 
 
 def test_sketch_view_uses_the_sketch_slot(run):

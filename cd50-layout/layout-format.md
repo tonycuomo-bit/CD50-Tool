@@ -16,11 +16,12 @@ positions are tool feet in the world frame; `frame.origin_ft` is the top-left of
 | `bollards` | list | `{item, kind, xy}`. |
 | `parking`, `landscape` | object | Stalls, signs, ADA check; plants. |
 | `routes` | list | Conduit runs `{id, from, to, kind, n, size, cond, fn, path, length_ft}`. |
-| `site_images` | object | `vicinity`, `lot`, `sketch`, see below. |
+| `site_images` | object | `vicinity`, `lot`, `sketch`, `background`, see below. |
 
 ## Site images
 
-Each entry has `name`, `address` (the project address it was added under) and, for `lot`, `install_box`. The image itself is
+Each entry has `name`, `address` (the project address it was added under) and, for `lot`, `install_box`. `background` is the
+plan background itself (it fills `frame`); the tool sends it whenever the background is a real image, not the sample lot. The image itself is
 never a data URI inside layout.json. It is one of:
 
 - `file` + `sha256`: from **Download layout**, a zip of `layout.json` and `images/<slot>.<ext>`. Unzip it into `sites/<site>/`.
