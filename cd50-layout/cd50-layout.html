@@ -104,20 +104,17 @@ dialog.boxdlg::backdrop{background:rgba(10,14,18,.6)}
   <aside class="side">
     <div class="head">
       <h1>CD50 Site Layout</h1>
-      <div class="sub">Start with the project address. The tool finds the best free aerial for it, then you size, place equipment and route conduit.</div>
+      <div class="sub">Start with the project address. Then sketch the site in Aerial Site Sketch (it comes back here at scale), size, place equipment and route conduit.</div>
     </div>
 
     <section class="block" aria-labelledby="h-addr" id="addrblock">
       <h2 id="h-addr">0 · Project address</h2>
       <form id="addrform" class="row2" style="grid-template-columns:auto auto;justify-content:start;align-items:end">
         <label class="f" style="grid-column:1/-1">Site address (required)<input id="addr" type="text" autocomplete="street-address" placeholder="Street, city, state ZIP" required></label>
-        <button class="btn primary" id="b-addr" type="submit">Find aerial</button>
         <a class="btn primary" id="b-sketchapp" href="https://claude.ai/artifact/B7Dy26CLWxtQnVBRmUQXin" target="_blank" rel="opener">Open Aerial Site Sketch ↗</a>
       </form>
-      <label class="chk"><input id="addr-esri" type="checkbox"> Include reference-only sources (Esri, vendor-licensed county imagery)</label>
       <label class="chk"><input id="sk-auto" type="checkbox" checked> Open Aerial Site Sketch in a new window when I enter an address (the address goes with it)</label>
-      <div class="note" id="addrstatus" role="status" aria-live="polite">Enter the address to start. Every free source that covers the site is checked and the sharpest, newest image loads at an exact scale, north up, pinned on the address.</div>
-      <div class="tablewrap" id="aerialcands" hidden></div>
+      <div class="note" id="addrstatus" role="status" aria-live="polite">Enter the address and press Enter (or Open Aerial Site Sketch) to start. Aerial Site Sketch opens with it; send the finished sketch back to place equipment on it.</div>
     </section>
 
     <section class="block" aria-labelledby="h-photos" id="photoblock">
@@ -162,7 +159,7 @@ dialog.boxdlg::backdrop{background:rgba(10,14,18,.6)}
         <button class="btn" id="b-boll" type="button" aria-pressed="true">Bollards</button>
       </div>
       <div class="row2" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
-        <label class="f">Fetched site imagery<select id="site"></select></label>
+        <label class="f">Saved site imagery<select id="site"></select></label>
         <button class="btn" id="b-site" type="button">Load site</button>
       </div>
       <div class="note" id="sitenote" hidden></div>
@@ -1052,7 +1049,7 @@ function loadImageFile(f) {
     const k = Math.min(1, 1800 / Math.max(im.width, im.height)); const w = Math.round(im.width * k), h = Math.round(im.height * k);
     const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(im, 0, 0, w, h);
     const src = c.toDataURL("image/jpeg", 0.88);
-    S.img = {src, sketchSrc:makeSketch(im, w, h), w, h, ppf:w / 140, x:0, y:0, sample:false};
+    S.img = {src, sketchSrc:makeSketch(im, w, h), w, h, ppf:w / 140, x:0, y:0, sample:false, guess:true};
     S.sketch = true; syncInputs(); fit(); render(); setMode("crop");
   }; im.src = rd.result; }; rd.readAsDataURL(f);
 }
@@ -1067,7 +1064,7 @@ function loadSketchResult(d, how){
     x.fillStyle = "#fff"; x.fillRect(0, 0, w, h); x.drawImage(im, 0, 0, w, h);
     const src = c.toDataURL("image/png"), scaled = +d.ppf > 0, ppf = scaled ? +d.ppf * k : w / 140;
     const ax = 60, ay = 50;
-    S.img = {src, sketchSrc:src, w, h, ppf, x:ax - w / 2 / ppf, y:ay - h / 2 / ppf, sample:false, site:null, linework:true, north:+d.north || 0, fromSketch:true};
+    S.img = {src, sketchSrc:src, w, h, ppf, x:ax - w / 2 / ppf, y:ay - h / 2 / ppf, sample:false, site:null, linework:true, north:+d.north || 0, fromSketch:true, ...(scaled ? {} : {guess:true})};
     S.sketch = false; syncInputs(); fit(); render(); setMode(scaled ? "select" : "scale");
     PH.sketch = {name:d.name || "aerial-sketch.png", src: src.length > 1500000 ? c.toDataURL("image/jpeg", 0.86) : src}; savePhotos(); drawPhotos();
     document.getElementById("photonote").textContent = `Aerial Site Sketch ${how} into the layout area${scaled ? `, at its scale (${(1 / ppf).toFixed(2)} ft per pixel)` : "; it had no scale, so set one with Set scale"}. Place equipment on it.`;
@@ -1162,7 +1159,7 @@ function openSketch(a){
     : `Your browser blocked the new window: use Open Aerial Site Sketch above${a ? " (it carries the address)" : ""}.`;
 }
 // the button is a plain link (opens even where scripted windows are blocked); it only copies the address on the way
-document.getElementById("b-sketchapp").onclick = function(){ const a = S.address || addrIn.value.trim(); this.href = sketchHref(a); if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
+document.getElementById("b-sketchapp").onclick = function(){ const a = commitAddress() || S.address; if (a) S.sketchFor = a; this.href = sketchHref(a); if (a) try { navigator.clipboard.writeText(a).catch(() => {}); } catch(e){}
   document.getElementById("photonote").textContent = `Aerial Site Sketch opens in a new window${a ? " with the address filled in (it is also copied, in case you need to paste it)" : ""}. Bring its PNG back into "Aerial sketch result".`; };
 
 // ---------- Google Earth Pro import: a saved image plus a KML/KMZ placemark (and ideally a path) from the same view.
@@ -1259,205 +1256,29 @@ function geCalibrate(cl){
 // Same method as tools/aerial.py: a local Transverse Mercator frame in US ft centred on the address, so ft/px is exact,
 // north is up and the pin is the image centre. Works wherever the browser can reach the sources (opened as a local file);
 // when it can't (the claude.ai viewer blocks outside hosts), it hands the address to Claude to run tools/aerial.py.
-// BEGIN AERIAL (synced from rules/aerial_sources.json by tools/sync_rules.py)
-const AERIAL = {"frame":{"w_ft":700,"h_ft":525,"ft_per_px":[0.25,0.5],"fine_gsd_ft":1.0},"sources":[{"id":"sandag-2023-9in","name":"SANDAG / SanGIS 2023 orthoimagery (Nearmap, 9 in)","type":"image","url":"https://gis.sandag.org/sdgis/rest/services/Imagery/SD2023_9inch/ImageServer","bbox":[-117.61,32.53,-116.08,33.51],"gsd_ft":0.75,"date":"2023-01-06","license":"public","credit":"SANDAG/SanGIS 2023 orthoimagery (Nearmap), 9 in, public domain"},{"id":"ohio-osip","name":"Ohio OSIP most current (6 in to 1 ft)","type":"image","url":"https://maps.ohio.gov/image/rest/services/osip_most_current/ImageServer","bbox":[-84.82,38.4,-80.52,41.98],"gsd_ft":0.5,"date":"2024","license":"public","credit":"Ohio OSIP III orthoimagery (OGRIP)"},{"id":"indiana-current","name":"Indiana current orthoimagery (6 in, 2025)","type":"image","url":"https://di-ingov.img.arcgis.com/arcgis/rest/services/DynamicWebMercator/Indiana_Current_Imagery/ImageServer","bbox":[-88.1,37.77,-84.78,41.77],"gsd_ft":0.5,"date":"2025","license":"public","credit":"Indiana GIO statewide orthoimagery, CC0"},{"id":"ct-2023","name":"Connecticut 2023 orthoimagery (CT ECO)","type":"image","url":"https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023/ImageServer","bbox":[-73.73,40.98,-71.78,42.05],"gsd_ft":0.25,"date":"2023","license":"public","credit":"CT ECO 2023 statewide orthoimagery"},{"id":"fairfax-2023-3in","name":"Fairfax County VA 2023 aerial (3 in)","type":"image","url":"https://www.fairfaxcounty.gov/gisimagery/rest/services/AerialPhotography/2023AerialPhotography3inch/ImageServer","bbox":[-77.54,38.59,-77.04,39.06],"gsd_ft":0.25,"date":"2023","license":"public","credit":"Fairfax County GIS 2023 aerial photography, 3 in"},{"id":"cook-2025","name":"Cook County IL 2025 orthoimagery (6 in, Chicago)","type":"image","url":"https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2025/ImageServer","bbox":[-88.27,41.46,-87.52,42.16],"gsd_ft":0.5,"date":"2025","license":"public","credit":"Cook County GIS 2025 orthoimagery, 6 in","note":"public county service; no license statement found, credit Cook County"},{"id":"cook-2024","name":"Cook County IL 2024 orthoimagery (6 in, Chicago)","type":"image","url":"https://gis.cookcountyil.gov/imagery/rest/services/CookOrtho2024/ImageServer","bbox":[-88.27,41.46,-87.52,42.16],"gsd_ft":0.5,"date":"2024","license":"public","credit":"Cook County GIS 2024 orthoimagery, 6 in","note":"public county service; no license statement found, credit Cook County"},{"id":"boulder-city-2024","name":"City of Boulder CO 2024 aerial","type":"image","url":"https://gis.bouldercolorado.gov/ags_svr1/rest/services/raster/2024_Aerial_City_of_Boulder/ImageServer","bbox":[-105.31,39.95,-105.17,40.1],"gsd_ft":0.5,"date":"2024","license":"public","credit":"City of Boulder 2024 aerial imagery","note":"resolution and public access not confirmed; the probe tells"},{"id":"drapp-2022","name":"Denver region DRAPP 2022 (6 in; Denver, Boulder, Golden)","type":"image","url":"https://gisportal.jeffco.us/image/rest/services/DRAPP/DRAPP2022/ImageServer","bbox":[-105.75,39.13,-103.7,40.3],"gsd_ft":0.5,"date":"2022","license":"public","credit":"DRCOG Denver Regional Aerial Photography Project 2022, CC BY 3.0"},{"id":"missouri-2024","name":"Missouri statewide 2023-24 (6 in)","type":"image","url":"https://stateimagery.msdis.missouri.edu/arcgis/rest/services/Missouri_6inch_Statewide_2023_2024_Dynamic/ImageServer","bbox":[-95.78,35.99,-89.09,40.62],"gsd_ft":0.5,"date":"2024","license":"public","credit":"MSDIS Missouri statewide 6 in orthoimagery 2023-2024"},{"id":"nys-latest","name":"New York State latest orthoimagery (NYC 6 in source, served ~1 ft)","type":"map","url":"https://orthos.its.ny.gov/arcgis/rest/services/wms/Latest/MapServer","bbox":[-79.77,40.48,-71.78,45.02],"gsd_ft":1.0,"date":"2021-2025","license":"public","credit":"NYS ITS GIS orthoimagery program (latest, 2021-2025)"},{"id":"nj-2020","name":"New Jersey 2020 orthophotography (1 ft)","type":"map","url":"https://maps.nj.gov/arcgis/rest/services/Basemap/Orthos_Natural_2020_NJ_WM/MapServer","bbox":[-75.57,38.92,-73.88,41.36],"gsd_ft":1.0,"date":"2020","license":"public","credit":"NJOGIS 2020 natural color orthophotography"},{"id":"nc-latest","name":"North Carolina latest orthoimagery (6 in)","type":"image","url":"https://services.gis.nc.gov/secure/rest/services/Imagery/Orthoimagery_Latest/ImageServer","bbox":[-84.33,33.84,-75.46,36.59],"gsd_ft":0.5,"date":"2020-2024","license":"public","credit":"NC OneMap orthoimagery program"},{"id":"md-sixinch","name":"Maryland six-inch imagery (2023-2025)","type":"image","url":"https://mdgeodata.md.gov/imagery/rest/services/SixInch/SixInchImagery/ImageServer","bbox":[-79.49,37.89,-75.05,39.73],"gsd_ft":0.5,"date":"2023-2025","license":"public","credit":"MD iMAP six-inch imagery"},{"id":"va-vbmp","name":"Virginia VBMP most recent (1 ft, 6 in / 3 in in cities)","type":"map","url":"https://vginmaps.vdem.virginia.gov/arcgis/rest/services/VBMP_Imagery/MostRecentImagery_WGS/MapServer","bbox":[-83.68,36.54,-75.24,39.47],"gsd_ft":1.0,"date":"2021-2023","license":"public","credit":"VGIN Virginia Base Mapping Program"},{"id":"dc-2023","name":"Washington DC 2023 orthophoto (3 in)","type":"image","url":"https://imagery.dcgis.dc.gov/dcgis/rest/services/Ortho/Ortho_2023/ImageServer","bbox":[-77.12,38.79,-76.91,39.0],"gsd_ft":0.25,"date":"2023-05","license":"public","credit":"DC GIS 2023 orthophoto"},{"id":"ky-phase2","name":"Kentucky KyFromAbove Phase 2 (6 in; Louisville 3 in)","type":"image","url":"https://kyraster.ky.gov/arcgis/rest/services/ImageServices/Ky_KYAPED_Phase2_6IN/ImageServer","bbox":[-89.57,36.5,-81.96,39.15],"gsd_ft":0.5,"date":"2019-2022","license":"public","credit":"KyFromAbove Partners"},{"id":"pa-pema","name":"Pennsylvania PEMA statewide 2021-2023","type":"map","url":"https://maps.pasda.psu.edu/server/rest/services/PEMAImagery2021_2023/MapServer","bbox":[-80.52,39.72,-74.69,42.27],"gsd_ft":1.0,"date":"2021-2023","license":"public","credit":"PEMA statewide imagery via PASDA"},{"id":"philly-2024","name":"Philadelphia 2024 (3 in)","type":"map","url":"https://imagery.pasda.psu.edu/server/rest/services/pasda/PhiladelphiaImagery2024/MapServer","bbox":[-75.28,39.87,-74.95,40.14],"gsd_ft":0.25,"date":"2024-05","license":"public","credit":"City of Philadelphia 2024 imagery via PASDA"},{"id":"wv-2024","name":"West Virginia 2024 aerial photography","type":"image","url":"https://tagis.dep.wv.gov/image/rest/services/webMercator/aerial_photography_2024/ImageServer","bbox":[-82.65,37.2,-77.72,40.64],"gsd_ft":1.0,"date":"2024","license":"public","credit":"WV DEP 2024 aerial photography","note":"resolution not confirmed"},{"id":"tn-imagery","name":"Tennessee TDOT imagery (6 in from 2022, else 1 ft)","type":"map","url":"https://tnmap.tn.gov/arcgis/rest/services/BASEMAPS/IMAGERY_WEB_MERCATOR/MapServer","bbox":[-90.31,34.98,-81.65,36.68],"gsd_ft":0.5,"date":"2022+","license":"public","credit":"TDOT Aerial Surveys"},{"id":"champaign-2023","name":"Champaign IL 2023 (3 in)","type":"image","url":"https://gisportal.champaignil.gov/is/rest/services/Aerial_Imagery/COC2023_3IN/ImageServer","bbox":[-88.33,40.05,-88.18,40.17],"gsd_ft":0.25,"date":"2023","license":"public","credit":"City of Champaign 2023 orthophoto"},{"id":"dekalb-ga-2024","name":"DeKalb County GA 2024 (Atlanta east)","type":"image","url":"https://dcgis.dekalbcountyga.gov/mapping/rest/services/Imagery/Imagery2024/ImageServer","bbox":[-84.35,33.61,-84.02,33.97],"gsd_ft":0.5,"date":"2024","license":"public","credit":"DeKalb County GIS 2024 imagery"},{"id":"palmbeach-2024","name":"Palm Beach County FL 2024","type":"image","url":"https://gis.pbcgov.org/image/rest/services/Aerialphotography_2024_WebMercator/ImageServer","bbox":[-80.89,26.32,-80.03,26.97],"gsd_ft":0.5,"date":"2024","license":"public","credit":"Palm Beach County 2024 aerial photography"},{"id":"pinellas-2024","name":"Pinellas County FL 2024 (St. Petersburg)","type":"image","url":"https://egis.pinellas.gov/gis/rest/services/Aerials/Aerials2024/ImageServer","bbox":[-82.86,27.6,-82.54,28.18],"gsd_ft":0.5,"date":"2024","license":"public","credit":"Pinellas County 2024 aerials","note":"no license statement found"},{"id":"oregon-osip-2022","name":"Oregon OSIP 2022 (1 ft)","type":"image","url":"https://imagery.oregonexplorer.info/arcgis/rest/services/OSIP_2022/OSIP_2022_WM/ImageServer","bbox":[-124.7,41.99,-116.46,46.29],"gsd_ft":1.0,"date":"2022","license":"public","credit":"Oregon Statewide Imagery Program 2022"},{"id":"sbcounty-2024","name":"San Bernardino County CA 2024 (urban area)","type":"image","url":"https://maps.sbcounty.gov/img/rest/services/y2024_IS/ImageServer","bbox":[-117.8,33.87,-114.13,35.81],"gsd_ft":0.5,"date":"2024","license":"public","credit":"San Bernardino County 2024 imagery","note":"resolution not confirmed"},{"id":"reno-2025","name":"Reno NV 2025 (6 in)","type":"image","url":"https://citymaps.reno.gov/image/rest/services/Mosaics/OrthoMosaic_2025_6inch_NAD/ImageServer","bbox":[-119.95,39.38,-119.7,39.67],"gsd_ft":0.5,"date":"2025","license":"public","credit":"City of Reno 2025 orthomosaic"},{"id":"maricopa-2025","name":"Maricopa County AZ assessor aerials (flown Oct-Dec 2024; Phoenix)","type":"map","url":"https://gis.mcassessor.maricopa.gov/arcgis/rest/services/Aerials2025/MapServer","bbox":[-113.34,32.5,-111.04,34.05],"gsd_ft":0.5,"date":"2024-12","license":"public","credit":"Maricopa County Assessor aerials","note":"resolution not confirmed"},{"id":"king-2023","name":"King County WA 2023 (3 in urban; Seattle)","type":"map","url":"https://gismaps.kingcounty.gov/arcgis/rest/services/BaseMaps/KingCo_Aerial_2023/MapServer","bbox":[-122.54,47.08,-121.06,47.78],"gsd_ft":0.25,"date":"2023","license":"restricted","credit":"EagleView Technologies, Inc., King County; licensed to the county"},{"id":"hillsborough-2024","name":"Hillsborough County FL 2024 (Tampa; Pictometry)","type":"image","url":"https://maps.hillsboroughcounty.org/arcgis/rest/services/AerialsNew/Aerials_2024/ImageServer","bbox":[-82.82,27.57,-82.05,28.17],"gsd_ft":0.5,"date":"2024","license":"restricted","credit":"Hillsborough County / Pictometry; visualization only"},{"id":"fortworth-2024","name":"Fort Worth TX 2024 (Pictometry)","type":"image","url":"https://gis.fortworthtexas.gov/gisimage/rest/services/Orthos/Orthos_2024/ImageServer","bbox":[-97.6,32.55,-97.03,33.05],"gsd_ft":0.5,"date":"2024-02","license":"restricted","credit":"City of Fort Worth / Pictometry"},{"id":"usgs-naip-plus","name":"USGS NAIP Plus (NAIP 0.6 m, HRO where flown)","type":"image","url":"https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer","bbox":null,"gsd_ft":1.97,"date":null,"license":"public","catalog":true,"credit":"USGS NAIP Plus, public domain"},{"id":"usgs-imagery-only","name":"USGS National Map imagery basemap (HRO / NAIP)","type":"map","url":"https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer","bbox":null,"gsd_ft":1.0,"date":null,"license":"public","credit":"USGS The National Map imagery, public domain"},{"id":"esri-world-imagery","name":"Esri World Imagery (Maxar / Vexcel / local, often 0.3 m or better)","type":"map","url":"https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer","metadata":"https://metadata.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Metadata_2026_r02/MapServer","bbox":null,"gsd_ft":1.0,"date":null,"license":"restricted","credit":"Esri World Imagery (Esri, Maxar, Earthstar Geographics and the GIS user community); reference and tracing only"}]};
-// END AERIAL
-const FIND_TRIGGER = "trig_01P1kxJyaUCwJf9Aypx7m9VK";   // Tony's "CD50 layout tool: Find aerial" scheduled task
-const FTUS = 1200 / 3937, SD_BBOX = [-117.61, 32.53, -116.08, 33.51];
-const addrIn = document.getElementById("addr"), addrStatus = document.getElementById("addrstatus"), candBox = document.getElementById("aerialcands");
-const inBox = (lon, lat, b) => !b || (b[0] <= lon && lon <= b[2] && b[1] <= lat && lat <= b[3]);
-const qs = p => Object.entries(p).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
-const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + " timed out")), ms))]);
-const getJSON = async (url, p) => { const r = await withTimeout(fetch(url + "?" + qs(p)), 15000, "request"); const d = await r.json(); if (d.error) throw new Error(d.error.message || "service error"); return d; };
-let jsonpN = 0;
-function jsonp(url, p){ return withTimeout(new Promise((res, rej) => {
-  const cb = "cd50jsonp" + (++jsonpN), sc = document.createElement("script");
-  window[cb] = d => { delete window[cb]; sc.remove(); res(d); };
-  sc.onerror = () => { delete window[cb]; sc.remove(); rej(new Error("blocked")); };
-  sc.src = url + "?" + qs({...p, format:"jsonp", callback:cb}); document.head.appendChild(sc);
-}), 12000, "geocoder"); }
+const FTUS = 1200 / 3937;
+const addrIn = document.getElementById("addr"), addrStatus = document.getElementById("addrstatus");
 const slugify = a => (a.toLowerCase().split(",")[0].replace(/[^a-z0-9 ]+/g, " ").trim().split(/\s+/).slice(0, 5).join("-")) || "site";
 const normAddr = a => a.toLowerCase().replace(/[.,#]/g, " ").replace(/\b(east)\b/g, "e").replace(/\b(west)\b/g, "w").replace(/\b(boulevard)\b/g, "blvd").replace(/\s+/g, " ").trim();
-async function geocodeAddr(a){
-  let g = null;
-  try { const d = await jsonp("https://geocoding.geo.census.gov/geocoder/locations/onelineaddress", {address:a, benchmark:"Public_AR_Current"});
-    const m = d.result.addressMatches[0]; if (m) g = {lon:m.coordinates.x, lat:m.coordinates.y, matched:m.matchedAddress, source:"US Census geocoder (address range)"}; } catch(e){}
-  if (!g || inBox(g.lon, g.lat, SD_BBOX)) try {
-    const d = await getJSON("https://geo.sandag.org/server/rest/services/SANDAG_COMPOSITE_LOCATOR/GeocodeServer/findAddressCandidates", {SingleLine:a, outSR:4326, outFields:"Addr_type,Loc_name", f:"json"});
-    const c = (d.candidates || []).filter(x => x.score >= 90).sort((p, q) => (p.attributes.Addr_type !== "PointAddress") - (q.attributes.Addr_type !== "PointAddress") || !/APN/.test(p.attributes.Loc_name) - !/APN/.test(q.attributes.Loc_name) || q.score - p.score)[0];
-    if (c && inBox(c.location.x, c.location.y, SD_BBOX)) g = {lon:c.location.x, lat:c.location.y, matched:c.address, source:`SANDAG address point (${c.attributes.Loc_name})`};
-  } catch(e){}
-  return g;
-}
-const localSR = (lon, lat) => JSON.stringify({wkt:'PROJCS["CD50 local TM",GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],' +
-  `PARAMETER["Central_Meridian",${lon.toFixed(7)}],PARAMETER["Scale_Factor",1.0],PARAMETER["Latitude_Of_Origin",${lat.toFixed(7)}],UNIT["Foot_US",0.3048006096012192]]`});
-function exportURL(src, sr, wFt, hFt, w, h){
-  const p = {bbox:[-wFt/2, -hFt/2, wFt/2, hFt/2].join(","), bboxSR:sr, imageSR:sr, size:`${w},${h}`, f:"image", format:"jpg"};
-  return src.type === "image" ? src.url + "/exportImage?" + qs({...p, interpolation:"RSP_CubicConvolution"}) : src.url + "/export?" + qs({...p, transparent:false, dpi:96});
-}
-const loadImg = url => withTimeout(new Promise((res, rej) => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => res(im); im.onerror = () => rej(new Error("not reachable")); im.src = url; }), 30000, "image");
-function blankImg(im){ try { const c = document.createElement("canvas"); c.width = 64; c.height = 48; const x = c.getContext("2d"); x.drawImage(im, 0, 0, 64, 48);
-  const d = x.getImageData(0, 0, 64, 48).data; let s = 0, s2 = 0; for (let i = 0; i < d.length; i += 4){ const v = (d[i] + d[i+1] + d[i+2]) / 3; s += v; s2 += v*v; }
-  const n = d.length / 4; return Math.sqrt(s2/n - (s/n)**2) < 4; } catch(e){ return false; } }
-async function siteInfo(src, lon, lat){
-  let gsd = src.gsd_ft, date = src.date, detail = null; const pt = {geometry:`${lon},${lat}`, geometryType:"esriGeometryPoint", inSR:4326, f:"json"};
-  try {
-    if (src.catalog){ const d = await getJSON(src.url + "/query", {...pt, spatialRel:"esriSpatialRelIntersects", where:"Category=1", outFields:"Name,resolution_value,resolution_units,acquisition_date,agency", returnGeometry:false});
-      const rows = (d.features || []).map(f => f.attributes).filter(a => a.resolution_value != null)
-        .map(a => ({g:a.resolution_value / (/^met/i.test(a.resolution_units || "") ? FTUS : 1), d:a.acquisition_date ? new Date(a.acquisition_date).toISOString().slice(0, 10) : "", n:a.Name}))
-        .sort((p, q) => p.g - q.g || (q.d > p.d) - (q.d < p.d));
-      if (rows[0]){ gsd = rows[0].g; date = rows[0].d || null; detail = rows[0].n; } }
-    if (src.metadata){ const d = await getJSON(src.metadata + "/identify", {...pt, sr:4326, layers:"all", tolerance:1, mapExtent:[lon-.001, lat-.001, lon+.001, lat+.001].join(","), imageDisplay:"400,400,96", returnGeometry:false});
-      for (const r of d.results || []){ const a = Object.fromEntries(Object.entries(r.attributes).map(([k, v]) => [k.toUpperCase(), v])); const res = a.SRC_RES ?? a["RESOLUTION (M)"];
-        if (res != null && res !== "" && res !== "Null"){ gsd = +res / FTUS; const t = String(a.SRC_DATE ?? ""); if (/^\d{8}$/.test(t)) date = `${t.slice(0,4)}-${t.slice(4,6)}-${t.slice(6)}`; detail = a.NICE_DESC || a.SRC_DESC || null; break; } } }
-  } catch(e){}
-  return {gsd, date, detail};
-}
-const rankCands = c => c.filter(x => x.ok).sort((p, q) => Math.round(p.gsd*100) - Math.round(q.gsd*100) || ((q.date || "") > (p.date || "")) - ((q.date || "") < (p.date || "")));
-function sharpen(im, w, h, gsd, ftpx){
-  // contrast stretch (0.4% clip) + unsharp mask sized to the source pixels; same intent as enhance() in tools/aerial.py
-  const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"); x.drawImage(im, 0, 0, w, h);
-  let D; try { D = x.getImageData(0, 0, w, h); } catch(e){ return null; }
-  const d = D.data, n = w * h, hist = new Uint32Array(256);
-  for (let i = 0; i < d.length; i += 4) hist[(d[i] + d[i+1] + d[i+2]) / 3 | 0]++;
-  let lo = 0, hi = 255, acc = 0; while (acc + hist[lo] < n * .004) acc += hist[lo++]; acc = 0; while (acc + hist[hi] < n * .004) acc += hist[hi--];
-  const k = 255 / Math.max(1, hi - lo), up = Math.max(1, gsd / ftpx), r = Math.max(1, Math.round(.6 * up)), amt = up > 1.5 ? .8 : .6;
-  const src = new Float32Array(d.length), tmp = new Float32Array(d.length), blur = new Float32Array(d.length);
-  for (let i = 0; i < d.length; i++) src[i] = (i & 3) === 3 ? 255 : Math.max(0, Math.min(255, (d[i] - lo) * k));
-  const box = (a, b, horiz) => { const L = horiz ? w : h, M = horiz ? h : w, st = horiz ? 4 : 4 * w, rs = horiz ? 4 * w : 4;
-    for (let m = 0; m < M; m++) for (let ch = 0; ch < 3; ch++){ const o = m * rs + ch; let s = 0;
-      for (let j = -r; j <= r; j++) s += a[o + Math.min(L - 1, Math.max(0, j)) * st];
-      for (let l = 0; l < L; l++){ b[o + l * st] = s / (2 * r + 1); s += a[o + Math.min(L - 1, l + r + 1) * st] - a[o + Math.max(0, l - r) * st]; } } };
-  box(src, tmp, true); box(tmp, blur, false);
-  for (let i = 0; i < d.length; i++) if ((i & 3) !== 3){ const diff = src[i] - blur[i]; d[i] = Math.abs(diff) < 2 ? src[i] : src[i] + amt * diff; }
-  x.putImageData(D, 0, 0); return c.toDataURL("image/jpeg", .86);
-}
 function addSiteOption(site){ if (![...siteSel.options].some(o => o.value === site.id)) siteSel.insertAdjacentHTML("afterbegin", `<option value="${site.id}"></option>`);
   siteSel.querySelector(`option[value="${CSS.escape(site.id)}"]`).textContent = site.label; }
 function setAddress(a, geo){ S.address = a; S.geo = geo || S.geo || null; addrIn.value = a; save(); gate(); }
 function gate(){ const on = !S.address; document.querySelector(".app").classList.toggle("locked", on); document.getElementById("gate").hidden = !on;
   document.querySelectorAll(".side>section:not(#addrblock)").forEach(el => { el.inert = on; }); if (!on && !addrIn.value) addrIn.value = S.address; }
-let lastCands = null;
-function showCands(c, g){
-  const fr = AERIAL.frame;
-  candBox.hidden = false;
-  candBox.innerHTML = `<table class="cands"><thead><tr><th></th><th>Source</th><th>Native</th><th>Date</th></tr></thead><tbody>${c.map((x, i) => `<tr>
-    <td>${x.ok ? `<input type="radio" name="aerial" value="${i}" aria-label="Use ${x.src.name}"${x === lastCands.best ? " checked" : ""}>` : ""}</td>
-    <td>${x.src.name}${x.src.license !== "public" ? ' <span class="pill warn">reference only</span>' : ""}${x.ok ? "" : `<div class="sub">${x.why}</div>`}</td>
-    <td class="n">${x.ok ? x.gsd.toFixed(2) + " ft" : "–"}</td><td class="n">${x.ok ? (x.date || "?") : ""}</td></tr>`).join("")}</tbody></table>
-    <div class="note">Frame ${fr.w_ft} × ${fr.h_ft} ft, north up, centred on ${g.matched} (${g.source}). Pick another row to compare.</div>${blockedNote(c)}`;
-}
-// sharper sources that cover the site but did not answer: name them and the domains to allow (Claude's cloud runs need them allowed too)
-const hostOf = u => { try { return new URL(u).hostname; } catch(e){ return ""; } };
-function blockedNote(c){
-  const best = lastCands && lastCands.best, lim = best ? best.gsd : 99;
-  const bb = c.filter(x => !x.ok && /reachable/.test(x.why) && x.src.gsd_ft < lim).sort((p, q) => p.src.gsd_ft - q.src.gsd_ft);
-  if (!bb.length) return "";
-  const hs = [...new Set(bb.flatMap(x => [x.src.url, x.src.metadata].filter(Boolean).map(hostOf)))].sort();
-  return `<div class="note"><span class="pill warn">Sharper imagery exists</span> ${bb.map(x => `${x.src.name} (~${x.src.gsd_ft} ft)`).join("; ")} did not answer from here. Allow ${hs.map(h => `<code>${h}</code>`).join(", ")} (cloud environment network settings, or this browser's network) and run Find aerial again.</div>`;
-}
-async function useCand(x, g){
-  const fr = AERIAL.frame, ftpx = x.gsd <= fr.fine_gsd_ft ? fr.ft_per_px[0] : fr.ft_per_px[1];
-  const w = Math.round(fr.w_ft / ftpx), h = Math.round(fr.h_ft / ftpx);
-  addrStatus.textContent = `Loading ${x.src.name} at ${ftpx} ft/px…`;
-  const im = await loadImg(exportURL(x.src, localSR(g.lon, g.lat), fr.w_ft, fr.h_ft, w, h));
-  const src = sharpen(im, w, h, x.gsd, ftpx) || im.src, slug = slugify(g.matched);
-  const site = {id:"addr-" + slug, folder:slug, label:g.matched, wFt:fr.w_ft, hFt:fr.h_ft, pin:[fr.w_ft/2, fr.h_ft/2], address:g.matched,
-    credit:`${x.src.credit}, ${x.date || "date unknown"} (${x.gsd.toFixed(2)} ft native), ${ftpx} ft/px, north up, local TM frame centred on the address; contrast and unsharp mask applied. Pin from ${g.source}.` +
-      (x.src.license !== "public" ? " Reference and tracing only: check the license before issuing drawings with it." : ""), src};
-  const i = SITES.findIndex(s => s.id === site.id); if (i >= 0) SITES[i] = site; else SITES.push(site);
-  S.aerialSite = {...site, src:null}; addSiteOption(site); loadSite(site);
-  addrStatus.textContent = `Loaded ${x.src.name}, ${x.date || "date unknown"}, ${x.gsd.toFixed(2)} ft native at ${ftpx} ft/px. Scale is set; the pin marks the address.`;
-}
-async function findAerial(a){
-  const btn = document.getElementById("b-addr"); btn.disabled = true; candBox.hidden = true;
-  try {
-    const na = normAddr(a), pre = SITES.find(s => { const L = normAddr(s.address || s.label); const k = L.split(" ").slice(0, 3).join(" "); return na.startsWith(k) || L.startsWith(na.split(" ").slice(0, 3).join(" ")); });
-    if (pre){ loadSite(pre); setAddress(pre.address || pre.label.split(" · ")[0]); addrStatus.textContent = `Loaded the saved aerial for ${pre.label}. ${pre.credit || ""}`; return; }
-    addrStatus.textContent = "Looking up the address…";
-    const g = await geocodeAddr(a);
-    if (!g){ setAddress(a); return askClaude(a, "The address lookup could not be reached from this page"); }
-    setAddress(g.matched, {lon:+g.lon.toFixed(7), lat:+g.lat.toFixed(7), source:g.source});
-    addrStatus.textContent = `Found ${g.matched}. Checking aerial sources…`;
-    const esri = document.getElementById("addr-esri").checked, sr = localSR(g.lon, g.lat), fr = AERIAL.frame, pw = 320, ph = Math.round(320 * fr.h_ft / fr.w_ft);
-    const c = await Promise.all(AERIAL.sources.filter(s => inBox(g.lon, g.lat, s.bbox)).map(async src => {
-      if (src.license !== "public" && !esri) return {src, ok:false, why:"Skipped: reference-only license (tick the box to include)"};
-      try { const [inf, im] = await Promise.all([siteInfo(src, g.lon, g.lat), loadImg(exportURL(src, sr, fr.w_ft, fr.h_ft, pw, ph))]);
-        return blankImg(im) ? {src, ok:false, why:"No imagery at this site"} : {src, ok:true, ...inf}; }
-      catch(e){ return {src, ok:false, why:"Not reachable from this page"}; } }));
-    const ok = rankCands(c);
-    if (!ok.length) return askClaude(g.matched, "None of the aerial sources could be reached from this page");
-    lastCands = {c, g, best:ok[0]}; showCands(c, g); await useCand(ok[0], g);
-  } catch(e){ addrStatus.textContent = `Could not load the aerial (${e.message}). Try again, or paste a screenshot.`; }
-  finally { btn.disabled = false; }
-}
-async function askClaude(a, why){
-  const site = slugify(a), esri = document.getElementById("addr-esri").checked;
-  const mcp = window.claude?.use ? await window.claude.use("mcp").catch(() => null) : null;
-  let err = null, errText = "";
-  if (mcp && FIND_TRIGGER){
-    const db = await aerialDb();
-    if (db) try { await db.doc("aerials/" + site).set({status:"requested", address:a, esri, msg:"Waiting for Claude", at:Date.now()}); } catch(e){}
-    try { await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id:FIND_TRIGGER, text:JSON.stringify({address:a, site, esri})}, {cache:false});
-      if (db){ watchAerial(site); addrStatus.textContent = `${why}, so Claude is fetching it. It loads here by itself when it's ready, usually in 2 to 4 minutes. Size the site meanwhile.`; }
-      else addrStatus.textContent = `${why}, so it went to Claude, which will fetch the aerial and post when it's ready (a few minutes).`;
-      return; }
-    catch(e){ err = e?.code || e?.message || "error"; errText = mcpErrText(e); }
-  }
-  const fix = {server_not_connected:"Add Claude Code in claude.ai Settings → Connectors", not_in_manifest:"Claude Code is turned off for this page: allow it in the page's Permissions menu",
-    approval_required:"Allow the Claude Code request when the page asks", needs_reauth:"Reconnect Claude Code in claude.ai Settings → Connectors"}[err];
-  const cmd = `python tools/aerial.py "${a}" --site ${site} --add-to-tool${esri ? " --esri" : ""}`;
-  const head = err ? `${why}, and the request to Claude failed (${err}${fix ? ": " + fix : ""}${errText ? "; says: " + errText : ""}).` : `${why}.`;
-  try { await navigator.clipboard.writeText(cmd); addrStatus.textContent = `${head} Copied the command to run in the CD50-Tool folder: ${cmd}`; }
-  catch(e){ addrStatus.textContent = `${head} In the CD50-Tool folder run: ${cmd}`; }
-}
-// the connector's own words for a failed call (a tool_error carries the tool's result), shortened for the status line
-function mcpErrText(e){
-  const r = e?.result, parts = [];
-  for (const c of (r && r.content) || []) if (c && c.text) parts.push(c.text);
-  let t = parts.join(" ") || (r && r.payload && JSON.stringify(r.payload)) || e?.message || "";
-  try { const j = JSON.parse(t); t = j.error?.message || j.message || t; } catch(_){}
-  return String(t).replace(/\s+/g, " ").slice(0, 240);
-}
-// Claude's answer comes back through the page's shared db: Claude uploads the aerial as an asset and writes aerials/<site>
-// {status: requested|working|ready|failed, msg, asset_id, wFt, hFt, pin, address, geo, label, credit}. Ready docs load as sites.
-let dbP = null, aerialWatch = null;
-const aerialDb = () => dbP || (dbP = window.claude?.use ? window.claude.use("db").catch(() => null) : Promise.resolve(null));
-function aerialSite(id, d){ return {id:"addr-" + id, folder:id, label:d.label || d.address, wFt:d.wFt, hFt:d.hFt, pin:d.pin, address:d.address, credit:d.credit, src:"/_blob/" + d.asset_id}; }
-function addAerialSite(id, d){ const site = aerialSite(id, d), i = SITES.findIndex(s => s.id === site.id); if (i >= 0) SITES[i] = site; else SITES.push(site); addSiteOption(site); return site; }
-async function watchAerial(id){
-  const db = await aerialDb(); if (!db) return;
-  if (aerialWatch) aerialWatch();
-  aerialWatch = db.doc("aerials/" + id).onSnapshot(snap => {
-    const d = snap.exists ? snap.data() : null; if (!d) return;
-    if (d.status === "ready" && d.asset_id){ aerialWatch && aerialWatch(); aerialWatch = null;
-      const site = addAerialSite(id, d); S.aerialSite = {...site, src:null}; loadSite(site); setAddress(d.address, d.geo || null);
-      addrStatus.textContent = `Loaded from Claude: ${d.msg || d.credit || ""}`; }
-    else if (d.status === "failed"){ aerialWatch && aerialWatch(); aerialWatch = null; addrStatus.textContent = `Claude could not fetch the aerial: ${d.msg || "no reason given"}. Paste a screenshot instead, or try again.`; }
-    else addrStatus.textContent = `Claude is fetching the aerial: ${d.msg || d.status}…`;
-  }, () => {});
-}
-// on open: list the aerials Claude has already fetched, and pick up one still in progress for the current address
-aerialDb().then(async db => { if (!db) return;
-  try { const q = await db.collection("aerials").get();
-    const mine = S.address ? slugify(S.address) : null;
-    q.docs.forEach(doc => { const d = doc.data();
-      if (d.status === "ready" && d.asset_id){ const site = addAerialSite(doc.id, d);
-        // the aerial for the current address arrived while the page was closed: load it now
-        if (doc.id === mine && !(S.img && S.img.site === site.id)){ S.aerialSite = {...site, src:null}; loadSite(site); addrStatus.textContent = `Loaded from Claude: ${d.msg || d.credit || ""}`; } }
-      else if (doc.id === mine && d.status !== "failed") watchAerial(doc.id); });
-  } catch(e){} });
-document.getElementById("addrform").onsubmit = e => { e.preventDefault(); const a = addrIn.value.trim(); if (!a) return;
-  if (skAuto.checked && normAddr(a) !== normAddr(S.sketchFor || "")){ S.sketchFor = a; openSketch(a); }   // once per new address
-  findAerial(a); };
-candBox.onchange = e => { const i = e.target.name === "aerial" && +e.target.value; if (lastCands && i !== false) useCand(lastCands.c[i], lastCands.g).catch(err => { addrStatus.textContent = `Could not load that source (${err.message}).`; }); };
+// the address unlocks the other steps: set on Enter, when the box loses focus, or with Open Aerial Site Sketch
+function commitAddress(){ const a = addrIn.value.trim(); if (!a) return "";
+  if (normAddr(a) !== normAddr(S.address || "")) setAddress(a);
+  return a; }
+document.getElementById("addrform").onsubmit = e => { e.preventDefault(); const a = commitAddress(); if (!a) return;
+  if (skAuto.checked && normAddr(a) !== normAddr(S.sketchFor || "")){ S.sketchFor = a; openSketch(a); } };   // once per new address
+addrIn.addEventListener("change", commitAddress);   // leaving the box unlocks the steps; the sketch opens on Enter or the button
 if (S.aerialSite && S.img && S.img.site === S.aerialSite.id && !SITES.some(s => s.id === S.aerialSite.id)){ SITES.push({...S.aerialSite, src:S.img.src}); addSiteOption(S.aerialSite); }
 
 // ---------- modes
 const hints = {
   select:"Drag equipment or a single bollard to move it. Click a conduit to add a bend point. Drag empty space to pan, scroll to zoom.",
-  crop:"Drag a box around the work area to crop the overhead view.",
-  scale:"Click both ends of something with a known length, such as a stall stripe, then enter its true length.",
+  crop:"Drag a box around the work area to crop the overhead view. Press on equipment, or Esc, to go back to Select.",
+  scale:"Click both ends of something with a known length, such as a stall stripe, then enter its true length. Esc or Select to skip.",
   gecal:"Click the first point of the Google Earth path on the image, then its last point.",
 };
 function setMode(m){ mode = m; scalePts = []; document.getElementById("scalebox").hidden = true;
@@ -1475,6 +1296,8 @@ let drag = null, scalePts = [];
 svg.addEventListener("wheel", e => { e.preventDefault(); const [x, y] = toFt(e); zoom(e.deltaY > 0 ? 1.12 : 0.89, x, y); }, {passive:false});
 svg.addEventListener("pointerdown", e => {
   const p = toFt(e); svg.setPointerCapture(e.pointerId);
+  // in Crop view a press on equipment, a bollard, a parking item or a bend point leaves cropping and grabs it
+  if (mode === "crop" && e.target.closest("[data-vtx],[data-item],[data-boll],[data-pk]")) setMode("select");
   if (mode === "crop"){ drag = {kind:"crop", a:p, b:p}; return; }
   if (mode === "scale"){ drag = {kind:"scale", b:p}; return; }
   if (mode === "gecal"){ drag = {kind:"gecal", b:p}; return; }
@@ -1512,7 +1335,7 @@ svg.addEventListener("pointerup", async e => {
     if (ex - sx > 20 && ey - sy > 20){
       const src = await cropImage(I.src, sx, sy, ex - sx, ey - sy); const sk = await cropImage(I.sketchSrc, sx, sy, ex - sx, ey - sy);
       S.img = {...I, src, sketchSrc:sk, w:ex - sx, h:ey - sy, x:I.x + sx / I.ppf, y:I.y + sy / I.ppf, sample:false};
-      fit(); setMode("scale"); return;
+      fit(); setMode(I.guess ? "scale" : "select"); return;   // a scaled image keeps its scale through the crop
     }
     render(); return;
   }
@@ -1526,11 +1349,12 @@ svg.addEventListener("dblclick", e => { const vtx = e.target.closest("[data-vtx]
 document.getElementById("scaleok").onclick = () => {
   const truth = parseFloat(document.getElementById("scaleft").value); if (!(truth > 0) || scalePts.length < 2 || !S.img) return;
   const L = Math.hypot(scalePts[1][0]-scalePts[0][0], scalePts[1][1]-scalePts[0][1]); const f = truth / L;
-  const [ox, oy] = scalePts[0]; S.img.ppf = S.img.ppf / f; S.img.x = ox + (S.img.x - ox) * f; S.img.y = oy + (S.img.y - oy) * f;
+  const [ox, oy] = scalePts[0]; S.img.ppf = S.img.ppf / f; S.img.x = ox + (S.img.x - ox) * f; S.img.y = oy + (S.img.y - oy) * f; delete S.img.guess;
   fit(); setMode("select");
 };
 document.getElementById("scalecancel").onclick = () => setMode("select");
 window.addEventListener("keydown", e => {
+  if (e.key === "Escape" && mode !== "select" && !e.target.matches("input,select,textarea")){ setMode("select"); return; }
   if (!selected || e.target.matches("input,select")) return;
   if ((e.key === "Delete" || e.key === "Backspace") && !selBoll && S.pk[selected]){ e.preventDefault(); delete S.pk[selected]; selected = null; render(); return; }
   if ((e.key === "Delete" || e.key === "Backspace") && selBoll){ e.preventDefault(); S.items[selBoll.id].bl.splice(selBoll.i, 1); selBoll = null; render(); return; }
