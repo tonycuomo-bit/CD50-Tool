@@ -118,6 +118,9 @@ ul.diff { margin: 0; padding-left: 18px; font-size: .93rem; }
 .rounds { display: flex; flex-wrap: wrap; gap: 6px; }
 .rounds button { font: 500 .8rem var(--font-mono); padding: 6px 9px; }
 .rounds button[aria-pressed=true] { background: var(--ink); color: var(--surface); }
+#ed-panel button[aria-pressed=true] { background: var(--ink); color: var(--surface); }
+#ed-panel button.rec { background: #C62828; color: #FFFFFF; border-color: #C62828; }
+#ed-panel textarea { min-height: 56px; }
 .mono { font-family: var(--font-mono); font-size: .9rem; }
 @media (prefers-reduced-motion: no-preference) { button { transition: transform .08s ease; } button:active:not(:disabled) { transform: translateY(1px); } }
 </style>
@@ -280,6 +283,26 @@ ul.diff { margin: 0; padding-left: 18px; font-size: .93rem; }
   <!-- 4 DOWNLOAD -->
   <section class="step" id="s-download" hidden>
     <div class="step-head"><span class="step-no">4</span><h2>Download</h2><p class="hint" id="dl-name"></p></div>
+    <div id="ed-panel" style="display:grid;gap:10px">
+      <h3 style="margin:0;font:700 1.05rem var(--font-display);text-transform:uppercase;letter-spacing:.05em">Change the sketch</h3>
+      <p class="hint" style="margin:0">The picked sketch is drawn in color over the photo. To change one part, press Select area and click 4 to 8 points around it (click the first point again to close the area). Then say or type the change.</p>
+      <div class="row zoombar" data-for="ed"><button type="button" data-z="in">Zoom in</button><button type="button" data-z="out">Zoom out</button><button type="button" data-z="fit">Fit</button><span class="hint">Ctrl + scroll also zooms.</span></div>
+      <div class="canvasbox" id="ed-box"><canvas id="ed-canvas" style="cursor:default"></canvas></div>
+      <div class="row">
+        <button type="button" id="ed-select" aria-pressed="false">Select area (4–8 points)</button>
+        <button type="button" id="ed-whole" aria-pressed="true">Whole sketch</button>
+        <button type="button" id="ed-undo-pt" hidden>Undo point</button>
+        <span class="hint" id="ed-scope" aria-live="polite">Change applies to: the whole sketch</span>
+      </div>
+      <label class="f"><span>Change for Claude (click in and speak, or type)</span>
+        <textarea id="ed-text" placeholder="The row in the area has 14 stalls, not 12, and the island at its end is landscaped."></textarea></label>
+      <div class="row">
+        <button type="button" id="ed-mic" aria-pressed="false">🎤 Dictate</button>
+        <button class="primary" type="button" id="ed-go">Apply change</button>
+        <button type="button" id="ed-undo" hidden>Undo last change</button>
+        <p class="hint" id="ed-msg" aria-live="polite" style="margin:0;flex:1;min-width:200px"></p>
+      </div>
+    </div>
     <div class="row" id="send-row">
       <button class="primary" id="send-layout">Send to the layout</button>
       <p class="hint" style="margin:0">Puts the sketch in the layout area (at its scale) and in the "Aerial sketch result" slot, and switches back to the layout to place equipment.</p>

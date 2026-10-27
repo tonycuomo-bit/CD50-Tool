@@ -73,7 +73,12 @@ td.tag{font-family:var(--f-mono);white-space:nowrap}
 .hint{font-size:12px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--rule);min-height:30px}
 .canvaswrap{position:relative;flex:1;min-height:420px;background:var(--canvas)}
 svg#plan{position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none;cursor:grab}
-svg#plan.mode-crop,svg#plan.mode-scale{cursor:crosshair}
+svg#plan.mode-crop,svg#plan.mode-scale,svg#plan.mode-aiarea{cursor:crosshair}
+.aibar{display:grid;gap:6px;padding:8px 10px;border-top:1px solid var(--rule)}
+.aibar .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.aibar textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:44px}
+.aibar .scope{flex:1;min-width:180px;font-size:12px;color:var(--muted)}
+.btn.rec{background:var(--bad);color:#fff;border-color:var(--bad)}
 .scalebox{position:absolute;left:10px;bottom:10px;display:flex;gap:6px;align-items:center;background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:6px 8px;font-size:12px}
 .scalebox input{width:80px}
 .inspector{font-size:13px}
@@ -265,6 +270,7 @@ body.sk .app{display:none}
       <button class="btn" id="m-scale" type="button" aria-pressed="false">Set scale</button>
       <button class="btn" id="m-rotate" type="button" aria-pressed="false" title="Drag an item (or the selected group) around to rotate it. Shift snaps to 15°.">⟳ Rotate</button>
       <button class="btn" id="m-multi" type="button" aria-pressed="false" title="Click items to add or drop them from the selection, or drag a box around them. Shift-click does the same.">Multi-select</button>
+      <button class="btn" id="m-aiarea" type="button" aria-pressed="false" title="Click 4 to 8 points around the part of the layout a dictated change may touch.">⬠ AI area</button>
       <button class="btn" id="b-undo" type="button" disabled title="Undo the last change (Ctrl+Z). Keeps the last 4 changes.">↶ Undo</button>
       <span class="sp"></span>
       <button class="btn" id="z-out" type="button" aria-label="Zoom out">−</button>
@@ -289,6 +295,15 @@ body.sk .app{display:none}
         <button class="btn primary" id="scaleok" type="button">Apply</button>
         <button class="btn" id="scalecancel" type="button">Cancel</button>
       </div>
+    </div>
+    <div class="aibar" id="aibar">
+      <div class="row"><span class="scope" id="ai-scope" role="status">Change applies to: whole layout</span>
+        <button class="btn" id="ai-draw" type="button" title="Click 4 to 8 points on the plan; click the first point or press Enter to close">Draw area (4–8 points)</button>
+        <button class="btn" id="ai-whole" type="button" aria-pressed="true">Whole layout</button></div>
+      <label class="f">Change for Claude (click in and speak, or type)<textarea id="ai-text" rows="2" placeholder="e.g. line these stalls up with the curb and space them 10 ft apart, remove the cars in this area, redraw the stripes as 60° stalls"></textarea></label>
+      <div class="row"><button class="btn" id="ai-mic" type="button" aria-pressed="false">🎤 Dictate</button>
+        <button class="btn primary" id="ai-go" type="button">Apply change</button>
+        <span class="note" id="ai-status" role="status"></span></div>
     </div>
   </main>
 </div>

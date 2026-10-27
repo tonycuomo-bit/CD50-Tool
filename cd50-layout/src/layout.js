@@ -482,6 +482,7 @@ function cropImage(src, sx, sy, sw, sh){
 // ---------- render
 // selection: selSet holds every selected item and parking/landscape object; selected is the one the inspectors show
 let selected = null, selBoll = null, mode = "select", selSet = new Set(), multi = false;
+let aiPoly = null, aiDraft = [];   // the AI change area in tool ft: the closed polygon, and the points clicked so far
 const isSel = id => selSet.has(id);
 function selectOnly(id){ selected = id || null; selSet = new Set(id ? [id] : []); selBoll = null; }
 const selIds = () => [...selSet].filter(id => O(id));
@@ -574,6 +575,10 @@ function render(){
   if (scalePts.length){ const pts = scalePts.concat(drag && (drag.kind === "scale" || drag.kind === "gecal") ? [drag.b] : []);
     if (pts.length > 1) el("line", {x1:pts[0][0], y1:pts[0][1], x2:pts[1][0], y2:pts[1][1], stroke:"var(--accent)", "stroke-width":unit*3}, gH);
     pts.forEach(p => el("circle", {cx:p[0], cy:p[1], r:unit*5, fill:"var(--accent)"}, gH)); }
+  const aiPts = mode === "aiarea" ? aiDraft : aiPoly;
+  if (aiPts && aiPts.length){ const open = mode === "aiarea";
+    el(open ? "polyline" : "polygon", {points:aiPts.map(q => q.join(",")).join(" "), fill:open ? "none" : "var(--accent)", "fill-opacity":0.1, stroke:"var(--accent)", "stroke-width":unit*2, "stroke-dasharray":`${unit*6} ${unit*4}`, "pointer-events":"none"}, gH);
+    aiPts.forEach((q, i) => el("circle", {cx:q[0], cy:q[1], r:unit*(i ? 4 : 6), fill:"var(--accent)", "pointer-events":"none"}, gH)); }
 
   // north arrow + scale bar (screen corner)
   const nx = v.x + v.w - unit*40, ny = v.y + unit*46;
@@ -913,8 +918,8 @@ document.getElementById("b-dl").onclick = async (e) => {
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 // Build PDF: in the claude.ai viewer, fire Tony's "Build PDF" scheduled task through the Claude Code Remote connector,
-// which wakes the CD50 Claude session with this layout. Opened as a local file, save layout.json and copy a Claude Code prompt.
-const BUILD_TRIGGER = "trig_01SUGXsC5acu3krHpFg7uN6A";
+// which starts a fresh Claude session for this build. Opened as a local file, save layout.json and copy a Claude Code prompt.
+const BUILD_TRIGGER = "trig_01NAhTa43nxwPKN7Nde4SfCo";   // the page db doc config/build {trigger_id} overrides it, so the task can change without a republish
 // Each build gets an id and a status doc builds/<id> in the page's db: {status: requested|working|ready|failed, site, address,
 // msg, pdf, at}. Claude moves it along and the page shows it, so a failed build is not mistaken for a slow one. While a build
 // of a site is open the button does not send that site again (no duplicate _rN), unless it has had no answer for BUILD_STALE_MIN.
@@ -932,14 +937,29 @@ async function openBuild(db, site){
   catch(e){}
   return null;
 }
+// The PDF is an asset of this page (/_blob/<id>). That address only works from inside the page (a new tab gets Not Found),
+// so fetch it here and hand it over through the downloads capability, or as a plain download outside claude.ai.
+async function savePdf(d, a){
+  const label = a.textContent, filename = d.pdf || "CD50.pdf"; a.textContent = " Getting the PDF…";
+  try {
+    const r = await fetch(d.pdf_url); if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+    let done = false;
+    if (dl){ try { await dl.save({filename, data:blob}); done = true; } catch(err){ if (err?.code === "declined") done = true; } }
+    if (!done){ const u = URL.createObjectURL(blob), x = document.createElement("a"); x.href = u; x.download = filename;
+      document.body.appendChild(x); x.click(); x.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); }
+    a.textContent = label;
+  } catch(err){ a.textContent = ` Could not get the PDF (${err?.code || err?.message || "error"}); press Build PDF again or ask Claude for ${filename}.`; }
+}
 function watchBuild(db, id){
   if (buildWatch) buildWatch();
   const stop = () => { if (buildWatch) buildWatch(); buildWatch = null; if (S.build && S.build.id === id){ delete S.build; save(); } };
   buildWatch = db.doc("builds/" + id).onSnapshot(snap => {
     const d = snap.exists ? snap.data() : null; if (!d) return;
     if (d.status === "ready"){ stop(); pdfStatus.textContent = `PDF ready for ${d.site}: ${d.pdf || "posted in your CD50 project"}.` + (d.msg ? ` ${d.msg}` : "");
-      if (/^(https:\/\/|\/)/.test(d.pdf_url || "")){ const a = document.createElement("a"); a.href = d.pdf_url; a.target = "_blank"; a.rel = "noopener"; a.textContent = " Open PDF";
-        pdfStatus.append(a); } }
+      if (/^(https:\/\/|\/)/.test(d.pdf_url || "")){ const a = document.createElement("a"); a.href = d.pdf_url; a.textContent = " Open PDF";
+        a.onclick = ev => { ev.preventDefault(); savePdf(d, a); }; pdfStatus.append(a); } }
     else if (d.status === "failed"){ stop(); pdfStatus.textContent = `Claude could not build ${d.site}: ${d.msg || "no reason given"}. Fix that and press Build PDF again, or use Download layout.`; }
     else if (buildStale(d)){ stop(); pdfStatus.textContent = `No answer from Claude on ${d.site} since ${hhmm(d.at)}. Press Build PDF to send it again, or use Download layout.`; }
     else pdfStatus.textContent = `Claude is building ${d.site} (sent ${hhmm(d.at)}): ${d.msg || d.status}…`;
@@ -996,7 +1016,9 @@ document.getElementById("b-pdf").onclick = async (e) => {
       const layout = {...siteLayout(), site_images:imgs.out};
       if (!db) throw {code:"no_db", message:"the page database is not available here"};
       await db.doc("builds/" + id).set({status:"requested", site, address:S.address || null, notes, layout, msg:"Waiting for Claude", at:Date.now()});
-      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: BUILD_TRIGGER, text: JSON.stringify({build_id:id, site})}, {cache:false});
+      let trig = BUILD_TRIGGER;
+      try { const c = await db.doc("config/build").get(), t = c.exists ? (c.data() || {}).trigger_id : ""; if (/^trig_\w+$/.test(t || "")) trig = t; } catch(err){}
+      await mcp.callTool("Claude Code Remote", "fire_trigger", {trigger_id: trig, text: JSON.stringify({build_id:id, site})}, {cache:false});
       pdfStatus.textContent = `Sent ${site} to Claude at ${hhmm(Date.now())}.` + (db ? " Its progress shows here; the PDF is usually ready within 10 minutes." : " The PDF is usually posted in your CD50 project within 10 minutes.")
         + (imgs.missing.length ? ` The site images (${imgs.missing.join(", ")}) could not be attached, so their sheets will be left out; use Download layout for those.` : "");
       if (db){ S.build = {id, site, at:Date.now()}; save(); watchBuild(db, id); }
@@ -1356,10 +1378,11 @@ const hints = {
   crop:"Drag a box around the work area to crop the overhead view. Press on equipment, or Esc, to go back to Select.",
   scale:"Click the centres of two stall stripes (standard stalls are 9 ft wide; several stalls apart is more accurate), or both ends of any known length, then enter the stall count or the length. Esc or Select to skip.",
   gecal:"Click the first point of the Google Earth path on the image, then its last point.",
+  aiarea:"Click 4 to 8 points around the part of the layout to change. Click the first point (or press Enter) to close it; Backspace removes the last point; Esc cancels.",
 };
-function setMode(m){ mode = m; scalePts = []; document.getElementById("scalebox").hidden = true;
-  ["select","crop","scale","rotate"].forEach(k => document.getElementById("m-" + k).setAttribute("aria-pressed", k === m));
-  svg.setAttribute("class", "mode-" + m); document.getElementById("hint").textContent = hints[m]; render(); }
+function setMode(m){ mode = m; scalePts = []; document.getElementById("scalebox").hidden = true; if (m !== "aiarea") aiDraft = [];
+  ["select","crop","scale","rotate","aiarea"].forEach(k => document.getElementById("m-" + k).setAttribute("aria-pressed", k === m));
+  svg.setAttribute("class", "mode-" + m); document.getElementById("hint").textContent = hints[m]; aiShowScope(); render(); }
 document.getElementById("m-select").onclick = () => setMode("select");
 document.getElementById("m-crop").onclick = () => setMode("crop");
 document.getElementById("m-scale").onclick = () => setMode("scale");
@@ -1380,6 +1403,7 @@ svg.addEventListener("pointerdown", e => {
   if (mode === "crop"){ drag = {kind:"crop", a:p, b:p}; return; }
   if (mode === "scale"){ drag = {kind:"scale", b:p}; return; }
   if (mode === "gecal"){ drag = {kind:"gecal", b:p}; return; }
+  if (mode === "aiarea"){ aiClick(p); return; }
   const vtx = e.target.closest("[data-vtx]"), item = e.target.closest("[data-item]"), run = e.target.closest("[data-run]");
   const boll = e.target.closest("[data-boll]"), pk = !boll && !item && e.target.closest("[data-pk]");
   if (vtx){ const [id, i] = vtx.dataset.vtx.split("|"); drag = {kind:"vtx", id, i:+i}; return; }
@@ -1464,6 +1488,7 @@ window.addEventListener("keydown", e => {
   if (document.body.classList.contains("sk")) return;   // keys belong to Aerial Site Sketch while it is open
   if (e.key === "Escape" && mode !== "select" && !e.target.matches("input,select,textarea")){ setMode("select"); return; }
   if (e.target.matches("input,select,textarea")) return;
+  if (mode === "aiarea" && (e.key === "Enter" || e.key === "Backspace")){ e.preventDefault(); if (e.key === "Enter") aiClose(); else { aiDraft.pop(); aiShowScope(); render(); } return; }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")){ e.preventDefault(); undo(); return; }
   if (e.key === "Escape" && selSet.size){ selectOnly(null); render(); return; }
   if (!selSet.size) return;
@@ -1488,6 +1513,282 @@ document.getElementById("b-new-yes").onclick = async () => {
   const keys = await IDB.keys().catch(() => []);
   await Promise.all(keys.filter(k => !String(k).startsWith("dir-")).map(k => IDB.del(k).catch(() => {})));
   location.reload();
+};
+
+// ---------- AI change box (below the plan). Say or type a change; Claude edits the layout objects (equipment positions,
+// stalls, signs, plants, conduit bend points) inside the drawn area (4 to 8 points), or anywhere with Whole layout. Claude
+// answers with a list of edits that are checked against the area before they apply, so one Undo takes the whole change back.
+const AI_MIN = 4, AI_MAX = 8;
+const aiScope = document.getElementById("ai-scope"), aiText = document.getElementById("ai-text"), aiStatus = document.getElementById("ai-status");
+const aiWhole = document.getElementById("ai-whole"), aiMic = document.getElementById("ai-mic"), aiGo = document.getElementById("ai-go");
+const aiObjs = () => [...Object.values(S.items), ...Object.values(S.pk)].filter(o => o.x != null);
+const aiIn = (x, y) => !aiPoly || inPoly(x, y, aiPoly);
+function aiShowScope(){ aiWhole.setAttribute("aria-pressed", !aiPoly && mode !== "aiarea");
+  aiScope.textContent = mode === "aiarea" ? `Drawing the area: ${aiDraft.length} point${aiDraft.length === 1 ? "" : "s"} (${AI_MIN} to ${AI_MAX})`
+    : aiPoly ? `Change applies to: the drawn area (${aiPoly.length} points, ${aiObjs().filter(o => aiIn(o.x, o.y)).length} items inside)` : "Change applies to: whole layout"; }
+function aiClick(p){ const unit = S.view.w / svg.clientWidth;
+  if (aiDraft.length >= AI_MIN && Math.hypot(p[0] - aiDraft[0][0], p[1] - aiDraft[0][1]) < unit*10){ aiClose(); return; }   // back on the first point
+  aiDraft.push([+p[0].toFixed(2), +p[1].toFixed(2)]);
+  if (aiDraft.length >= AI_MAX){ aiClose(); return; }
+  aiShowScope(); render(); }
+function aiClose(){ if (aiDraft.length < AI_MIN){ aiStatus.textContent = `Click at least ${AI_MIN} points for the area.`; return; }
+  aiPoly = aiDraft; aiDraft = []; aiStatus.textContent = ""; setMode("select"); aiText.focus(); }
+document.getElementById("m-aiarea").onclick = document.getElementById("ai-draw").onclick = () => { aiPoly = null; setMode(mode === "aiarea" ? "select" : "aiarea"); };
+aiWhole.onclick = () => { aiPoly = null; if (mode === "aiarea") setMode("select"); else { aiShowScope(); render(); } };
+
+// Dictation: the browser's speech recognition where this view lets the page use the microphone; otherwise the system's own
+// dictation (Windows: Win+H, Mac: Fn twice, phones: the keyboard's mic) types into the box just the same.
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const DICTATE_TIP = /Mac/.test(navigator.platform) ? "press Fn twice (Mac dictation)" : /Win/.test(navigator.platform) ? "press Win+H (Windows dictation)" : "use your keyboard's mic";
+let aiRec = null, aiAuto = !!SR;
+function aiListen(on){
+  if (!on){ if (aiRec) aiRec.stop(); return; }
+  if (!SR){ aiStatus.textContent = `Speech is not available in this browser: click in the box and ${DICTATE_TIP}.`; return; }
+  if (aiRec) return;
+  const r = new SR(), base = aiText.value.trim(); r.lang = navigator.language || "en-US"; r.continuous = true; r.interimResults = true;
+  aiRec = r; aiMic.setAttribute("aria-pressed", true); aiMic.classList.add("rec"); aiMic.textContent = "■ Stop"; aiStatus.textContent = "Listening…";
+  r.onresult = ev => { let t = ""; for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript;
+    aiText.value = [base, t.trim()].filter(Boolean).join(" "); };
+  r.onerror = ev => { if (ev.error === "not-allowed" || ev.error === "service-not-allowed") aiAuto = false;
+    aiStatus.textContent = aiAuto ? `Dictation stopped (${ev.error}).` : `The microphone is blocked here: click in the box and ${DICTATE_TIP} instead.`; };
+  r.onend = () => { aiRec = null; aiMic.setAttribute("aria-pressed", false); aiMic.classList.remove("rec"); aiMic.textContent = "🎤 Dictate";
+    if (aiStatus.textContent === "Listening…") aiStatus.textContent = ""; };
+  try { r.start(); } catch(e){ r.onend(); aiAuto = false; aiStatus.textContent = `Dictation could not start: click in the box and ${DICTATE_TIP}.`; }
+}
+aiMic.onclick = () => aiListen(!aiRec);
+aiText.addEventListener("focus", () => { if (aiAuto && !aiRec && !aiText.value.trim()) aiListen(true); });   // click in and speak
+
+// what Claude sees: every object (id, kind, centre, rotation, size) marked inside or outside the area and whether Tony has it
+// selected, the conduit runs, and a picture of the area (or the view) with the background and every object's outline and id
+const aiNum = v => typeof v === "number" && isFinite(v) && Math.abs(v) < 20000, aiPt = p => Array.isArray(p) && aiNum(p[0]) && aiNum(p[1]);
+const loadImg = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+function aiFoot(o, z){   // footprint [along x, along y] in ft at rot 0
+  if (S.items[o.id]){ const s = spec(o, z) || {}; return [s.pw || s.w || 2, s.pd || s.d || 2]; }
+  if (o.type === "stall"){ const d = stallDims(o); return [d.w, d.l]; }
+  if (o.type === "plant"){ const d = (PLANTS[o.plant] || {}).dia || 3; return [d, d]; }
+  return [1.5, 1.5];
+}
+function aiContext(){
+  const z = size(), r2 = v => +(+v).toFixed(2);
+  const objs = aiObjs().map(o => {
+    const [w, d] = aiFoot(o, z), b = {id:o.id, x:r2(o.x), y:r2(o.y), rot:r2(o.rot || 0), w:r2(w), d:r2(d), inside:aiIn(o.x, o.y), ...(isSel(o.id) ? {selected:true} : {})};
+    if (S.items[o.id]) return {...b, type:o.type, kind:o.kind, what:(spec(o, z) || {}).name, fixed:"equipment: move or rotate only"};
+    if (o.type === "stall") return {...b, type:"stall", kind:o.kind, aisle:o.aisle, aisle_w:stallDims(o).aisle};
+    if (o.type === "plant") return {...b, type:"plant", plant:o.plant};
+    return {...b, type:o.type, sign:o.sign};
+  });
+  const R = runs(z).map(r => ({id:r.id, from:r.from, to:r.to, bends:(S.routes[r.id] || []).map(p => p.map(r2))}));
+  return {objs, R};
+}
+const AI_COL = {xfmr:"#ff8a00", ct:"#ff8a00", mtr:"#ff8a00", svc:"#ff8a00", cab:"#ff2d55", post:"#ff2d55", stall:"#00b8d9", sign:"#e6b800", plant:"#2fbf4a"};
+async function aiPicture(lim){
+  if (!lim || !lim.images) return null;
+  const P = aiPoly, [x0, y0, x1, y1] = P ? [Math.min(...P.map(p => p[0])) - 15, Math.min(...P.map(p => p[1])) - 15, Math.max(...P.map(p => p[0])) + 15, Math.max(...P.map(p => p[1])) + 15]
+    : [S.view.x, S.view.y, S.view.x + S.view.w, S.view.y + S.view.h];
+  const f = Math.min(1568 / (x1 - x0), 1568 / (y1 - y0), 40);   // px per ft
+  const c = document.createElement("canvas"); c.width = Math.max(1, Math.round((x1 - x0) * f)); c.height = Math.max(1, Math.round((y1 - y0) * f));
+  const g = c.getContext("2d"), M = p => [(p[0] - x0) * f, (p[1] - y0) * f], lw = Math.max(1.5, c.width / 700);
+  const path = (pts, closed) => { g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); if (closed) g.closePath(); };
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, c.width, c.height);
+  const im = svg.querySelector("image"), href = im && im.getAttribute("href"), img = href ? await loadImg(href) : null;
+  if (img){ const [ix, iy] = M([+im.getAttribute("x"), +im.getAttribute("y")]); g.drawImage(img, ix, iy, +im.getAttribute("width") * f, +im.getAttribute("height") * f); }
+  const z = size(); g.lineWidth = lw;
+  g.strokeStyle = "#2f7bff"; g.setLineDash([lw * 3, lw * 2]);
+  for (const r of runs(z)){ const pts = pathPts(r); if (pts.every(aiPt)){ path(pts.map(M), false); g.stroke(); } }
+  g.setLineDash([]);
+  const fs = Math.max(11, Math.round(c.width / 95)); g.font = `bold ${fs}px sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+  for (const o of aiObjs()){ const [w, d] = aiFoot(o, z), [cx, cy] = M([o.x, o.y]), col = AI_COL[o.type] || "#ff8a00";
+    g.save(); g.translate(cx, cy); g.rotate((o.rot || 0) * Math.PI / 180); g.strokeStyle = col; g.lineWidth = lw * (isSel(o.id) ? 2.5 : 1.2);
+    if (o.type === "plant"){ g.beginPath(); g.arc(0, 0, w * f / 2, 0, Math.PI * 2); g.stroke(); } else g.strokeRect(-w * f / 2, -d * f / 2, w * f, d * f);
+    g.restore();
+    if (cx > -50 && cy > -50 && cx < c.width + 50 && cy < c.height + 50){ g.lineWidth = 3; g.strokeStyle = "#ffffff"; g.strokeText(o.id, cx, cy); g.fillStyle = col; g.fillText(o.id, cx, cy); } }
+  if (P){ g.strokeStyle = "#f0b21c"; g.lineWidth = lw * 2; g.setLineDash([lw * 5, lw * 3]); path(P.map(M), true); g.stroke(); g.setLineDash([]); }
+  const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.85));
+  return blob && blob.size <= lim.images.maxInputBytes ? {blob, box:[x0, y0, x1, y1].map(v => +v.toFixed(1)), px:[c.width, c.height], bg:!!img} : null;
+}
+const bgKind = () => !S.img ? "none" : S.img.sample ? "the built-in sample lot drawing" : S.img.fromSketch || S.img.linework ? "a line sketch (dark lines on white) from Aerial Site Sketch"
+  : "an aerial photo" + (S.sketch ? ", shown in Sketch view (a line drawing made from the photo; edits go into both)" : "");
+function aiPrompt(ask, ctx, pic){
+  const north = (S.img && S.img.north) || 0, I = S.img;
+  return `You edit a Tesla V4 Supercharger site layout (CD50 plan set tool) for an EV charging engineer, who asked for this change:
+"""${ask}"""
+
+COORDINATES: feet. x grows to the right and y grows DOWN the plan. North is ${north ? `${north}° clockwise from up` : "up"}. rot is degrees clockwise. Each object's x,y is its centre.
+At rot 0: an object's w runs along x and d along y; a charging post's stall lies on its +y side (the stall centre is about ${(S.park.l / 2 - 1.6).toFixed(1)} ft from the post); a stall's length runs along y and its sign stands at its -y end.
+
+AREA: ${aiPoly ? `only objects whose centre is inside this polygon may change, every new or moved centre and conduit bend point must stay inside it, and background edits are clipped to it: ${JSON.stringify(aiPoly)}` : "the whole layout may change."}
+${ctx.objs.some(o => o.selected) ? `SELECTED: Tony has these selected; "these", "this" or "the selected ones" mean them: ${ctx.objs.filter(o => o.selected).map(o => o.id).join(", ")}.` : ""}
+${pic ? `PICTURE: x ${pic.box[0]} to ${pic.box[2]}, y ${pic.box[1]} to ${pic.box[3]} (${pic.px[0]} x ${pic.px[1]} px; left edge = smaller x, top edge = smaller y). ${pic.bg ? "It shows the background" : "There is no background"} with every object's outline and id on top: orange = service equipment, red = cabinets and posts, cyan = stalls, gold = signs, green = plants, dashed blue = conduit runs, dashed yellow = the area. Thicker outlines are selected. Use it to line things up with curbs, stripes, islands and buildings.` : "There is no picture; work from the coordinates."}
+BACKGROUND: ${bgKind()}${I ? `, covering x ${+I.x.toFixed(1)} to ${+(I.x + I.w / I.ppf).toFixed(1)} and y ${+I.y.toFixed(1)} to ${+(I.y + I.h / I.ppf).toFixed(1)}` : ""}.
+
+OBJECTS (inside = may change when an area is set):
+${JSON.stringify(ctx.objs)}
+
+CONDUIT RUNS (straight from the "from" object to the "to" object through the bend points; bends are [x,y]):
+${JSON.stringify(ctx.R)}
+
+PARKING: ADA standard ${S.park.jur}, EV stalls at least ${S.park.w} ft wide and ${S.park.l} ft long. Stall kinds: ${JSON.stringify(STALL_KINDS)}. Sign kinds: ${JSON.stringify(Object.fromEntries(Object.entries(SIGNS).map(([k, v]) => [k, v.label])))}. Plant kinds: ${JSON.stringify(Object.fromEntries(Object.entries(PLANTS).map(([k, v]) => [k, `${v.label}, ${v.dia} ft`])))}.
+
+RULES: Equipment (transformer, CT, meter, switchboard, cabinets, posts) comes from the sizing: move or rotate it, never add or delete it. Stalls, signs and plants may be added, moved, rotated, changed in kind, or deleted. Keep stalls from overlapping (side by side stalls sit one stall width apart, centre to centre), keep each post at the head of its stall, and keep the change to what was asked.
+To line things up, prefer "align", "distribute" and "rotate" over many single moves. To lay out stalls, use "add_row".
+Background edits paint into the image itself (they cannot be dragged later, only undone): use them only when Tony asks to remove, hide, clean up or redraw something in the background, such as cars, old stripes, marks or clutter. "bg_erase" covers a polygon with the surrounding pavement or paper color ("color":"auto"), or a color you give. To realign existing striping in the background, erase the old stripes, then draw the new ones with "bg_stall_row" or "bg_line". Use dark lines (#333333) on a line sketch and white (#f8fafc) or yellow (#facc15) on an aerial photo.
+If part of the request cannot be done with these edits (for example changing charger counts), leave it out and say so in "skipped".
+
+Answer with JSON only:
+{"summary": "one short sentence of what you changed", "skipped": "what you left out and why, or empty",
+ "edits": [
+  {"op":"move","id":"<id>","x":0,"y":0,"rot":0},
+  {"op":"shift","ids":["<id>"],"dx":0,"dy":0},
+  {"op":"rotate","ids":["<id>"],"deg":0,"about":[x,y]},
+  {"op":"align","ids":["<id>"],"axis":"x|y","value":0,"rot":0},
+  {"op":"distribute","ids":["<id>"],"from":[x,y],"to":[x,y],"rot":0},
+  {"op":"add","type":"stall","kind":"ev|van|std|amb","x":0,"y":0,"rot":0},
+  {"op":"add","type":"sign","sign":"<sign kind>","x":0,"y":0,"rot":0},
+  {"op":"add","type":"plant","plant":"<plant kind>","x":0,"y":0},
+  {"op":"add_row","kind":"ev|van|std|amb","from":[x,y],"to":[x,y],"count":1,"rot":0},
+  {"op":"set","id":"<stall, sign or plant id>","kind|sign|plant|aisle":"<new value; aisle is L or R>"},
+  {"op":"delete","ids":["<stall, sign or plant id>"]},
+  {"op":"route","id":"<conduit run id>","bends":[[x,y]]},
+  {"op":"bg_erase","polygon":[[x,y],[x,y],[x,y]],"color":"auto"},
+  {"op":"bg_line","points":[[x,y],[x,y]],"color":"#f8fafc","width_ft":0.33,"dashed":false},
+  {"op":"bg_stall_row","p1":[x,y],"p2":[x,y],"count":1,"toward":[x,y],"depth_ft":18,"angle_deg":90,"lean":"p2","color":"#f8fafc","width_ft":0.33}
+ ]}
+"rot" is optional in move, align and distribute (it keeps each rotation when left out). "about" is optional in rotate (default: the group's centre). "align" puts every centre on x = value (axis "x") or y = value (axis "y"); value defaults to their average. "distribute" spaces the objects evenly from "from" to "to", in the order listed. "add_row" puts "count" stall centres evenly from "from" to "to". "bends" replaces a run's bend points ([] for a straight run). "bg_stall_row" paints count+1 stripes from p1 to p2 (the stripes' aisle-side ends), each running "depth_ft" toward the side where "toward" lies, at "angle_deg" to the p1-p2 line (90 = square), leaning toward p2 or p1. Use only ids listed above.`;
+}
+// background edits paint into the background image (the photo and its sketch view, or the sketch), clipped to the area
+function ringColor(g, c, pts){   // the median color just outside a polygon (pixels)
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), m = 8;
+  const bx = Math.max(0, Math.floor(Math.min(...xs) - m)), by = Math.max(0, Math.floor(Math.min(...ys) - m));
+  const bw = Math.min(c.width, Math.ceil(Math.max(...xs) + m)) - bx, bh = Math.min(c.height, Math.ceil(Math.max(...ys) + m)) - by;
+  if (bw < 1 || bh < 1) return "#808080";
+  const d = g.getImageData(bx, by, bw, bh).data, ch = [[], [], []], step = Math.max(1, Math.floor(Math.sqrt(bw * bh / 4000)));
+  for (let y = 0; y < bh; y += step) for (let x = 0; x < bw; x += step) if (!inPoly(bx + x, by + y, pts)){ const i = (y * bw + x) * 4; ch[0].push(d[i]); ch[1].push(d[i + 1]); ch[2].push(d[i + 2]); }
+  if (!ch[0].length) return "#808080";
+  const med = a => a.sort((p, q) => p - q)[a.length >> 1];
+  return "#" + ch.map(a => med(a).toString(16).padStart(2, "0")).join("");
+}
+function aiPaintOp(g, c, e, M, k, dark){
+  const hex = /^#[0-9a-f]{6}$/i.test(e.color || "") ? e.color : null;
+  const light = h => h && parseInt(h.slice(1, 3), 16) * 0.299 + parseInt(h.slice(3, 5), 16) * 0.587 + parseInt(h.slice(5, 7), 16) * 0.114 > 150;
+  const ink = h => dark && (!h || light(h)) ? "#333333" : h || (dark ? "#333333" : "#f8fafc");   // light lines vanish on a sketch
+  const path = (pts, closed) => { g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); if (closed) g.closePath(); };
+  if (e.op === "bg_erase"){ const pts = e.polygon.map(M); g.fillStyle = hex || ringColor(g, c, pts); path(pts, true); g.fill(); return; }
+  g.lineWidth = Math.max(1, (aiNum(e.width_ft) && e.width_ft > 0 && e.width_ft < 3 ? e.width_ft : 0.33) * k); g.lineCap = "butt";
+  if (e.op === "bg_line"){ g.strokeStyle = ink(hex); g.setLineDash(e.dashed ? [k * 2, k * 2] : []); path(e.points.map(M), false); g.stroke(); g.setLineDash([]); return; }
+  if (e.op === "bg_stall_row"){   // count+1 stripes from p1 to p2, each depth_ft deep (measured square to the row) toward "toward"
+    const a = M(e.p1), b = M(e.p2), L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    let n = [-u[1], u[0]]; if (aiPt(e.toward)){ const t = M(e.toward); if ((t[0] - a[0]) * n[0] + (t[1] - a[1]) * n[1] < 0) n = [u[1], -u[0]]; }
+    const ang = Math.max(30, Math.min(90, aiNum(e.angle_deg) ? e.angle_deg : 90)) * Math.PI / 180, lean = e.lean === "p1" ? -1 : 1;
+    const len = (aiNum(e.depth_ft) && e.depth_ft > 4 && e.depth_ft < 60 ? e.depth_ft : 18) * k / Math.sin(ang);
+    const d = [u[0] * Math.cos(ang) * lean + n[0] * Math.sin(ang), u[1] * Math.cos(ang) * lean + n[1] * Math.sin(ang)], cnt = Math.round(e.count);
+    g.strokeStyle = ink(hex);
+    for (let i = 0; i <= cnt; i++){ const p = [a[0] + (b[0] - a[0]) * i / cnt, a[1] + (b[1] - a[1]) * i / cnt]; path([p, [p[0] + d[0] * len, p[1] + d[1] * len]], false); g.stroke(); }
+  }
+}
+function aiBgOk(e){
+  const hit = pts => !aiPoly || pts.some(p => aiIn(p[0], p[1]));
+  if (e.op === "bg_erase") return Array.isArray(e.polygon) && e.polygon.length >= 3 && e.polygon.length <= 40 && e.polygon.every(aiPt) && hit(e.polygon);
+  if (e.op === "bg_line") return Array.isArray(e.points) && e.points.length >= 2 && e.points.length <= 100 && e.points.every(aiPt) && hit(e.points);
+  if (e.op === "bg_stall_row") return aiPt(e.p1) && aiPt(e.p2) && aiNum(e.count) && e.count >= 1 && e.count <= 60 && hit([e.p1, e.p2]);
+  return false;
+}
+async function aiPaint(ops){
+  const I = S.img; if (!I || !ops.length) return 0;
+  const wFt = I.w / I.ppf, hFt = I.h / I.ppf, dark0 = !!(I.fromSketch || I.linework);
+  const edit = async (src, dark) => {
+    const img = await loadImg(src); if (!img) return src;
+    const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext("2d"), kx = c.width / wFt, ky = c.height / hFt, M = p => [(p[0] - I.x) * kx, (p[1] - I.y) * ky];
+    g.drawImage(img, 0, 0);
+    if (aiPoly){ g.beginPath(); aiPoly.map(M).forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); g.clip(); }
+    for (const e of ops) aiPaintOp(g, c, e, M, kx, dark);
+    return /^data:image\/png/.test(src) ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.9);
+  };
+  const same = I.sketchSrc === I.src, src = await edit(I.src, dark0);
+  const sk = same ? src : typeof I.sketchSrc === "string" && I.sketchSrc.startsWith("data:") ? await edit(I.sketchSrc, true) : I.sketchSrc;
+  S.img = {...I, src, sketchSrc:sk};
+  return ops.length;
+}
+// apply Claude's edits after checking each against the rules and the area; anything that fails a check is counted and skipped
+async function aiApply(edits){
+  const z = size(), runIds = new Set(runs(z).map(r => r.id)), bg = [];
+  const idsOf = e => [...new Set(Array.isArray(e.ids) ? e.ids : e.id ? [e.id] : [])].map(O).filter(Boolean);
+  // move every object in list to f(o, i) = {x, y, rot?}, or none of them if any starts or ends outside the area
+  const place = (list, f) => {
+    const nx = list.map(f);
+    if (!list.length || list.some(o => !aiIn(o.x, o.y)) || nx.some(p => !p || !aiNum(p.x) || !aiNum(p.y) || !aiIn(p.x, p.y))) return false;
+    list.forEach((o, i) => { delete o.auto; o.x = +nx[i].x.toFixed(2); o.y = +nx[i].y.toFixed(2); if (aiNum(nx[i].rot)) o.rot = norm360(nx[i].rot); });
+    return true;
+  };
+  let ok = 0, bad = 0;
+  for (const e of Array.isArray(edits) ? edits : []){
+    const L = e && typeof e === "object" ? idsOf(e) : [], o = L[0], pk = o && S.pk[o.id];
+    let done = false;
+    switch (e && e.op){
+      case "move": done = L.length === 1 && place(L, () => ({x:e.x, y:e.y, rot:e.rot})); break;
+      case "shift": done = aiNum(e.dx) && aiNum(e.dy) && place(L, q => ({x:q.x + e.dx, y:q.y + e.dy})); break;
+      case "rotate": { if (!aiNum(e.deg) || !L.length) break;
+        const c = aiPt(e.about) ? e.about : L.length > 1 ? selCentre(L.map(q => q.id)) : [o.x, o.y], t = e.deg * Math.PI / 180, cs = Math.cos(t), sn = Math.sin(t);
+        done = place(L, q => { const dx = q.x - c[0], dy = q.y - c[1]; return {x:c[0] + dx*cs - dy*sn, y:c[1] + dx*sn + dy*cs, rot:(q.rot || 0) + e.deg}; }); break; }
+      case "align": { if (!L.length || (e.axis !== "x" && e.axis !== "y")) break;
+        const v = aiNum(e.value) ? e.value : L.reduce((s, q) => s + q[e.axis], 0) / L.length;
+        done = place(L, q => ({x:e.axis === "x" ? v : q.x, y:e.axis === "y" ? v : q.y, rot:e.rot})); break; }
+      case "distribute": { if (!L.length || !aiPt(e.from) || !aiPt(e.to)) break; const n = L.length;
+        done = place(L, (q, i) => { const t = n > 1 ? i / (n - 1) : 0; return {x:e.from[0] + (e.to[0] - e.from[0]) * t, y:e.from[1] + (e.to[1] - e.from[1]) * t, rot:e.rot}; }); break; }
+      case "add": { if (!aiNum(e.x) || !aiNum(e.y) || !aiIn(e.x, e.y)) break; const rot = aiNum(e.rot) ? norm360(e.rot) : 0;
+        if (e.type === "stall" && STALL_KINDS[e.kind]){ addStall(e.kind, e.x, e.y, rot); done = true; }
+        else if (e.type === "sign" && SIGNS[e.sign]){ S.pk[addSign(e.sign, e.x, e.y)].rot = rot; done = true; }
+        else if (e.type === "plant" && PLANTS[e.plant]){ addPlant(e.plant, e.x, e.y); done = true; }
+        break; }
+      case "add_row": { const n = Math.round(e.count); if (!STALL_KINDS[e.kind] || !aiPt(e.from) || !aiPt(e.to) || !(n >= 1 && n <= 40)) break;
+        const P = Array.from({length:n}, (_, i) => { const t = n > 1 ? i / (n - 1) : 0; return [e.from[0] + (e.to[0] - e.from[0]) * t, e.from[1] + (e.to[1] - e.from[1]) * t]; });
+        if (P.some(p => !aiIn(p[0], p[1]))) break;
+        const rot = aiNum(e.rot) ? norm360(e.rot) : 0; P.forEach(p => addStall(e.kind, p[0], p[1], rot)); done = true; break; }
+      case "delete": { if (!L.length || L.some(q => !S.pk[q.id] || !aiIn(q.x, q.y))) break;
+        L.forEach(q => { delete S.pk[q.id]; selSet.delete(q.id); if (selected === q.id) selected = null; }); done = true; break; }
+      case "set": { if (!pk || L.length !== 1 || !aiIn(o.x, o.y)) break; delete o.auto;
+        if (o.type === "stall" && STALL_KINDS[e.kind]){ o.kind = e.kind; done = true; }
+        if (o.type === "stall" && (e.aisle === "L" || e.aisle === "R")){ o.aisle = e.aisle; done = true; }
+        if (o.type === "sign" && SIGNS[e.sign]){ o.sign = e.sign; done = true; }
+        if (o.type === "plant" && PLANTS[e.plant]){ o.plant = e.plant; done = true; }
+        break; }
+      case "route": { if (!runIds.has(e.id) || !Array.isArray(e.bends) || e.bends.length > 12 || !e.bends.every(p => aiPt(p) && aiIn(p[0], p[1]))
+          || (aiPoly && !(S.routes[e.id] || []).every(p => aiIn(p[0], p[1])))) break;
+        if (e.bends.length) S.routes[e.id] = e.bends.map(p => [+p[0].toFixed(2), +p[1].toFixed(2)]); else delete S.routes[e.id]; done = true; break; }
+      case "bg_erase": case "bg_line": case "bg_stall_row": if (S.img && aiBgOk(e)){ bg.push(e); done = true; } break;
+    }
+    done ? ok++ : bad++;
+  }
+  if (bg.length) await aiPaint(bg);
+  return {ok, bad, bg:bg.length};
+}
+let aiCtl = null;
+aiGo.onclick = async () => {
+  if (aiCtl){ aiCtl.abort(); return; }   // pressed again while Claude works: cancel
+  const ask = aiText.value.trim();
+  if (!ask){ aiStatus.textContent = "Say or type the change first."; aiText.focus(); return; }
+  if (mode === "aiarea"){ aiStatus.textContent = "Finish the area first: click its first point or press Enter."; return; }
+  aiListen(false);
+  const sample = window.claude?.use ? await window.claude.use("sample").catch(() => null) : null;
+  if (!sample){ aiStatus.textContent = "Claude is not available in this view. Open the page in claude.ai."; return; }
+  aiCtl = new AbortController(); aiGo.textContent = "Cancel"; aiStatus.textContent = "Claude is working on the change…";
+  try {
+    const lim = await sample.limits().catch(() => null), pic = await aiPicture(lim).catch(() => null), ctx = aiContext();
+    const ans = await sample.json(aiPrompt(ask, ctx, pic), {...(pic ? {images:[pic.blob]} : {}), modelTier:"complex", cache:false, signal:aiCtl.signal});
+    const {ok, bad} = await aiApply(ans && ans.edits);
+    render(); aiShowScope();
+    aiStatus.textContent = (ok ? `Done: ${String(ans.summary || "layout changed").slice(0, 300)}${bad ? ` (${bad} edit${bad > 1 ? "s" : ""} outside the area or not allowed were skipped)` : ""}. Undo takes it back.`
+      : `No change made${bad ? `: Claude's ${bad} edit${bad > 1 ? "s were" : " was"} outside the area or not allowed` : ""}.`)
+      + (ans && ans.skipped ? ` Not done: ${String(ans.skipped).slice(0, 300)}` : "");
+    if (ok) aiText.value = "";
+  } catch(err){
+    aiStatus.textContent = err?.code === "cancelled" ? "Cancelled."
+      : err?.code === "not_granted" ? "Allow Claude for this page (the page's Permissions menu), then press Apply change again."
+      : err?.code === "rate_limited" ? "Claude is busy. Wait a minute, then press Apply change again."
+      : err?.code === "invalid_json" ? "Claude's answer could not be read. Press Apply change again, or say it differently."
+      : `Claude could not make the change (${err?.code || err?.message || "error"}).`;
+  }
+  aiCtl = null; aiGo.textContent = "Apply change";
 };
 
 // ---------- boot
