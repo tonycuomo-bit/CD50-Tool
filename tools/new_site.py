@@ -53,7 +53,7 @@ def site_json(lay, slug):
             "applicable_codes": [f"{'California Electrical Code (CEC)' if ca else 'National Electrical Code (NFPA 70) as adopted by the AHJ'}, incl. Art. 625, 230, 240, 250 and 110.",
                                  f"{'California Building Code (CBC) incl. Chapter 11B accessibility' if ca else 'International Building Code as adopted; ICC A117.1 and 2010 ADA Standards for accessibility'}.",
                                  "Local fire code and municipal code of the AHJ.", "Utility electric service requirements and metering standards.",
-                                 "Tesla V4 Supercharger and V4 Megacharger installation manuals and templatized plan sets."],
+                                 f"Tesla {equip.replace('Tesla ', '').replace(' + ', ' and ')} installation manuals and templatized plan sets."],
             "project_team": [["Property owner", "{owner} (to be confirmed)", "{owner_address}"], ["Owner contact", "{owner_contact}", "{owner_email}"],
                              ["Designer", "HiON EV", "{designer_email}"], ["Contractor of record", "TBD", ""], ["Electrical engineer of record", "[TBD AT CD90]", ""],
                              ["Utility", TBD, ""], ["Charging equipment", "Tesla", ""]],

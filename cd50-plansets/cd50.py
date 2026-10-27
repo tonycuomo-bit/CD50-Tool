@@ -401,7 +401,9 @@ def plan(x, y, vb, scale, layers):
     return f'<svg x="{x}" y="{y}" width="{vw*scale}" height="{vh*scale}" viewBox="{vx} {vy} {vw} {vh}" overflow="hidden">{"".join(layers)}</svg>'
 
 # ---------------------------------------------------------------- title block
-SHEETS = [("G-001","COVER SHEET"),("G-002","GENERAL NOTES"),("A-101","SITE PLAN & TRUCK CIRCULATION"),
+# a site with no MW (Megacharger) group has no truck charging: its sheets leave out the truck circulation and MW items
+A101_T = "SITE PLAN & TRUCK CIRCULATION" if MW else "SITE PLAN"
+SHEETS = [("G-001","COVER SHEET"),("G-002","GENERAL NOTES"),("A-101",A101_T),
           ("E-101","ELECTRICAL SITE PLAN"),("E-102","ENLARGED ELECTRICAL PLANS"),("E-201","SINGLE-LINE DIAGRAM"),
           ("E-301","LOAD CALCULATIONS & SCHEDULES"),("S-501","PAD, FOUNDATION & BOLLARD DETAILS")]
 PLANTS = ((LAYOUT or {}).get('landscape') or {}).get('plants', [])     # generic trees / shrubs from the layout tool, species TBD
@@ -491,19 +493,20 @@ s, y2 = table(1680, y+20, [("SHEET", 90), ("SHEET INDEX", 520)], rows, rh=22, sz
 s, y3 = notes(1680, y2+40, "APPLICABLE CODES (VERIFY EDITION WITH AHJ AT CD90)", txt('applicable_codes'), n=62, sz=11); o.append(s)
 # project team
 s, y4 = table(70, 1000, [("PROJECT TEAM", 220), ("NAME / COMPANY", 340), ("CONTACT", 300)], txt_rows('project_team'), rh=24, sz=11.5); o.append(s)
-s, y5 = table(70, y4+30, [("ABBREVIATIONS", 110), ("", 320), ("", 110), ("", 320)], [
-    ["AFG", "Above finished grade", "MW", "V4 Megacharger"], ["AL / CU", "Aluminum / copper", "OCPD", "Overcurrent protective device"],
-    ["EGC", "Equipment grounding conductor", "POC", "Point of connection"], ["EVCS", "EV charging station", "PL", "Property line"],
-    ["FUT", "Future", "SB", "Switchboard"], ["kcmil", "Thousand circular mils", "TBD", "To be determined"],
-    ["XR", "Utility transformer", "WB-67", "AASHTO interstate semi design vehicle"],
-], rh=22, sz=11); o.append(s)
+_ab = [("AFG", "Above finished grade"), ("MW", "V4 Megacharger"), ("AL / CU", "Aluminum / copper"), ("OCPD", "Overcurrent protective device"),
+       ("EGC", "Equipment grounding conductor"), ("POC", "Point of connection"), ("EVCS", "EV charging station"), ("PL", "Property line"),
+       ("FUT", "Future"), ("SB", "Switchboard"), ("kcmil", "Thousand circular mils"), ("TBD", "To be determined"),
+       ("XR", "Utility transformer"), ("WB-67", "AASHTO interstate semi design vehicle")]
+_ab = [a for a in _ab if MW or a[0] not in ("MW", "WB-67")]
+s, y5 = table(70, y4+30, [("ABBREVIATIONS", 110), ("", 320), ("", 110), ("", 320)],
+              [[*_ab[k], *(_ab[k+1] if k+1 < len(_ab) else ("", ""))] for k in range(0, len(_ab), 2)], rh=22, sz=11); o.append(s)
 pages.append(sheet("G-001", "COVER SHEET", "".join(o)))
 
 # ================================================================ G-002
 o = []
 cols = [70, 640, 1210, 1780]
 s, y = notes(cols[0], 90, "GENERAL NOTES", txt('general_notes'), n=62); o.append(s)
-s, y = notes(cols[0], y+30, "TRUCK CIRCULATION NOTES", txt('truck_notes'), n=62); o.append(s)
+if MW: s, y = notes(cols[0], y+30, "TRUCK CIRCULATION NOTES", txt('truck_notes'), n=62); o.append(s)
 s, y = notes(cols[1], 90, "ELECTRICAL NOTES", txt('electrical_notes'), n=62); o.append(s)
 s, y = notes(cols[2], 90, "BOLLARD & EQUIPMENT PROTECTION NOTES", txt('bollard_notes'), n=62); o.append(s)
 s, y = notes(cols[2], y+30, "ACCESSIBILITY NOTES (CBC 11B)", txt('accessibility_notes'), n=62); o.append(s)
@@ -540,17 +543,17 @@ def centered(pts, w, h):
     return ((min(xs)+max(xs))/2 - w/2, (min(ys)+max(ys))/2 - h/2, w, h)
 VB = centered([i['c'] for i in ITEMS.values()], 1720, 1460) if LAYOUT else tuple(GEO['views']['site_plan']); TX, TY = 590, 80
 o = [plan(TX, TY, VB, 1.0, [site_lines, truck_plain, equipment(tags=True, clear=False)])]
-o.append(view_title(TX, 1620, "1", "SITE PLAN & TRUCK CIRCULATION", 'SCALE: 1" = 20\'-0"' + SCALE_FLAG))
+o.append(view_title(TX, 1620, "1", A101_T, 'SCALE: 1" = 20\'-0"' + SCALE_FLAG))
 o.append(scalebar(TX+520, 1622)); o.append(north(TX+1640, 1610))
 kn = txt('a101_keynotes')
 s, y = notes(70, 90, "KEYNOTES", kn, n=40, sz=11.5); o.append(s)
-leg = [("#0b5f8a", "WB-67 swept path / truck lanes"), ("#c4b5fd", "Megacharger cabinet"), ("#fdba74", "V4 cabinet"),
+leg = ([("#0b5f8a", "WB-67 swept path / truck lanes"), ("#c4b5fd", "Megacharger cabinet")] if MW else []) + [("#fdba74", "V4 cabinet"),
        ("#99f6e4", "Switchboard"), ("#cbd5e1", "Utility transformer"), ("#eab308", "Guard post (fixed)"), ("#ffffff", "Guard post (removable)"), ("#f97316", "Tesla rebounding bollard")]
 o.append(T(70, y+30, "LEGEND", 14, w="bold")); y += 50
 for c, t in leg:
     o.append(R(70, y-10, 22, 12, fill=c, sw=0.8) if "Bollard" not in t else f'<circle cx="81" cy="{y-4}" r="5" fill="{c}" stroke="#141817" stroke-width="1"/>'); o.append(T(102, y, t, 11.5)); y += 22
 s, y = notes(70, y+30, "SITE DATA", txt('a101_site_data'), n=40, sz=11, num=False); o.append(s)
-pages.append(sheet("A-101", "SITE PLAN & TRUCK CIRCULATION", "".join(o)))
+pages.append(sheet("A-101", A101_T, "".join(o)))
 
 # ================================================================ L-101 (only when the layout tool export has plants)
 def landscape_layout():
@@ -582,7 +585,7 @@ if PLANTS:
         "Symbols show mature canopy or spread; locations are diagrammatic at CD50.",
         f"Keep plants out of equipment working clearances: cabinet 5' front, switchboard working space, transformer clearances per {UT}, and the V4 post 1'-6\" service side.",
         "Provide root barriers where a tree is within 5 ft of a conduit trench, equipment pad or bollard footing.",
-        "Keep the WB-67 swept path, driveway sight lines and accessible routes clear; shrubs in sight-line areas 30\" max mature height.",
+        ("Keep the WB-67 swept path, driveway" if MW else "Keep driveway") + " sight lines and accessible routes clear; shrubs in sight-line areas 30\" max mature height.",
         "Existing landscaping to remain unless noted; repair irrigation disturbed by trenching.",
     ], n=40, sz=11); o.append(s)
     pages.append(sheet("L-101", "LANDSCAPE PLAN", "".join(o)))
