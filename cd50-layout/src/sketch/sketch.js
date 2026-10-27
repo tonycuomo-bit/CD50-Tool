@@ -552,7 +552,11 @@ async function overlayBlob(feats, only, enhance) {
   if (only) feats = feats.filter(f => only.has(f.type));
   const c = photoCanvas(enhance), cr = c.cr, k = c.k;
   const photo = enhance && c.enhanced ? await canvasBlob(c) : (S.cropBlob || S.file);
-  const x = c.getContext("2d"), M = p => [(p[0] - cr.x0) * k, (p[1] - cr.y0) * k], lw = Math.max(2, c.width / 500);
+  drawOverlay(c.getContext("2d"), feats, p => [(p[0] - cr.x0) * k, (p[1] - cr.y0) * k], Math.max(2, c.width / 500));
+  return { overlay: await canvasBlob(c), photo, enhanced: !!c.enhanced };
+}
+/* Draws features in the overlay colors on a 2D context; M maps image pixels to the context. */
+function drawOverlay(x, feats, M, lw) {
   x.lineCap = "round"; x.lineJoin = "round";
   const line = (pts, closed) => { x.beginPath(); pts.map(M).forEach((q, i) => i ? x.lineTo(q[0], q[1]) : x.moveTo(q[0], q[1])); if (closed) x.closePath(); x.stroke(); };
   const head = (at, dir) => { const q = M(at), n = [-dir[1], dir[0]], s = lw * 5; x.beginPath(); x.moveTo(q[0] + dir[0] * s, q[1] + dir[1] * s); x.lineTo(q[0] - dir[0] * s + n[0] * s * .7, q[1] - dir[1] * s + n[1] * s * .7); x.lineTo(q[0] - dir[0] * s - n[0] * s * .7, q[1] - dir[1] * s - n[1] * s * .7); x.closePath(); x.fill(); };
@@ -570,7 +574,6 @@ async function overlayBlob(feats, only, enhance) {
       const q = M(p.at); x.strokeStyle = "#FF8A00"; x.lineWidth = lw; x.beginPath(); x.arc(q[0], q[1], lw * 3, 0, Math.PI * 2); x.stroke();
     }
   }));
-  return { overlay: await canvasBlob(c), photo, enhanced: !!c.enhanced };
 }
 /* One feature written the way Claude sees it: on the traced image's 0-1000 grid, whole numbers. */
 function serialFeat(f) {
@@ -1508,6 +1511,7 @@ function pick(L) {
   $("#s-download").hidden = false; $("#dl-name").textContent = "Files will be named " + baseName() + ".";
   $("#dl-msg").className = "msg";
   $("#s-download").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  edShow();
 }
 $("#regen").addEventListener("click", guard("regenerating", async () => {
   if (S.busy || !S.rounds.length) return;
@@ -1689,6 +1693,162 @@ function askOne(u, i, n) {
     };
   });
 }
+
+/* ---------- change the picked sketch. Tony selects an area (4 to 8 points) or keeps the whole sketch, and says or types the
+   change. Claude sees the photo, the sketch drawn over it and the feature list, and answers with remove / replace / add, as
+   in a review; only features in the area may change, and anything new must sit inside it. Each change makes a new round,
+   so Undo last change (or the Rounds row) goes back to the sketch before it. */
+const ED_MIN = 4, ED_MAX = 8, ED = { poly: null, draft: null, from: [], busy: false };   // poly, draft: the area on the image's 0-1000 grid
+ZOOM.ed = makeZoom($("#ed-box"), $("#ed-canvas"), imgAspect);
+function ptInPoly(p, P) {
+  let c = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > p[1]) !== (P[j][1] > p[1]) && p[0] < (P[j][0] - P[i][0]) * (p[1] - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c;
+  return c;
+}
+const featPts = f => [f.p1, f.p2, f.q1, f.q2, f.at].filter(isPt).concat((f.points || []).filter(isPt));
+const featTouches = f => !ED.poly || featPts(f).some(p => ptInPoly(p, ED.poly));   // may change: any of its points in the area
+const featInside = f => { const p = featPts(f); return !ED.poly || (p.length > 0 && ptInPoly(centroid(p), ED.poly)); };   // a new one: centred in it
+function edDraw() {
+  const r = S.rounds[S.view], cv = $("#ed-canvas"); if (!r || !S.imgEl) return;
+  drawImageCanvas(cv, null, null);
+  const k = cv.width / S.W, x = cv.getContext("2d"), lw = Math.max(2, cv.width / 500);
+  drawOverlay(x, levelFeatures(roundFeatures(r).feats, S.picked || "B"), p => [p[0] * k, p[1] * k], lw);
+  const pts = ED.draft || ED.poly; if (!pts || !pts.length) return;
+  const N = p => [p[0] / 1000 * cv.width, p[1] / 1000 * cv.height];
+  x.strokeStyle = x.fillStyle = "#F0B21C"; x.lineWidth = lw * 1.5; x.setLineDash(ED.draft ? [] : [lw * 4, lw * 3]);
+  x.beginPath(); pts.map(N).forEach((q, i) => i ? x.lineTo(q[0], q[1]) : x.moveTo(q[0], q[1])); if (!ED.draft) x.closePath(); x.stroke(); x.setLineDash([]);
+  pts.map(N).forEach((q, i) => { x.beginPath(); x.arc(q[0], q[1], lw * (i ? 2.2 : 3.4), 0, Math.PI * 2); x.fill(); });
+}
+function edScope() {
+  const r = S.rounds[S.view], n = r && ED.poly ? roundFeatures(r).feats.filter(featTouches).length : 0;
+  $("#ed-select").setAttribute("aria-pressed", !!ED.draft); $("#ed-whole").setAttribute("aria-pressed", !ED.poly && !ED.draft);
+  $("#ed-undo-pt").hidden = !ED.draft; $("#ed-canvas").style.cursor = ED.draft ? "crosshair" : "default";
+  $("#ed-undo").hidden = !ED.from.some(x => S.rounds.includes(x));
+  $("#ed-scope").textContent = ED.draft ? `Click ${ED_MIN} to ${ED_MAX} points around the part to change (${ED.draft.length} so far). Click the first point again to close the area.`
+    : ED.poly ? `Change applies to: the selected area (${ED.poly.length} points, ${n} item${n === 1 ? "" : "s"} in it)` : "Change applies to: the whole sketch";
+}
+function edShow() {
+  ED.draft = null; edScope(); edDraw();
+  const b = S.border && S.border.length > 2 ? S.border : S.crop ? [[S.crop.x0 / S.W * 1000, S.crop.y0 / S.H * 1000], [(S.crop.x0 + S.crop.w) / S.W * 1000, (S.crop.y0 + S.crop.h) / S.H * 1000]] : null;
+  requestAnimationFrame(() => b ? ZOOM.ed.focus([Math.min(...b.map(p => p[0])) - 20, Math.min(...b.map(p => p[1])) - 20, Math.max(...b.map(p => p[0])) + 20, Math.max(...b.map(p => p[1])) + 20]) : ZOOM.ed.fit());
+}
+function edClose() {
+  if (!ED.draft || ED.draft.length < ED_MIN) { $("#ed-msg").textContent = `Click at least ${ED_MIN} points.`; return; }
+  ED.poly = ED.draft; ED.draft = null; $("#ed-msg").textContent = ""; edScope(); edDraw(); $("#ed-text").focus();
+}
+$("#ed-select").addEventListener("click", () => { ED.draft = ED.draft ? null : []; ED.poly = null; edScope(); edDraw(); });
+$("#ed-whole").addEventListener("click", () => { ED.poly = ED.draft = null; edScope(); edDraw(); });
+$("#ed-undo-pt").addEventListener("click", () => { if (ED.draft) { ED.draft.pop(); edScope(); edDraw(); } });
+$("#ed-canvas").addEventListener("click", e => {
+  if (!ED.draft) return;
+  const cv = $("#ed-canvas"), p = canvasNorm(cv, e), b = cv.getBoundingClientRect(), d0 = ED.draft[0];
+  if (ED.draft.length >= ED_MIN && Math.hypot((p[0] - d0[0]) / 1000 * b.width, (p[1] - d0[1]) / 1000 * b.height) < 12) { edClose(); return; }   // back on the first point
+  ED.draft.push(p.map(v => Math.round(v * 10) / 10));
+  if (ED.draft.length >= ED_MAX) { edClose(); return; }
+  edScope(); edDraw();
+});
+$("#ed-undo").addEventListener("click", () => {
+  let r; while (ED.from.length && !S.rounds.includes(r = ED.from.pop())) r = null;
+  if (!r) { edScope(); return; }
+  S.view = S.rounds.indexOf(r); renderOptions(); edScope(); edDraw(); $("#ed-msg").textContent = `Back to round ${r.n}.`;
+});
+// Dictation: the browser's speech recognition where this view lets the page use the microphone; otherwise the system's own
+// dictation (Windows: Win+H, Mac: Fn twice, phones: the keyboard's mic) types into the box just the same.
+const SREC = window.SpeechRecognition || window.webkitSpeechRecognition;
+const DICTATE_TIP = /Mac/.test(navigator.platform) ? "press Fn twice (Mac dictation)" : /Win/.test(navigator.platform) ? "press Win+H (Windows dictation)" : "use your keyboard's mic";
+let edRec = null, edAuto = !!SREC;
+function edListen(on) {
+  const mic = $("#ed-mic"), msg = $("#ed-msg"), box = $("#ed-text");
+  if (!on) { if (edRec) edRec.stop(); return; }
+  if (!SREC) { msg.textContent = `Speech is not available in this browser: click in the box and ${DICTATE_TIP}.`; return; }
+  if (edRec) return;
+  const r = new SREC(), base = box.value.trim(); r.lang = navigator.language || "en-US"; r.continuous = true; r.interimResults = true;
+  edRec = r; mic.setAttribute("aria-pressed", "true"); mic.classList.add("rec"); mic.textContent = "■ Stop"; msg.textContent = "Listening…";
+  r.onresult = ev => { let t = ""; for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript; box.value = [base, t.trim()].filter(Boolean).join(" "); };
+  r.onerror = ev => { if (ev.error === "not-allowed" || ev.error === "service-not-allowed") edAuto = false;
+    msg.textContent = edAuto ? `Dictation stopped (${ev.error}).` : `The microphone is blocked here: click in the box and ${DICTATE_TIP} instead.`; };
+  r.onend = () => { edRec = null; mic.setAttribute("aria-pressed", "false"); mic.classList.remove("rec"); mic.textContent = "🎤 Dictate"; if (msg.textContent === "Listening…") msg.textContent = ""; };
+  try { r.start(); } catch (e) { r.onend(); edAuto = false; msg.textContent = `Dictation could not start: click in the box and ${DICTATE_TIP}.`; }
+}
+$("#ed-mic").addEventListener("click", () => edListen(!edRec));
+$("#ed-text").addEventListener("focus", () => { if (edAuto && !edRec && !$("#ed-text").value.trim()) edListen(true); });   // click in and speak
+function editPrompt(ask, feats) {
+  const gridPerFt = S.pxPerFt ? S.pxPerFt / (S.crop ? S.crop.w : S.W) * 1000 : 0;
+  return `You are editing a traced engineering sketch of EXISTING site conditions (a parking lot at an EV charging site). Tony, the engineer, asked for this change:
+"""${ask}"""
+Image 1 is the aerial photo. Image 2 is the same photo with the current sketch drawn on top. Colors: magenta = stall stripes; cyan = lot border, curbs and islands; yellow = yellow painted lines; white = white painted lines and striped areas; blue = drive lane centerlines with direction arrows; green = landscaping and hedges; orange = buildings, equipment and poles; light blue = ADA spaces.
+COORDINATES: a 0-1000 grid on each axis of the image (x from the left edge, y from the top edge). Whole numbers.
+${gridPerFt ? `Scale: 1 ft is about ${gridPerFt.toFixed(2)} units on the x grid.` : "No scale is set; a standard stall is about 9 ft wide."}
+${ED.poly ? `AREA: Tony selected this polygon: ${JSON.stringify(ED.poly.map(toCropPt).map(p => p.map(Math.round)))}. Change, remove or add only features in it (a feature crossing its edge may change; anything new must be centred inside it). Leave everything outside it exactly as it is.` : "AREA: the whole sketch. Change only what the request is about."}
+
+CURRENT FEATURES (index: feature)
+${feats.map((f, i) => i + ": " + serialFeat(f)).join("\n")}
+
+RULES
+1. Tony knows the site: make the change he asks for, even where the photo is unclear.
+2. The sketch shows existing conditions only. Leave out proposed work (new chargers, equipment, or stalls and striping for the project) and say so in "skipped".
+3. Keep every other feature as it is. Do not re-trace or tidy anything he did not ask about.
+
+${LOT_KNOWLEDGE}
+FEATURE SHAPES (coordinates on the 0-1000 grid)
+${Object.values(SHAPES).join("\n")}
+Stall rows use: {"type":"stall_row","p1":[x,y],"p2":[x,y],"q1":[x,y],"count":N,"angle":60,"leanToward":"p2"} (p1, p2: aisle-side ends of the first and last stripe; q1: far end of the first stripe; leanToward: the end the stripes' far ends point to).
+
+Reply with only one JSON object:
+{"remove":[{"i":index}],"replace":[{"i":index,"feature":{...}}],"add":[{...}],"summary":"one short sentence on what you changed","skipped":"what you could not do and why, or empty"}`;
+}
+/* Applies Claude's change to t.features (indices refer to the list Claude was shown); anything outside the area is skipped. */
+function applyEdit(t, ed) {
+  const conv = f => { const g = cleanFeature(f); if (g && S.crop) featToFull(g); return g; };
+  const list = t.features.slice(), idx = v => Number(v && typeof v === "object" ? v.i : v), rem = new Set();
+  let n = 0, out = 0;
+  (ed.remove || []).forEach(v => { const i = idx(v);
+    if (!Number.isInteger(i) || !list[i] || rem.has(i)) return;
+    if (!featTouches(list[i])) { out++; return; }
+    rem.add(i); n++; });
+  (ed.replace || []).forEach(v => { const i = idx(v), g = v && conv(v.feature);
+    if (!g || !Number.isInteger(i) || !list[i] || rem.has(i)) return;
+    if (!featTouches(list[i]) || !featInside(g)) { out++; return; }
+    list[i] = g; n++; });
+  const kept = list.filter((f, i) => !rem.has(i));
+  (ed.add || []).forEach(a => { const g = conv(a); if (!g) return; if (!featInside(g)) { out++; return; } kept.push(g); n++; });
+  t.features = kept;
+  return { n, out };
+}
+$("#ed-go").addEventListener("click", async () => {
+  const go = $("#ed-go"), msg = $("#ed-msg"), ask = $("#ed-text").value.trim(), r = S.rounds[S.view];
+  if (ED.busy) { if (S.ctl) S.ctl.abort(); return; }   // pressed again while Claude works: cancel
+  if (!ask) { msg.textContent = "Say or type the change first."; $("#ed-text").focus(); return; }
+  if (ED.draft) { msg.textContent = "Finish the area first: click its first point again."; return; }
+  if (!r || S.busy) return;
+  if (!caps.sample) { msg.textContent = "Claude is not available in this view. Open the page in claude.ai."; return; }
+  edListen(false);
+  const feats = JSON.parse(JSON.stringify(roundFeatures(r).feats)), t = { features: feats };
+  ED.busy = S.busy = true; setBusy(true); S.ctl = new AbortController(); go.textContent = "Cancel"; msg.textContent = "Claude is making the change…";
+  try {
+    const ov = await overlayBlob(feats, null, false);
+    const ed = await caps.sample.json(editPrompt(ask, feats), { images: [ov.photo, ov.overlay], modelTier: "complex", cache: false, signal: S.ctl.signal });
+    const res = applyEdit(t, ed || {}), skipped = ed && ed.skipped ? ` Not done: ${String(ed.skipped).slice(0, 300)}` : "";
+    if (!res.n) msg.textContent = "No change made" + (res.out ? `: Claude's ${res.out} edit${res.out > 1 ? "s were" : " was"} outside the selected area` : "") + "." + skipped;
+    else {
+      const summary = String((ed && ed.summary) || "sketch changed").slice(0, 300);
+      const trace = Object.assign({}, r.trace, { features: t.features, unclear: [] });
+      finalizeTrace(trace);
+      trace.laneNotes = (r.trace.laneNotes || []).concat(`Changed at Tony's request ("${ask.slice(0, 160)}"): ${summary}`);
+      S.rounds.push({ n: S.rounds.length + 1, trace, answers: {}, detail: "Change: " + ask, at: new Date() });
+      ED.from.push(r); S.view = S.rounds.length - 1;
+      renderOptions(); $("#dl-name").textContent = "Files will be named " + baseName() + ".";
+      const hiddenB = S.picked === "A" && t.features.some(f => !BASIC.has(f.type) && !feats.includes(f)) ? " Some of it shows only in Option B (Full)." : "";
+      msg.textContent = `Done: ${summary}${res.out ? ` (${res.out} edit${res.out > 1 ? "s" : ""} outside the area skipped)` : ""}. Undo last change goes back.${hiddenB}${skipped}`;
+      $("#ed-text").value = "";
+    }
+    edScope(); edDraw();
+  } catch (e) {
+    msg.textContent = e && e.code === "cancelled" ? "Cancelled." : "Not changed: " + sampleMsg(e);
+  } finally {
+    ED.busy = S.busy = false; setBusy(false); go.textContent = "Apply change";
+  }
+});
 
 /* ---------- project number ---------- */
 $("#proj-retry").addEventListener("click", () => lookupProject());
